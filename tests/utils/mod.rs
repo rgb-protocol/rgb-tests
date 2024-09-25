@@ -4,14 +4,9 @@ pub mod helpers;
 pub const TEST_DATA_DIR: &str = "test-data";
 pub const INTEGRATION_DATA_DIR: &str = "integration";
 pub const STRESS_DATA_DIR: &str = "stress";
+pub const SAVE_DIR: &str = "saves";
 
-pub const ELECTRUM_1_REGTEST_URL: &str = "127.0.0.1:50001";
-pub const ELECTRUM_2_REGTEST_URL: &str = "127.0.0.1:50002";
-pub const ELECTRUM_3_REGTEST_URL: &str = "127.0.0.1:50003";
 pub const ELECTRUM_MAINNET_URL: &str = "ssl://electrum.iriswallet.com:50003";
-pub const ESPLORA_1_REGTEST_URL: &str = "http://127.0.0.1:8094/regtest/api";
-pub const ESPLORA_2_REGTEST_URL: &str = "http://127.0.0.1:8095/regtest/api";
-pub const ESPLORA_3_REGTEST_URL: &str = "http://127.0.0.1:8096/regtest/api";
 pub const ESPLORA_MAINNET_URL: &str = "https://blockstream.info/api";
 pub const FAKE_TXID: &str = "e5a3e577309df31bd606f48049049d2e1e02b048206ba232944fcc053a176ccb:0";
 pub const UDA_FIXED_INDEX: u32 = 0;
@@ -29,7 +24,8 @@ pub type AS = AssetSchema;
 
 pub use std::{
     borrow::Borrow,
-    cell::OnceCell,
+    cell::{OnceCell, RefCell},
+    cmp::max,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     env::VarError,
     ffi::OsString,
@@ -37,9 +33,12 @@ pub use std::{
     fs::OpenOptions,
     io::Write,
     num::NonZeroU32,
+    os::unix::process::CommandExt,
     path::{PathBuf, MAIN_SEPARATOR},
     process::{Command, Stdio},
     str::FromStr,
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Arc,
     sync::{Mutex, Once, OnceLock, RwLock},
     time::{Duration, Instant},
 };
@@ -79,16 +78,15 @@ pub use commit_verify::{mpc, CommitVerify};
 pub use descriptors::Wpkh;
 pub use electrum::{Client as ElectrumClient, ElectrumApi, Param};
 pub use file_format::FileFormat;
+pub use lazy_static::lazy_static;
+pub use nix::unistd::{self, Pid};
 pub use once_cell::sync::Lazy;
 pub use psbt::{
     Beneficiary as PsbtBeneficiary, KeyMap, Payment, Prevout, PropKey, Psbt, PsbtConstructor,
     PsbtMeta, PsbtVer, Utxo,
 };
-#[cfg(not(feature = "altered"))]
 pub use psrgbt::{OpoutAndOpids, ProprietaryKeyRgb, RgbExt, RgbPsbt, TxParams};
-#[cfg(feature = "altered")]
-pub use psrgbt::{OpoutAndOpids, ProprietaryKeyRgb, RgbExt, RgbPsbt, TxParams};
-pub use rand::RngCore;
+pub use rand::{rngs::StdRng, seq::SliceRandom, Rng, RngCore, SeedableRng};
 #[cfg(not(feature = "altered"))]
 pub use rgb::{
     assignments::AssignVec,
@@ -146,7 +144,7 @@ pub use rgbstd::{
     },
     indexers::AnyResolver,
     invoice::{Beneficiary, RgbInvoice, RgbInvoiceBuilder, XChainNet},
-    persistence::{fs::FsBinStore, StashReadProvider},
+    persistence::{fs::FsBinStore, ContractStateRead, StashReadProvider},
     schema::SchemaId,
     stl::{
         AssetSpec, Attachment, Details, EmbeddedMedia, MediaType, Name, ProofOfReserves,
@@ -165,8 +163,11 @@ pub use schemata::{
     OS_ASSET, OS_INFLATION, OS_REPLACE, PFA_SCHEMA_ID, TS_BURN, TS_INFLATION, TS_REPLACE,
     TS_TRANSFER, UDA_SCHEMA_ID,
 };
+pub use serde::{Deserialize, Serialize};
 pub use serde_json::{json, Value};
 pub use serial_test::serial;
+pub use signal_hook::consts::{SIGINT, SIGTERM};
+pub use signal_hook::flag::register;
 pub use strict_encoding::{fname, tn, FieldName, StrictSerialize, TypeName};
 pub use strict_types::{SemId, StrictDeserialize, StrictDumb, StrictVal, TypeSystem};
 pub use strum::IntoEnumIterator;
@@ -174,3 +175,52 @@ pub use strum_macros::EnumIter;
 pub use time::OffsetDateTime;
 
 pub use crate::utils::{chain::*, helpers::*};
+
+fn running_in_docker() -> bool {
+    std::path::Path::new("/.dockerenv").exists()
+}
+
+lazy_static! {
+    pub static ref ELECTRUM_1_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "electrum_1:50001"
+        } else {
+            "127.0.0.1:50001"
+        }
+    };
+    pub static ref ELECTRUM_2_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "electrum_2:50001"
+        } else {
+            "127.0.0.1:50002"
+        }
+    };
+    pub static ref ELECTRUM_3_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "electrum_3:50001"
+        } else {
+            "127.0.0.1:50003"
+        }
+    };
+    pub static ref ESPLORA_1_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "http://esplora_1:80/regtest/api"
+        } else {
+            "http://127.0.0.1:8094/regtest/api"
+        }
+    };
+    pub static ref ESPLORA_2_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "http://esplora_2:80/regtest/api"
+        } else {
+            "http://127.0.0.1:8095/regtest/api"
+        }
+    };
+    pub static ref ESPLORA_3_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "http://esplora_3:80/regtest/api"
+        } else {
+            "http://127.0.0.1:8096/regtest/api"
+        }
+    };
+}

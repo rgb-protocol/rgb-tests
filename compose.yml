@@ -1,0 +1,33 @@
+services:
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      - test-network
+    environment:
+      - SKIP_INIT=1             # external services need to be running
+      # docker-specific variables
+      - MEMPROF                 # enable memory profiling
+      - MY_GID=${MY_GID:-1000}  # local user id to match file permissions
+      - MY_UID=${MY_UID:-1000}  # local user id to match file permissions
+      # test variables (same meaning as for local execution)
+      - ASSETS
+      - DISK
+      - LOAD_ID
+      - LOOPS
+      - NETIF
+      - SEED
+      - VERBOSE
+      - WALLETS
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # Docker APIs (bitcoin-cli)
+      - ./cargo_cache:/usr/local/cargo/registry/    # cargo cache
+      - ./target_cache:/opt/target/                 # target cache
+      - ./test-data:/opt/test-data                  # output
+      - ./tests:/opt/tests:ro                       # updated test code
+
+networks:
+  test-network:
+    name: tests_default
+    external: true

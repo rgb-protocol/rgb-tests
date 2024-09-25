@@ -79,14 +79,23 @@ fn _bitcoin_cli_cmd(instance: u8, args: Vec<&str>) -> String {
         ]),
         Indexer::Esplora => bitcoin_cli.extend(vec![service_name, "cli".to_string()]),
     };
-    let output = Command::new("docker")
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .arg("compose")
-        .args(bitcoin_cli)
-        .args(&args)
-        .output()
-        .unwrap_or_else(|_| panic!("failed to call bitcoind with args {args:?}"));
+    let output = unsafe {
+        Command::new("docker")
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .arg("compose")
+            .args(bitcoin_cli)
+            .args(&args)
+            .pre_exec(|| {
+                // prevent child from getting SIGINT/SIGTERM)
+                match unistd::setpgid(Pid::from_raw(0), Pid::from_raw(0)) {
+                    Ok(_) => Ok(()),
+                    Err(e) => panic!("setpgid failed: {e}"),
+                }
+            })
+            .output()
+            .unwrap_or_else(|_| panic!("failed to call bitcoind with args {args:?}"))
+    };
     if !output.status.success() {
         println!("{output:?}");
         panic!("failed to get succesful output with args {args:?}");
@@ -235,13 +244,13 @@ pub fn get_height_custom(instance: u8) -> u32 {
 pub fn indexer_url(instance: u8, network: Network) -> String {
     match (INDEXER.get().unwrap(), network, instance) {
         (Indexer::Electrum, Network::Mainnet, _) => ELECTRUM_MAINNET_URL,
-        (Indexer::Electrum, Network::Regtest, INSTANCE_1) => ELECTRUM_1_REGTEST_URL,
-        (Indexer::Electrum, Network::Regtest, INSTANCE_2) => ELECTRUM_2_REGTEST_URL,
-        (Indexer::Electrum, Network::Regtest, INSTANCE_3) => ELECTRUM_3_REGTEST_URL,
+        (Indexer::Electrum, Network::Regtest, INSTANCE_1) => &ELECTRUM_1_REGTEST_URL,
+        (Indexer::Electrum, Network::Regtest, INSTANCE_2) => &ELECTRUM_2_REGTEST_URL,
+        (Indexer::Electrum, Network::Regtest, INSTANCE_3) => &ELECTRUM_3_REGTEST_URL,
         (Indexer::Esplora, Network::Mainnet, _) => ESPLORA_MAINNET_URL,
-        (Indexer::Esplora, Network::Regtest, INSTANCE_1) => ESPLORA_1_REGTEST_URL,
-        (Indexer::Esplora, Network::Regtest, INSTANCE_2) => ESPLORA_2_REGTEST_URL,
-        (Indexer::Esplora, Network::Regtest, INSTANCE_3) => ESPLORA_3_REGTEST_URL,
+        (Indexer::Esplora, Network::Regtest, INSTANCE_1) => &ESPLORA_1_REGTEST_URL,
+        (Indexer::Esplora, Network::Regtest, INSTANCE_2) => &ESPLORA_2_REGTEST_URL,
+        (Indexer::Esplora, Network::Regtest, INSTANCE_3) => &ESPLORA_3_REGTEST_URL,
         _ => unreachable!(),
     }
     .to_string()

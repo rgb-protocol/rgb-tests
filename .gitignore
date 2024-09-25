@@ -1,3 +1,5 @@
 **/target
 /.vim
+/cargo_cache
+/target_cache
 /test-data

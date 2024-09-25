@@ -41,23 +41,13 @@ cargo test --test validation
 
 ### Stress tests
 
-To run a single stress test, set the `LOOPS` variable to the requested number
-of loops and then, from the project root, for example execute:
-```sh
-LOOPS=20 cargo test --test stress back_and_forth::case_1 -- --ignored
-```
+Stress tests are available to evaluate RGB under scenarios that may expose
+issues not covered by more specific test types. They also better reflect
+real-world usage, further broadening the tested surface.
 
-This will produce a CSV report file that can be opened in a spreadsheet program
-manually or by running:
-```sh
-open test-data/stress/<timestamp>.csv
-```
+These tests are ignore by default, as their runtime is long.
 
-Stress tests have been parametrized the same way some integration tests are.
-To select which test case you want to run, find the case attribute you want to
-use (e.g. `#[case(TT::Witness, DT::Wpkh, DT::Tr)]`) and if, as an example, it's
-the 4th one, run `<test_name>::case_4`. Note that case numbers are zero-padded
-so if for example there are 20 test cases, case 4 would be called `case_04`.
+See the dedicated [documentation](STRESS.md) for more information.
 
 ### Test services
 

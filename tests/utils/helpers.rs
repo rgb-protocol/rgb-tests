@@ -7,7 +7,7 @@ pub struct TestWallet {
     instance: u8,
 }
 
-enum WalletAccount {
+pub enum WalletAccount {
     Private(XprivAccount),
     Public(XpubAccount),
 }
@@ -71,7 +71,7 @@ impl Filter<'_> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DescriptorType {
     Wpkh,
     Tr,
@@ -786,6 +786,14 @@ impl Report {
             .unwrap();
     }
 
+    pub fn write_displayable(&self, content: impl Display) {
+        let mut file = OpenOptions::new()
+            .append(true)
+            .open(&self.report_path)
+            .unwrap();
+        file.write_all(format!("{content};").as_bytes()).unwrap();
+    }
+
     pub fn end_line(&self) {
         let mut file = OpenOptions::new()
             .append(true)
@@ -804,8 +812,8 @@ pub fn get_builder_seal(outpoint: Outpoint, blinding: Option<u64>) -> BuilderSea
     BuilderSeal::from(blind_seal)
 }
 
-fn _get_wallet(
-    descriptor_type: &DescriptorType,
+pub fn get_wallet_internal(
+    descriptor_type: Option<&DescriptorType>,
     network: Network,
     wallet_dir: PathBuf,
     wallet_account: WalletAccount,
@@ -813,45 +821,57 @@ fn _get_wallet(
     import_kits: bool,
 ) -> TestWallet {
     std::fs::create_dir_all(&wallet_dir).unwrap();
-    println!("wallet dir: {wallet_dir:?}");
-
-    let xpub_account = match wallet_account {
-        WalletAccount::Private(ref xpriv_account) => xpriv_account.to_xpub_account(),
-        WalletAccount::Public(ref xpub_account) => xpub_account.clone(),
-    };
-    const OPRET_KEYCHAINS: [Keychain; 3] = [
-        Keychain::INNER,
-        Keychain::OUTER,
-        Keychain::with(RgbKeychain::Rgb as u8),
-    ];
-    const TAPRET_KEYCHAINS: [Keychain; 4] = [
-        Keychain::INNER,
-        Keychain::OUTER,
-        Keychain::with(RgbKeychain::Rgb as u8),
-        Keychain::with(RgbKeychain::Tapret as u8),
-    ];
-    let keychains: &[Keychain] = match *descriptor_type {
-        DescriptorType::Tr => &TAPRET_KEYCHAINS[..],
-        DescriptorType::Wpkh => &OPRET_KEYCHAINS[..],
-    };
-    let xpub_derivable = XpubDerivable::with(xpub_account.clone(), keychains);
-
-    let descriptor = match descriptor_type {
-        DescriptorType::Wpkh => RgbDescr::Wpkh(Wpkh::from(xpub_derivable)),
-        DescriptorType::Tr => RgbDescr::TapretKey(TapretKey::from(xpub_derivable)),
-    };
-
     let name = "bp_wallet_name";
-    let mut bp_wallet = Wallet::new_layer1(descriptor.clone(), network);
-    bp_wallet.set_name(name.to_string());
     let bp_dir = wallet_dir.join(name);
     let bp_wallet_provider = FsTextStore::new(bp_dir).unwrap();
-    bp_wallet.make_persistent(bp_wallet_provider, true).unwrap();
-
     let stock_provider = FsBinStore::new(wallet_dir.clone()).unwrap();
-    let mut stock = Stock::in_memory();
-    stock.make_persistent(stock_provider, true).unwrap();
+    let (bp_wallet, stock) = if let Some(dt) = descriptor_type {
+        // new wallet
+        let xpub_account = match wallet_account {
+            WalletAccount::Private(ref xpriv_account) => xpriv_account.to_xpub_account(),
+            WalletAccount::Public(ref xpub_account) => xpub_account.clone(),
+        };
+        const OPRET_KEYCHAINS: [Keychain; 3] = [
+            Keychain::INNER,
+            Keychain::OUTER,
+            Keychain::with(RgbKeychain::Rgb as u8),
+        ];
+        const TAPRET_KEYCHAINS: [Keychain; 4] = [
+            Keychain::INNER,
+            Keychain::OUTER,
+            Keychain::with(RgbKeychain::Rgb as u8),
+            Keychain::with(RgbKeychain::Tapret as u8),
+        ];
+        let keychains: &[Keychain] = match *dt {
+            DescriptorType::Tr => &TAPRET_KEYCHAINS[..],
+            DescriptorType::Wpkh => &OPRET_KEYCHAINS[..],
+        };
+        let xpub_derivable = XpubDerivable::with(xpub_account.clone(), keychains);
+        let descriptor = match dt {
+            DescriptorType::Wpkh => RgbDescr::Wpkh(Wpkh::from(xpub_derivable)),
+            DescriptorType::Tr => RgbDescr::TapretKey(TapretKey::from(xpub_derivable)),
+        };
+        let mut bp_wallet = Wallet::new_layer1(descriptor.clone(), network);
+        bp_wallet.make_persistent(bp_wallet_provider, true).unwrap();
+        bp_wallet.set_name(name.to_string());
+        let mut stock = Stock::in_memory();
+        stock.make_persistent(stock_provider, true).unwrap();
+        (bp_wallet, stock)
+    } else {
+        // load wallet
+        let stock = Stock::load(stock_provider.clone(), true).unwrap();
+        let bp_wallet = Wallet::load(bp_wallet_provider.clone(), true).unwrap();
+        (bp_wallet, stock)
+    };
     let mut wallet = RgbWallet::new(stock, bp_wallet);
+    println!(
+        "wallet dir: {wallet_dir:?} ({})",
+        if wallet.wallet().is_taproot() {
+            "tapret"
+        } else {
+            "opret"
+        }
+    );
 
     if import_kits {
         for asset_schema in AssetSchema::iter() {
@@ -886,8 +906,21 @@ pub fn get_wallet_custom(
     instance: Option<u8>,
     import_kits: bool,
 ) -> TestWallet {
+    get_wallet_and_seed(descriptor_type, instance, import_kits, None).0
+}
+
+pub fn get_wallet_and_seed(
+    descriptor_type: &DescriptorType,
+    instance: Option<u8>,
+    import_kits: bool,
+    rng: Option<&mut StdRng>,
+) -> (TestWallet, Vec<u8>) {
     let mut seed = vec![0u8; 128];
-    rand::thread_rng().fill_bytes(&mut seed);
+    if let Some(rng) = rng {
+        rng.fill_bytes(&mut seed);
+    } else {
+        rand::thread_rng().fill_bytes(&mut seed);
+    }
 
     let xpriv_account = XprivAccount::with_seed(true, &seed).derive(h![86, 1, 0]);
 
@@ -896,14 +929,15 @@ pub fn get_wallet_custom(
         .join(INTEGRATION_DATA_DIR)
         .join(fingerprint);
 
-    _get_wallet(
-        descriptor_type,
+    let wallet = get_wallet_internal(
+        Some(descriptor_type),
         Network::Regtest,
         wallet_dir,
         WalletAccount::Private(xpriv_account),
         instance.unwrap_or(INSTANCE_1),
         import_kits,
-    )
+    );
+    (wallet, seed)
 }
 
 pub fn get_mainnet_wallet() -> TestWallet {
@@ -915,8 +949,8 @@ pub fn get_mainnet_wallet() -> TestWallet {
         .join(INTEGRATION_DATA_DIR)
         .join("mainnet");
 
-    _get_wallet(
-        &DescriptorType::Wpkh,
+    get_wallet_internal(
+        Some(&DescriptorType::Wpkh),
         Network::Mainnet,
         wallet_dir,
         WalletAccount::Public(xpub_account),
@@ -1044,6 +1078,17 @@ impl TestWallet {
 
     pub fn get_address(&mut self) -> Address {
         self.get_derived_address(true).addr
+    }
+
+    pub fn get_unspents(&mut self) -> HashMap<Outpoint, Sats> {
+        let coins = self.wallet.wallet().address_coins();
+        let mut unspents: HashMap<Outpoint, Sats> = HashMap::new();
+        for (_, u) in coins {
+            u.iter().for_each(|e| {
+                unspents.insert(e.outpoint, e.amount);
+            });
+        }
+        unspents
     }
 
     pub fn get_utxo(&mut self, sats: Option<u64>) -> Outpoint {
@@ -1513,6 +1558,34 @@ impl TestWallet {
             .data("assetOwner", Filter::Wallet(&self.wallet))
             .unwrap()
             .collect()
+    }
+
+    pub fn get_contract_balance(&self, contract_id: ContractId) -> u64 {
+        let asset_schema = self
+            .stock()
+            .contract_data(contract_id)
+            .unwrap()
+            .schema
+            .schema_id()
+            .into();
+        match asset_schema {
+            AssetSchema::Nia | AssetSchema::Cfa | AssetSchema::Ifa | AssetSchema::Pfa => {
+                // balance can overflow with show_tentative=true
+                let allocations = self.contract_fungible_allocations(contract_id, false);
+                let mut balance = 0;
+                for a in allocations {
+                    let outpoint = a.seal.outpoint().unwrap();
+                    let amount = a.state;
+                    if self.wallet.wallet().utxo(outpoint).is_some() {
+                        balance += amount.value();
+                    }
+                }
+                balance
+            }
+            AssetSchema::Uda => {
+                unimplemented!("todo");
+            }
+        }
     }
 
     pub fn history(&self, contract_id: ContractId) -> Vec<ContractOp> {
