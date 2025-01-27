@@ -363,6 +363,7 @@ fn transfer_loop(
 #[case(AS::Cfa)]
 #[case(AS::Uda)]
 #[case(AS::Pfa)]
+#[case(AS::Ifa)]
 fn unknown_kit(#[case] asset_schema: AssetSchema) {
     println!("asset_schema {asset_schema:?}");
 
@@ -381,6 +382,7 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
             let pubkey = CompressedPk::from_byte_array(public_key.serialize()).unwrap();
             (wlt_1.issue_pfa(600, None, pubkey), Some(secret_key))
         }
+        AssetSchema::Ifa => (wlt_1.issue_ifa(600, None, vec![], vec![]), None),
     };
 
     if asset_schema == AssetSchema::Pfa {
@@ -470,7 +472,7 @@ fn same_transfer_twice_no_update_witnesses(#[case] transfer_type: TransferType) 
     let schema_id = wlt_1.schema_id(contract_id);
 
     let amount = 100;
-    let invoice = wlt_2.invoice(contract_id, schema_id, amount, transfer_type.into());
+    let invoice = wlt_2.invoice(contract_id, schema_id, amount, transfer_type);
     let _ = wlt_1.pay_full(invoice.clone(), None, Some(500), false, None);
 
     let (consignment, _, _, _) = wlt_1.pay_full(invoice, None, Some(1000), true, None);
@@ -536,7 +538,7 @@ fn same_transfer_twice_update_witnesses(#[case] transfer_type: TransferType) {
     let schema_id = wlt_1.schema_id(contract_id);
 
     let amount = 100;
-    let invoice = wlt_2.invoice(contract_id, schema_id, amount, transfer_type.into());
+    let invoice = wlt_2.invoice(contract_id, schema_id, amount, transfer_type);
     let _ = wlt_1.pay_full(invoice.clone(), None, Some(500), false, None);
 
     wlt_1.sync_and_update_witnesses(None);
@@ -578,7 +580,7 @@ fn invoice_reuse(#[case] transfer_type: TransferType) {
     let schema_id = wlt_1.schema_id(contract_id);
 
     let amount = 300;
-    let invoice = wlt_2.invoice(contract_id, schema_id, amount, transfer_type.into());
+    let invoice = wlt_2.invoice(contract_id, schema_id, amount, transfer_type);
     wlt_1.send_to_invoice(&mut wlt_2, invoice.clone(), Some(500), None, None);
     let (consignment, _) = wlt_1.send_to_invoice(&mut wlt_2, invoice, Some(600), None, None);
 
@@ -1101,7 +1103,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
 
     // wlt_2 use custom resolver to be able to send the assets even if transfer TX sending to
     // blinded UTXO has not been broadcasted
-    wlt_2.accept_transfer_custom_resolver(consignment.clone(), None, &resolver);
+    wlt_2.accept_transfer_custom(consignment.clone(), None, &resolver, bset![]);
 
     let invoice = wlt_3.invoice(contract_id, schema_id, 50, InvoiceType::Witness);
     let (consignment, tx, _, _) = wlt_2.pay_full(invoice, Some(2000), None, true, None);
@@ -1459,6 +1461,230 @@ fn pfa() {
         false,
     );
     wlt_2.check_allocations(contract_id_2, schema_id_2, vec![amt_2], false);
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn ifa_inflation() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+
+    let issued_supply = 999;
+    let inflation_supply = 555;
+    let inflation_outpoint = wlt_1.get_utxo(None);
+    let contract_id = wlt_1.issue_ifa(
+        issued_supply,
+        None,
+        vec![],
+        vec![(inflation_outpoint, inflation_supply)],
+    );
+
+    wlt_1.send_ifa(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        issued_supply,
+    );
+
+    // first inflation
+    let inflation_1_amt_1 = 300;
+    let inflation_1_amt_2 = 200;
+    wlt_1.inflate_ifa(
+        contract_id,
+        vec![inflation_outpoint],
+        vec![inflation_1_amt_1, inflation_1_amt_2],
+    );
+
+    // send inflated asset
+    wlt_1.check_allocations(
+        contract_id,
+        AssetSchema::Ifa,
+        vec![inflation_1_amt_1, inflation_1_amt_2],
+        false,
+    );
+    wlt_1.send_ifa(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        inflation_1_amt_1 + inflation_1_amt_2,
+    );
+    wlt_2.check_allocations(
+        contract_id,
+        AssetSchema::Ifa,
+        vec![issued_supply, inflation_1_amt_1 + inflation_1_amt_2],
+        false,
+    );
+
+    // second inflation
+    let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let inflation_allocations = contract
+        .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+        .collect::<Vec<_>>();
+    let inflation_outpoints = inflation_allocations
+        .iter()
+        .map(|oa| oa.seal.outpoint().unwrap())
+        .collect::<Vec<_>>();
+    let inflation_2_amt: u64 = inflation_allocations
+        .iter()
+        .map(|oa| oa.state.value())
+        .sum();
+    wlt_1.inflate_ifa(contract_id, inflation_outpoints, vec![inflation_2_amt]);
+
+    // send inflated asset
+    let total_circulating = issued_supply + inflation_1_amt_1 + inflation_1_amt_2 + inflation_2_amt;
+    wlt_1.check_allocations(contract_id, AssetSchema::Ifa, vec![inflation_2_amt], false);
+    wlt_1.send_ifa(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        inflation_2_amt,
+    );
+    wlt_2.check_allocations(
+        contract_id,
+        AssetSchema::Ifa,
+        vec![
+            issued_supply,
+            inflation_1_amt_1 + inflation_1_amt_2,
+            inflation_2_amt,
+        ],
+        false,
+    );
+    wlt_2.send_ifa(
+        &mut wlt_3,
+        TransferType::Blinded,
+        contract_id,
+        total_circulating,
+    );
+    wlt_1.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
+    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
+    wlt_3.check_allocations(
+        contract_id,
+        AssetSchema::Ifa,
+        vec![total_circulating],
+        false,
+    );
+
+    // check max supply has been reached, no more inflation allowed
+    let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let max_supply = contract.max_supply().value();
+    let total_issued_supply = contract.total_issued_supply().value();
+    assert_eq!(max_supply, total_issued_supply);
+    assert_eq!(max_supply, total_circulating);
+    let inflation_allocations = contract
+        .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+        .collect::<Vec<_>>();
+    let inflatable: u64 = inflation_allocations
+        .iter()
+        .map(|oa| oa.state.value())
+        .sum();
+    assert_eq!(inflatable, 0);
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn ifa_burn() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_ifa(999, None, vec![], vec![]);
+
+    let amt = 300;
+    let utxo = wlt_2.get_utxo(None);
+    wlt_1.send_ifa(
+        &mut wlt_2,
+        InvoiceType::Blinded(Some(utxo)),
+        contract_id,
+        amt,
+    );
+
+    // burn assets
+    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amt], false);
+    wlt_2.burn_ifa(contract_id, utxo);
+    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn ifa_replace() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+
+    let right_utxo = wlt_1.get_utxo(None);
+    let amount = 999;
+    let contract_id = wlt_1.issue_ifa(amount, None, vec![right_utxo], vec![]);
+
+    // check replace right has been correctly defined
+    let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let replace_rights = contract
+        .replace_rights(AllocationFilter::Wallet.filter_for(&wlt_1))
+        .collect::<Vec<_>>();
+    let replace_outpoints = replace_rights
+        .iter()
+        .map(|oa| oa.seal.outpoint().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(replace_outpoints.len(), 1);
+    assert_eq!(right_utxo, replace_outpoints[0]);
+
+    // history that will be excluded after replace
+    let mut txs_before_replace = HashSet::<Txid>::new();
+    let (_, tx, _) = wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, amount);
+    txs_before_replace.insert(tx.txid());
+    let (_, tx, _) = wlt_2.send_ifa(&mut wlt_1, TransferType::Blinded, contract_id, amount);
+    txs_before_replace.insert(tx.txid());
+    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
+
+    // send assets that will be replaced
+    let amt_1 = 900;
+    wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, amt_1);
+    let amt_2 = amount - amt_1;
+    wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, amt_2);
+    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amt_1, amt_2], false);
+
+    // replace assets
+    wlt_2.replace_ifa(&mut wlt_1, right_utxo, contract_id);
+    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amount], false);
+
+    // send assets and check that excluded history does not appear in the consignment
+    let (consignment, _, _) =
+        wlt_2.send_ifa(&mut wlt_3, TransferType::Blinded, contract_id, amount);
+    assert_eq!(consignment.bundles.len(), 4);
+    let spent_witnesses = consignment
+        .bundles
+        .iter()
+        .map(|b| b.witness_id())
+        .collect::<HashSet<Txid>>();
+    assert!(spent_witnesses.is_disjoint(&txs_before_replace));
+
+    // check replace right has been moved
+    let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let replace_rights = contract
+        .replace_rights(AllocationFilter::Wallet.filter_for(&wlt_1))
+        .collect::<Vec<_>>();
+    assert_eq!(replace_rights.len(), 1);
+
+    // move replace right from wlt_1 to wlt_3
+    let beneficiary = XChainNet::bitcoin(
+        wlt_3.network(),
+        Beneficiary::BlindedSeal(wlt_3.get_secret_seal(None, None)),
+    );
+    let builder = RgbInvoiceBuilder::new(beneficiary)
+        .set_contract(contract_id)
+        .set_void();
+    let invoice = builder.finish();
+    wlt_1.send_ifa_to_invoice(&mut wlt_3, invoice);
+    let contract = wlt_3.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let replace_rights = contract
+        .replace_rights(AllocationFilter::Wallet.filter_for(&wlt_3))
+        .collect::<Vec<_>>();
+    assert_eq!(replace_rights.len(), 1);
 }
 
 #[cfg(not(feature = "altered"))]

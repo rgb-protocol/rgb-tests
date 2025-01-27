@@ -16,6 +16,8 @@ pub const ESPLORA_MAINNET_URL: &str = "https://blockstream.info/api";
 pub const FAKE_TXID: &str = "e5a3e577309df31bd606f48049049d2e1e02b048206ba232944fcc053a176ccb:0";
 pub const UDA_FIXED_INDEX: u32 = 0;
 pub const DEFAULT_FEE_ABS: u64 = 400;
+pub const MEDIA_FPATH: &str = "tests/fixtures/rgb_logo.jpeg";
+pub const OPID_REJECT_URL: &str = "example.xyz/opidReject";
 
 pub const INSTANCE_1: u8 = 1;
 pub const INSTANCE_2: u8 = 2;
@@ -42,7 +44,7 @@ pub use std::{
 };
 
 pub use amplify::{
-    bmap,
+    bmap, bset,
     confinement::{Confined, U16},
     map, s, ByteArray, Bytes64, Wrapper,
 };
@@ -68,6 +70,7 @@ pub use file_format::FileFormat;
 pub use once_cell::sync::Lazy;
 pub use psbt::{
     Beneficiary as PsbtBeneficiary, Payment, Prevout, Psbt, PsbtConstructor, PsbtMeta, PsbtVer,
+    Utxo,
 };
 #[cfg(not(feature = "altered"))]
 pub use psrgbt::{RgbExt, RgbInExt, RgbPsbt, TxParams};
@@ -77,11 +80,11 @@ pub use rand::RngCore;
 #[cfg(not(feature = "altered"))]
 pub use rgb::{
     containers::{PubWitness, ValidContract, WitnessBundle},
-    contract::{AllocatedState, AssignmentsFilter, ContractOp, OpDirection},
+    contract::{AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection},
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::ContractTerms,
+    stl::{ContractTerms, OpidRejectUrl},
     validation::{Failure, ResolveWitness, Scripts, Validity, Warning, WitnessResolverError},
     vm::{WitnessOrd, WitnessPos},
     AssignmentType, DescriptorRgb, GenesisSeal, GraphSeal, Identity, OpId, RgbDescr, RgbKeychain,
@@ -90,11 +93,11 @@ pub use rgb::{
 #[cfg(feature = "altered")]
 pub use rgb_altered::{
     containers::{PubWitness, ValidContract, WitnessBundle},
-    contract::{AllocatedState, AssignmentsFilter, ContractOp, OpDirection},
+    contract::{AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection},
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::ContractTerms,
+    stl::{ContractTerms, OpidRejectUrl},
     validation::{Failure, ResolveWitness, Scripts, Validity, Warning, WitnessResolverError},
     vm::{WitnessOrd, WitnessPos},
     AssignmentType, DescriptorRgb, GenesisSeal, GraphSeal, Identity, OpId, RgbDescr, RgbKeychain,
@@ -123,8 +126,9 @@ pub use rgbstd::{
 };
 pub use rstest::rstest;
 pub use schemata::{
-    CollectibleFungibleAsset, NonInflatableAsset, PermissionedFungibleAsset, UniqueDigitalAsset,
-    CFA_SCHEMA_ID, NIA_SCHEMA_ID, PFA_SCHEMA_ID, UDA_SCHEMA_ID,
+    CollectibleFungibleAsset, InflatableFungibleAsset, NonInflatableAsset,
+    PermissionedFungibleAsset, UniqueDigitalAsset, CFA_SCHEMA_ID, IFA_SCHEMA_ID, NIA_SCHEMA_ID,
+    PFA_SCHEMA_ID, UDA_SCHEMA_ID,
 };
 pub use serial_test::serial;
 pub use strict_encoding::{fname, tn, FieldName, StrictSerialize, TypeName};

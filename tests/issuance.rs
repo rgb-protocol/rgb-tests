@@ -3,8 +3,6 @@ pub mod utils;
 use rstest_reuse::{self, *};
 use utils::*;
 
-const MEDIA_FPATH: &str = "tests/fixtures/rgb_logo.jpeg";
-
 #[template]
 #[rstest]
 #[case(DescriptorType::Wpkh)]
@@ -193,6 +191,92 @@ fn issue_cfa(wallet_desc: DescriptorType) {
 
 #[cfg(not(feature = "altered"))]
 #[apply(descriptor)]
+fn issue_ifa(wallet_desc: DescriptorType) {
+    println!("wallet_desc {wallet_desc:?}");
+
+    initialize();
+
+    let mut wallet = get_wallet(&wallet_desc);
+
+    let issued_supply = 999;
+    let ticker = "TCKR";
+    let name = "asset name";
+    let precision = 2;
+    let details = Some("some details");
+    let terms_text = "Ricardian contract";
+    let terms_media_fpath = Some(MEDIA_FPATH);
+    let opid_reject_url = Some(OPID_REJECT_URL);
+    let replace_outpoints = vec![wallet.get_utxo(None), wallet.get_utxo(None)];
+    let inflation_info = vec![(wallet.get_utxo(None), 7), (wallet.get_utxo(None), 9)];
+    let inflation_supply: u64 = inflation_info.iter().map(|(_, amt)| amt).sum();
+    let asset_info = AssetInfo::ifa(
+        ticker,
+        name,
+        precision,
+        details,
+        terms_text,
+        terms_media_fpath,
+        opid_reject_url,
+        vec![issued_supply],
+        replace_outpoints.clone(),
+        inflation_info.clone(),
+    );
+    let contract_id = wallet.issue_with_info(asset_info, vec![], None, None);
+
+    let contract = wallet.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let spec = contract.spec();
+    assert_eq!(spec.ticker.to_string(), ticker.to_string());
+    assert_eq!(spec.name.to_string(), name.to_string());
+    assert_eq!(spec.precision.decimals(), precision);
+    let terms = contract.contract_terms();
+    assert_eq!(terms.text.to_string(), terms_text.to_string());
+    let terms_media = terms.media.unwrap();
+    assert_eq!(terms_media.ty.to_string(), "image/jpeg");
+    assert_eq!(
+        terms_media.digest.to_string(),
+        "02d2cc5d7883885bb7472e4fe96a07344b1d7cf794cb06943e1cdb5c57754d8a"
+    );
+    assert_eq!(
+        contract.opid_reject_url().map(|d| d.to_string()),
+        opid_reject_url.map(|d| d.to_string())
+    );
+    assert_eq!(contract.total_issued_supply().value(), issued_supply);
+    assert_eq!(
+        contract.max_supply().value(),
+        issued_supply + inflation_supply
+    );
+    let inflation_allocations = contract
+        .inflation_allocations(FilterIncludeAll)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        inflation_allocations
+            .iter()
+            .map(|i| i.seal.outpoint().unwrap())
+            .collect::<BTreeSet<_>>(),
+        inflation_info
+            .into_iter()
+            .map(|(o, _)| o)
+            .collect::<BTreeSet<_>>(),
+    );
+    let replace_rights = contract
+        .replace_rights(FilterIncludeAll)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        replace_rights
+            .iter()
+            .map(|r| r.seal.outpoint().unwrap())
+            .collect::<BTreeSet<_>>(),
+        replace_outpoints.into_iter().collect::<BTreeSet<_>>(),
+    );
+
+    let allocations = wallet.contract_fungible_allocations(contract_id, false);
+    assert_eq!(allocations.len(), 1);
+    let allocation = allocations[0];
+    assert_eq!(allocation.state, Amount::from(issued_supply));
+}
+
+#[cfg(not(feature = "altered"))]
+#[apply(descriptor)]
 fn issue_nia_multiple_utxos(wallet_desc: DescriptorType) {
     println!("wallet_desc {wallet_desc:?}");
 
@@ -358,6 +442,7 @@ fn issue_on_different_layers(#[case] scenario: &str) {
 #[case(AS::Cfa)]
 #[case(AS::Uda)]
 #[case(AS::Pfa)]
+#[case(AS::Ifa)]
 fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
     println!("asset_schema {asset_schema:?}");
 
@@ -393,6 +478,10 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
                 "rgb:L9pgSVBV-SZak7SD-HG5YZbz-zQYuV01-oMKcHpO-RAQQ2zM",
             )
         }
+        AssetSchema::Ifa => (
+            AssetInfo::default_ifa(vec![999], vec![], vec![]),
+            "rgb:0BE~U89N-BCpNAvM-qLVH764-GyTkV4x-78PP7Y7-xNMcZng",
+        ),
     };
 
     let mut wallet = get_wallet(&DescriptorType::Wpkh);

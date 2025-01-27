@@ -19,7 +19,18 @@ pub enum AllocationFilter {
     WalletTentative,
 }
 
-enum Filter<'w> {
+impl AllocationFilter {
+    pub fn filter_for(self, wlt: &TestWallet) -> Filter {
+        match self {
+            Self::WalletAll => Filter::WalletAll(&wlt.wallet),
+            Self::WalletTentative => Filter::WalletTentative(&wlt.wallet),
+            Self::Wallet => Filter::Wallet(&wlt.wallet),
+            Self::Stock => Filter::NoWallet,
+        }
+    }
+}
+
+pub enum Filter<'w> {
     NoWallet,
     Wallet(&'w RgbWallet<Wallet<XpubDerivable, RgbDescr>>),
     WalletAll(&'w RgbWallet<Wallet<XpubDerivable, RgbDescr>>),
@@ -143,6 +154,7 @@ pub enum AssetSchema {
     Uda,
     Cfa,
     Pfa,
+    Ifa,
 }
 
 impl fmt::Display for AssetSchema {
@@ -158,6 +170,7 @@ impl AssetSchema {
             Self::Uda => UniqueDigitalAsset::schema(),
             Self::Cfa => CollectibleFungibleAsset::schema(),
             Self::Pfa => PermissionedFungibleAsset::schema(),
+            Self::Ifa => InflatableFungibleAsset::schema(),
         }
     }
 
@@ -167,6 +180,7 @@ impl AssetSchema {
             Self::Uda => UniqueDigitalAsset::scripts(),
             Self::Cfa => CollectibleFungibleAsset::scripts(),
             Self::Pfa => PermissionedFungibleAsset::scripts(),
+            Self::Ifa => InflatableFungibleAsset::scripts(),
         }
     }
 
@@ -176,6 +190,7 @@ impl AssetSchema {
             Self::Uda => UniqueDigitalAsset::types(),
             Self::Cfa => CollectibleFungibleAsset::types(),
             Self::Pfa => PermissionedFungibleAsset::types(),
+            Self::Ifa => InflatableFungibleAsset::types(),
         }
     }
 
@@ -189,14 +204,14 @@ impl AssetSchema {
 
     fn default_state_type(&self) -> StateType {
         match self {
-            Self::Cfa | Self::Nia | Self::Pfa => StateType::Fungible,
+            Self::Cfa | Self::Nia | Self::Pfa | Self::Ifa => StateType::Fungible,
             Self::Uda => StateType::Structured,
         }
     }
 
     fn allocated_state(&self, value: u64) -> AllocatedState {
         match self {
-            Self::Cfa | Self::Nia | Self::Pfa => AllocatedState::Amount(value.into()),
+            Self::Cfa | Self::Nia | Self::Pfa | Self::Ifa => AllocatedState::Amount(value.into()),
             Self::Uda => AllocatedState::Data(
                 Allocation::with(UDA_FIXED_INDEX, OwnedFraction::from(1)).into(),
             ),
@@ -211,12 +226,13 @@ impl From<SchemaId> for AssetSchema {
             NIA_SCHEMA_ID => AssetSchema::Nia,
             UDA_SCHEMA_ID => AssetSchema::Uda,
             PFA_SCHEMA_ID => AssetSchema::Pfa,
+            IFA_SCHEMA_ID => AssetSchema::Ifa,
             _ => panic!("unknown schema ID"),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AssetInfo {
     Nia {
         spec: AssetSpec,
@@ -241,15 +257,24 @@ pub enum AssetInfo {
         issue_amounts: Vec<u64>,
         pubkey: CompressedPk,
     },
+    Ifa {
+        spec: AssetSpec,
+        terms: ContractTerms,
+        opid_reject_url: Option<OpidRejectUrl>,
+        issue_amounts: Vec<u64>,
+        replace_outpoints: Vec<Outpoint>,
+        inflation_info: Vec<(Outpoint, u64)>,
+    },
 }
 
 impl AssetInfo {
-    fn asset_schema(&self) -> AssetSchema {
+    pub fn asset_schema(&self) -> AssetSchema {
         match self {
             Self::Nia { .. } => AssetSchema::Nia,
             Self::Uda { .. } => AssetSchema::Uda,
             Self::Cfa { .. } => AssetSchema::Cfa,
             Self::Pfa { .. } => AssetSchema::Pfa,
+            Self::Ifa { .. } => AssetSchema::Ifa,
         }
     }
 
@@ -291,6 +316,25 @@ impl AssetInfo {
             None,
             issue_amounts,
             pubkey,
+        )
+    }
+
+    pub fn default_ifa(
+        issue_amounts: Vec<u64>,
+        replace_outpoints: Vec<Outpoint>,
+        inflation_info: Vec<(Outpoint, u64)>,
+    ) -> Self {
+        AssetInfo::ifa(
+            "IFATCKR",
+            "IFA asset name",
+            0,
+            None,
+            "IFA terms",
+            None,
+            Some(OPID_REJECT_URL),
+            issue_amounts,
+            replace_outpoints,
+            inflation_info,
         )
     }
 
@@ -411,6 +455,42 @@ impl AssetInfo {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn ifa(
+        ticker: &str,
+        name: &str,
+        precision: u8,
+        details: Option<&str>,
+        terms_text: &str,
+        terms_media_fpath: Option<&str>,
+        opid_reject_url: Option<&str>,
+        issue_amounts: Vec<u64>,
+        replace_outpoints: Vec<Outpoint>,
+        inflation_info: Vec<(Outpoint, u64)>,
+    ) -> Self {
+        let spec = AssetSpec::with(
+            ticker,
+            name,
+            Precision::try_from(precision).unwrap(),
+            details,
+        )
+        .unwrap();
+        let text = RicardianContract::from_str(terms_text).unwrap();
+        let attachment = terms_media_fpath.map(attachment_from_fpath);
+        let terms = ContractTerms {
+            text,
+            media: attachment,
+        };
+        Self::Ifa {
+            spec,
+            terms,
+            opid_reject_url: opid_reject_url
+                .map(|u| OpidRejectUrl::try_from(u.to_owned()).unwrap()),
+            issue_amounts,
+            replace_outpoints,
+            inflation_info,
+        }
+    }
     pub fn add_global_state(&self, mut builder: ContractBuilder) -> ContractBuilder {
         match self {
             Self::Nia {
@@ -481,6 +561,33 @@ impl AssetInfo {
                     Amount::from(issue_amounts.iter().sum::<u64>()),
                 )
                 .unwrap(),
+            Self::Ifa {
+                spec,
+                terms,
+                issue_amounts,
+                opid_reject_url,
+                inflation_info,
+                ..
+            } => {
+                let issue_amount = Amount::from(issue_amounts.iter().sum::<u64>());
+                let inflation_amount =
+                    Amount::from(inflation_info.iter().map(|(_, amt)| amt).sum::<u64>());
+                builder = builder
+                    .add_global_state("spec", spec.clone())
+                    .unwrap()
+                    .add_global_state("terms", terms.clone())
+                    .unwrap()
+                    .add_global_state("issuedSupply", issue_amount)
+                    .unwrap()
+                    .add_global_state("maxSupply", issue_amount + inflation_amount)
+                    .unwrap();
+                if let Some(opid_reject_url) = opid_reject_url {
+                    builder = builder
+                        .add_global_state("opidRejectUrl", opid_reject_url.clone())
+                        .unwrap()
+                }
+                builder
+            }
         }
     }
 
@@ -493,7 +600,8 @@ impl AssetInfo {
         match self {
             Self::Nia { issue_amounts, .. }
             | Self::Cfa { issue_amounts, .. }
-            | Self::Pfa { issue_amounts, .. } => {
+            | Self::Pfa { issue_amounts, .. }
+            | Self::Ifa { issue_amounts, .. } => {
                 for (amt, outpoint) in issue_amounts.iter().zip(outpoints.iter().cycle()) {
                     builder = builder
                         .add_fungible_state(
@@ -517,6 +625,43 @@ impl AssetInfo {
                     .unwrap()
             }
         }
+    }
+
+    pub fn add_inflation_allowance(
+        &self,
+        mut builder: ContractBuilder,
+        blinding: Option<u64>,
+    ) -> ContractBuilder {
+        if let Self::Ifa { inflation_info, .. } = self {
+            for (outpoint, amt) in inflation_info {
+                builder = builder
+                    .add_fungible_state(
+                        "inflationAllowance",
+                        get_builder_seal(*outpoint, blinding),
+                        *amt,
+                    )
+                    .unwrap();
+            }
+        }
+        builder
+    }
+
+    pub fn add_replace_right(
+        &self,
+        mut builder: ContractBuilder,
+        blinding: Option<u64>,
+    ) -> ContractBuilder {
+        if let Self::Ifa {
+            replace_outpoints, ..
+        } = self
+        {
+            for outpoint in replace_outpoints {
+                builder = builder
+                    .add_rights("replaceRight", get_builder_seal(*outpoint, blinding))
+                    .unwrap();
+            }
+        }
+        builder
     }
 }
 
@@ -875,6 +1020,10 @@ impl TestWallet {
             .unwrap();
     }
 
+    pub fn utxo(&self, outpoint: &Outpoint) -> (Utxo, ScriptPubkey) {
+        self.wallet.wallet().utxo(*outpoint).unwrap()
+    }
+
     pub fn close_method(&self) -> CloseMethod {
         self.wallet.wallet().close_method()
     }
@@ -940,10 +1089,10 @@ impl TestWallet {
             asset_info.scripts(),
             self.chain_net(),
         );
-
         builder = asset_info.add_global_state(builder);
-
         builder = asset_info.add_asset_owner(builder, outpoints, blinding);
+        builder = asset_info.add_inflation_allowance(builder, blinding);
+        builder = asset_info.add_replace_right(builder, blinding);
 
         let created_at = created_at.unwrap_or_else(|| Utc::now().timestamp());
         let contract = builder.issue_contract_raw(created_at).unwrap();
@@ -978,24 +1127,43 @@ impl TestWallet {
         self.issue_with_info(asset_info, vec![outpoint.copied()], None, None)
     }
 
+    pub fn issue_ifa(
+        &mut self,
+        issued_supply: u64,
+        outpoint: Option<&Outpoint>,
+        replace_outpoints: Vec<Outpoint>,
+        inflation_info: Vec<(Outpoint, u64)>,
+    ) -> ContractId {
+        let asset_info =
+            AssetInfo::default_ifa(vec![issued_supply], replace_outpoints, inflation_info);
+        self.issue_with_info(asset_info, vec![outpoint.copied()], None, None)
+    }
+
+    pub fn get_secret_seal(
+        &mut self,
+        outpoint: Option<Outpoint>,
+        static_blinding: Option<u64>,
+    ) -> SecretSeal {
+        let outpoint = outpoint.unwrap_or_else(|| self.get_utxo(None));
+        let seal = GraphSeal::from(match static_blinding {
+            Some(bli) => BlindSeal::with_blinding(outpoint.txid, outpoint.vout, bli),
+            None => BlindSeal::new_random(outpoint.txid, outpoint.vout),
+        });
+        self.wallet.stock_mut().store_secret_seal(seal).unwrap();
+        seal.to_secret_seal()
+    }
+
     pub fn invoice(
         &mut self,
         contract_id: ContractId,
         schema_id: SchemaId,
         amount: u64,
-        invoice_type: InvoiceType,
+        invoice_type: impl Into<InvoiceType>,
     ) -> RgbInvoice {
-        let network = self.wallet.wallet().network();
-        let beneficiary = match invoice_type {
+        let network = self.network();
+        let beneficiary = match invoice_type.into() {
             InvoiceType::Blinded(outpoint) => {
-                let outpoint = if let Some(outpoint) = outpoint {
-                    outpoint
-                } else {
-                    self.get_utxo(None)
-                };
-                let seal = GraphSeal::new_random(outpoint.txid, outpoint.vout);
-                self.wallet.stock_mut().store_secret_seal(seal).unwrap();
-                Beneficiary::BlindedSeal(seal.to_secret_seal())
+                Beneficiary::BlindedSeal(self.get_secret_seal(outpoint, None))
             }
             InvoiceType::Witness => {
                 let address = self.get_address();
@@ -1129,21 +1297,27 @@ impl TestWallet {
         (consignment, tx, psbt, psbt_meta)
     }
 
-    pub fn accept_transfer(&mut self, consignment: Transfer, report: Option<&Report>) {
+    pub fn accept_transfer(
+        &mut self,
+        consignment: Transfer,
+        report: Option<&Report>,
+    ) -> BTreeSet<OpId> {
         let resolver = self.get_resolver();
-        self.accept_transfer_custom_resolver(consignment, report, &resolver);
+        self.accept_transfer_custom(consignment, report, &resolver, bset![])
     }
 
-    pub fn accept_transfer_custom_resolver(
+    pub fn accept_transfer_custom(
         &mut self,
         consignment: Transfer,
         report: Option<&Report>,
         resolver: &impl ResolveWitness,
-    ) {
+        trusted_op_seals: BTreeSet<OpId>,
+    ) -> BTreeSet<OpId> {
         self.sync();
         let validate_start = Instant::now();
         let validated_consignment = consignment
-            .validate(&resolver, self.chain_net(), None)
+            .clone()
+            .validate_with_opids(&resolver, self.chain_net(), None, trusted_op_seals)
             .map_err(|(status, _)| status)
             .unwrap();
         let validate_duration = validate_start.elapsed();
@@ -1163,6 +1337,7 @@ impl TestWallet {
         if let Some(report) = report {
             report.write_duration(accept_duration);
         }
+        validated_consignment.validated_opids().clone()
     }
 
     pub fn try_add_tapret_tweak(&mut self, consignment: Transfer, txid: &Txid) {
@@ -1236,12 +1411,7 @@ impl TestWallet {
     }
 
     pub fn debug_logs(&self, contract_id: ContractId, filter: AllocationFilter) {
-        let filter = match filter {
-            AllocationFilter::WalletAll => Filter::WalletAll(&self.wallet),
-            AllocationFilter::WalletTentative => Filter::WalletTentative(&self.wallet),
-            AllocationFilter::Wallet => Filter::Wallet(&self.wallet),
-            AllocationFilter::Stock => Filter::NoWallet,
-        };
+        let filter = filter.filter_for(self);
 
         let contract = self.contract_data(contract_id);
 
@@ -1364,14 +1534,14 @@ impl TestWallet {
     pub fn send(
         &mut self,
         recv_wlt: &mut TestWallet,
-        transfer_type: TransferType,
+        invoice_type: impl Into<InvoiceType>,
         contract_id: ContractId,
         amount: u64,
         sats: u64,
         report: Option<&Report>,
     ) -> (Transfer, Tx) {
         let schema_id = self.schema_id(contract_id);
-        let invoice = recv_wlt.invoice(contract_id, schema_id, amount, transfer_type.into());
+        let invoice = recv_wlt.invoice(contract_id, schema_id, amount, invoice_type.into());
         self.send_to_invoice(recv_wlt, invoice, Some(sats), None, report)
     }
 
@@ -1410,7 +1580,7 @@ impl TestWallet {
 
         let schema_id = self.schema_id(contract_id);
         assert_eq!(schema_id, AssetSchema::Pfa.schema().schema_id());
-        let invoice = recv_wlt.invoice(contract_id, schema_id, amount, transfer_type.into());
+        let invoice = recv_wlt.invoice(contract_id, schema_id, amount, transfer_type);
         let (mut consignment, tx, psbt, psbt_meta) = self.pay_full(invoice, None, None, true, None);
         let txid = tx.txid();
         consignment.modify_bundle(txid, transition_signer);
@@ -1431,6 +1601,281 @@ impl TestWallet {
         self.sync();
     }
 
+    pub fn send_ifa(
+        &mut self,
+        recv_wlt: &mut TestWallet,
+        invoice_type: impl Into<InvoiceType>,
+        contract_id: ContractId,
+        amount: u64,
+    ) -> (Transfer, Tx, BTreeSet<OpId>) {
+        let schema_id = self.schema_id(contract_id);
+        let invoice = recv_wlt.invoice(contract_id, schema_id, amount, invoice_type.into());
+        self.send_ifa_to_invoice(recv_wlt, invoice)
+    }
+
+    pub fn send_ifa_to_invoice(
+        &mut self,
+        recv_wlt: &mut TestWallet,
+        invoice: RgbInvoice,
+    ) -> (Transfer, Tx, BTreeSet<OpId>) {
+        let (consignment, tx, _, _) = self.pay_full(invoice, None, None, true, None);
+        self.mine_tx(&tx.txid(), false);
+        let trusted_op_seals = consignment.replace_transitions_input_ops();
+        let validated_opids = recv_wlt.accept_transfer_custom(
+            consignment.clone(),
+            None,
+            &recv_wlt.get_resolver(),
+            trusted_op_seals,
+        );
+        self.sync();
+        (consignment, tx, validated_opids)
+    }
+
+    pub fn inflate_ifa(
+        &mut self,
+        contract_id: ContractId,
+        inflation_outpoints: Vec<Outpoint>,
+        inflation_amounts: Vec<u64>,
+    ) {
+        let contract = self.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+        let inflation_allocations = contract
+            .inflation_allocations(Filter::Wallet(&self.wallet))
+            .filter(|oa| inflation_outpoints.contains(&oa.seal.outpoint().unwrap()))
+            .collect::<Vec<_>>();
+        let inflation_supply: u64 = inflation_allocations
+            .iter()
+            .map(|oa| oa.state.value())
+            .sum();
+
+        let total_inflation_amount: u64 = inflation_amounts.iter().sum();
+        let inflation_change = inflation_supply - total_inflation_amount;
+
+        let mut psbt_beneficiaries = vec![];
+        let mut num_psbt_beneficiaries = inflation_amounts.len();
+        if inflation_change > 0 {
+            num_psbt_beneficiaries += 1;
+        }
+        (0..num_psbt_beneficiaries)
+            .for_each(|_| psbt_beneficiaries.push((self.get_address(), None)));
+
+        let (mut psbt, _) = self.construct_psbt(inflation_outpoints, psbt_beneficiaries, None);
+        let mut asset_transition_builder = self
+            .wallet
+            .stock()
+            .transition_builder(contract_id, "inflate")
+            .unwrap();
+        let prev_outputs = psbt
+            .inputs()
+            .map(|txin| txin.previous_outpoint)
+            .collect::<HashSet<_>>();
+        for (_, opout_state_map) in self
+            .wallet
+            .stock()
+            .contract_assignments_for(contract_id, prev_outputs)
+            .unwrap()
+        {
+            for (opout, state) in opout_state_map {
+                asset_transition_builder =
+                    asset_transition_builder.add_input(opout, state).unwrap();
+            }
+        }
+        let mut beneficiaries = vec![];
+        for (vout, inflation_amount) in inflation_amounts.into_iter().enumerate() {
+            let seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(vout as u32));
+            beneficiaries.push(seal);
+            asset_transition_builder = asset_transition_builder
+                .add_fungible_state("assetOwner", seal, inflation_amount)
+                .unwrap();
+        }
+
+        if inflation_change > 0 {
+            let change_vout = num_psbt_beneficiaries as u32 - 1;
+            let seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(change_vout));
+            beneficiaries.push(seal);
+            asset_transition_builder = asset_transition_builder
+                .add_fungible_state(fname!("inflationAllowance"), seal, inflation_change)
+                .unwrap();
+        }
+        asset_transition_builder = asset_transition_builder
+            .add_global_state("issuedSupply", Amount::from(total_inflation_amount))
+            .unwrap()
+            .add_metadata("allowedInflation", Amount::from(inflation_change))
+            .unwrap();
+        let transition = asset_transition_builder.complete_transition().unwrap();
+        for input in psbt.inputs_mut() {
+            input
+                .set_rgb_consumer(contract_id, transition.id())
+                .unwrap();
+        }
+        psbt.push_rgb_transition(transition).unwrap();
+        psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO)
+            .set_opret_host()
+            .unwrap();
+        psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+        psbt.complete_construction();
+        let fascia = psbt.rgb_commit().unwrap();
+        self.consume_fascia(fascia, psbt.txid());
+        let tx = self.sign_finalize_extract(&mut psbt);
+        self.broadcast_tx(&tx);
+        self.mine_tx(&tx.txid(), false);
+        println!("inflation txid: {}", tx.txid());
+        self.sync();
+        let consignments = self.create_consignments(bmap![contract_id => beneficiaries], tx.txid());
+        for consignment in consignments {
+            let all_opids = consignment
+                .bundles
+                .iter()
+                .flat_map(|b| b.bundle().known_transitions.keys().copied())
+                .collect::<BTreeSet<_>>();
+            let validated_consignment = consignment
+                .clone()
+                .validate_with_opids(&self.get_resolver(), self.chain_net(), None, bset![])
+                .map_err(|(status, _)| status)
+                .unwrap();
+            assert_eq!(*validated_consignment.validated_opids(), all_opids);
+        }
+    }
+
+    pub fn replace_ifa(
+        &mut self,
+        right_owner: &mut TestWallet,
+        right_utxo: Outpoint,
+        contract_id: ContractId,
+    ) {
+        let address = self.get_address();
+        let allocations = self.contract_fungible_allocations(contract_id, false);
+        let replaced_amount: u64 = allocations.iter().map(|a| a.state.value()).sum();
+        let utxos = allocations.iter().map(|a| a.seal.into()).collect();
+        let (mut psbt, _) = self.construct_psbt(utxos, vec![(address, None)], None);
+        let (input, _) = right_owner.utxo(&right_utxo);
+        right_owner.psbt_add_input(&mut psbt, right_utxo); // include replace right
+        psbt.construct_output_expect(
+            right_owner.get_address().script_pubkey(),
+            Sats::from_sats(input.value.sats()),
+        );
+        let mut asset_transition_builder = right_owner
+            .wallet
+            .stock()
+            .transition_builder(contract_id, "replace")
+            .unwrap();
+        let prev_outputs = psbt
+            .inputs()
+            .map(|txin| txin.previous_outpoint)
+            .collect::<HashSet<_>>();
+        for wlt in [&right_owner, &self] {
+            for (_, opout_state_map) in wlt
+                .wallet
+                .stock()
+                .contract_assignments_for(contract_id, prev_outputs.clone())
+                .unwrap()
+            {
+                for (opout, state) in opout_state_map {
+                    asset_transition_builder =
+                        asset_transition_builder.add_input(opout, state).unwrap();
+                }
+            }
+        }
+        let mut beneficiaries = vec![];
+        let seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(0));
+        beneficiaries.push(seal);
+        asset_transition_builder = asset_transition_builder
+            .add_fungible_state("assetOwner", seal, replaced_amount)
+            .unwrap(); // add replaced allocation
+        let seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(1));
+        beneficiaries.push(seal);
+        asset_transition_builder = asset_transition_builder
+            .add_rights("replaceRight", seal)
+            .unwrap(); // add replace right
+        let transition = asset_transition_builder.complete_transition().unwrap();
+        for input in psbt.inputs_mut() {
+            input
+                .set_rgb_consumer(contract_id, transition.id())
+                .unwrap();
+        }
+        psbt.push_rgb_transition(transition).unwrap();
+        psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO)
+            .set_opret_host()
+            .unwrap();
+        psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+        psbt.complete_construction();
+        let fascia = psbt.rgb_commit().unwrap();
+        self.consume_fascia(fascia.clone(), psbt.txid());
+        right_owner.consume_fascia(fascia, psbt.txid());
+        right_owner.sign_finalize(&mut psbt);
+        let tx = self.sign_finalize_extract(&mut psbt);
+        self.broadcast_tx(&tx);
+        self.mine_tx(&tx.txid(), false);
+        println!("replace txid: {}", tx.txid());
+        self.sync();
+        right_owner.sync();
+
+        let consignments = self.create_consignments(bmap![contract_id => beneficiaries], tx.txid());
+        assert_eq!(consignments.len(), 2);
+        for consignment in consignments {
+            let trusted_op_seals = consignment.replace_transitions_input_ops();
+            let validated_consignment = consignment
+                .clone()
+                .validate_with_opids(
+                    &self.get_resolver(),
+                    self.chain_net(),
+                    None,
+                    trusted_op_seals,
+                )
+                .map_err(|(status, _)| status)
+                .unwrap();
+            let resolver = right_owner.get_resolver();
+            right_owner
+                .wallet
+                .stock_mut()
+                .accept_transfer(validated_consignment.clone(), &resolver)
+                .unwrap();
+        }
+    }
+
+    pub fn burn_ifa(&mut self, contract_id: ContractId, utxo: Outpoint) {
+        let address = self.get_address();
+        let (mut psbt, _) = self.construct_psbt(vec![utxo], vec![(address, None)], None);
+        let mut asset_transition_builder = self
+            .wallet
+            .stock()
+            .transition_builder(contract_id, "burn")
+            .unwrap();
+        let prev_outputs = psbt
+            .inputs()
+            .map(|txin| txin.previous_outpoint)
+            .collect::<HashSet<_>>();
+        for (_, opout_state_map) in self
+            .wallet
+            .stock()
+            .contract_assignments_for(contract_id, prev_outputs)
+            .unwrap()
+        {
+            for (opout, state) in opout_state_map {
+                asset_transition_builder =
+                    asset_transition_builder.add_input(opout, state).unwrap();
+            }
+        }
+        let transition = asset_transition_builder.complete_transition().unwrap();
+        for input in psbt.inputs_mut() {
+            input
+                .set_rgb_consumer(contract_id, transition.id())
+                .unwrap();
+        }
+        psbt.push_rgb_transition(transition).unwrap();
+        psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO)
+            .set_opret_host()
+            .unwrap();
+        psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+        psbt.complete_construction();
+        let fascia = psbt.rgb_commit().unwrap();
+        self.consume_fascia(fascia, psbt.txid());
+        let tx = self.sign_finalize_extract(&mut psbt);
+        self.broadcast_tx(&tx);
+        self.mine_tx(&tx.txid(), false);
+        println!("burn txid: {}", tx.txid());
+        self.sync();
+    }
+
     pub fn check_allocations(
         &self,
         contract_id: ContractId,
@@ -1439,7 +1884,7 @@ impl TestWallet {
         nonfungible_allocation: bool,
     ) {
         match asset_schema.into() {
-            AssetSchema::Nia | AssetSchema::Cfa | AssetSchema::Pfa => {
+            AssetSchema::Nia | AssetSchema::Cfa | AssetSchema::Pfa | AssetSchema::Ifa => {
                 let allocations = self.contract_fungible_allocations(contract_id, false);
                 let mut actual_fungible_allocations = allocations
                     .iter()
@@ -1608,7 +2053,7 @@ impl TestWallet {
         for account in self.descriptor().xpubs() {
             psbt.xpubs.insert(*account.xpub(), account.origin().clone());
         }
-        let (input, spk) = self.wallet.wallet().utxo(utxo).unwrap();
+        let (input, spk) = self.utxo(&utxo);
         psbt.construct_input_expect(
             input.to_prevout(),
             self.descriptor(),
