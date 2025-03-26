@@ -40,11 +40,12 @@ pub use std::{
 pub use amplify::{
     bmap,
     confinement::{Confined, U16},
-    map, s, ByteArray, Wrapper,
+    map, s, ByteArray, Bytes64, Wrapper,
 };
 use bitcoin_hashes::{sha256, Hash};
 pub use bp::{
     seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
+    secp256k1::{Message, Secp256k1, SecretKey},
     ConsensusDecode, LockTime, Outpoint, Sats, ScriptPubkey, SeqNo, Tx, Txid, Vout,
 };
 pub use bpstd::{
@@ -70,12 +71,12 @@ pub use psrgbt_altered::{RgbExt, RgbInExt, RgbPsbt, TxParams};
 pub use rand::RngCore;
 #[cfg(not(feature = "altered"))]
 pub use rgb::{
-    containers::{PubWitness, ValidContract},
+    containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{AllocatedState, AssignmentsFilter, ContractOp, OpDirection},
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::ContractTerms,
+    stl::{ContractTerms, PublicKey},
     validation::{Failure, ResolveWitness, Scripts, Validity, Warning, WitnessResolverError},
     vm::{WitnessOrd, WitnessPos},
     AssignmentType, DescriptorRgb, GenesisSeal, GraphSeal, Identity, OpId, RgbDescr, RgbKeychain,
@@ -83,12 +84,12 @@ pub use rgb::{
 };
 #[cfg(feature = "altered")]
 pub use rgb_altered::{
-    containers::{PubWitness, ValidContract},
+    containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{AllocatedState, AssignmentsFilter, ContractOp, OpDirection},
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::ContractTerms,
+    stl::{ContractTerms, PublicKey},
     validation::{Failure, ResolveWitness, Scripts, Validity, Warning, WitnessResolverError},
     vm::{WitnessOrd, WitnessPos},
     AssignmentType, DescriptorRgb, GenesisSeal, GraphSeal, Identity, OpId, RgbDescr, RgbKeychain,
@@ -112,12 +113,13 @@ pub use rgbstd::{
         RicardianContract, Ticker, TokenData,
     },
     Allocation, Amount, ChainNet, ContractId, GlobalStateType, KnownState, Layer1, Operation,
-    OutputAssignment, OwnedFraction, Precision, Schema, TokenIndex, TxoSeal,
+    OutputAssignment, OutputSeal, OwnedFraction, Precision, Schema, SecretSeal, TokenIndex,
+    TxoSeal,
 };
 pub use rstest::rstest;
 pub use schemata::{
-    CollectibleFungibleAsset, NonInflatableAsset, UniqueDigitalAsset, CFA_SCHEMA_ID, NIA_SCHEMA_ID,
-    UDA_SCHEMA_ID,
+    CollectibleFungibleAsset, NonInflatableAsset, PermissionedFungibleAsset, UniqueDigitalAsset,
+    CFA_SCHEMA_ID, NIA_SCHEMA_ID, PFA_SCHEMA_ID, UDA_SCHEMA_ID,
 };
 pub use serial_test::serial;
 pub use strict_encoding::{fname, tn, FieldName, StrictSerialize, TypeName};

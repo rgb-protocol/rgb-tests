@@ -142,6 +142,7 @@ pub enum AssetSchema {
     Nia,
     Uda,
     Cfa,
+    Pfa,
 }
 
 impl fmt::Display for AssetSchema {
@@ -156,6 +157,7 @@ impl AssetSchema {
             Self::Nia => NonInflatableAsset::schema(),
             Self::Uda => UniqueDigitalAsset::schema(),
             Self::Cfa => CollectibleFungibleAsset::schema(),
+            Self::Pfa => PermissionedFungibleAsset::schema(),
         }
     }
 
@@ -164,6 +166,7 @@ impl AssetSchema {
             Self::Nia => NonInflatableAsset::scripts(),
             Self::Uda => UniqueDigitalAsset::scripts(),
             Self::Cfa => CollectibleFungibleAsset::scripts(),
+            Self::Pfa => PermissionedFungibleAsset::scripts(),
         }
     }
 
@@ -172,6 +175,7 @@ impl AssetSchema {
             Self::Nia => NonInflatableAsset::types(),
             Self::Uda => UniqueDigitalAsset::types(),
             Self::Cfa => CollectibleFungibleAsset::types(),
+            Self::Pfa => PermissionedFungibleAsset::types(),
         }
     }
 
@@ -185,14 +189,14 @@ impl AssetSchema {
 
     fn default_state_type(&self) -> StateType {
         match self {
-            Self::Cfa | Self::Nia => StateType::Fungible,
+            Self::Cfa | Self::Nia | Self::Pfa => StateType::Fungible,
             Self::Uda => StateType::Structured,
         }
     }
 
     fn persisted_state(&self, value: u64) -> PersistedState {
         match self {
-            Self::Cfa | Self::Nia => PersistedState::Amount(value.into()),
+            Self::Cfa | Self::Nia | Self::Pfa => PersistedState::Amount(value.into()),
             Self::Uda => PersistedState::Data(
                 Allocation::with(UDA_FIXED_INDEX, OwnedFraction::from(1)).into(),
                 1,
@@ -207,6 +211,7 @@ impl From<SchemaId> for AssetSchema {
             CFA_SCHEMA_ID => AssetSchema::Cfa,
             NIA_SCHEMA_ID => AssetSchema::Nia,
             UDA_SCHEMA_ID => AssetSchema::Uda,
+            PFA_SCHEMA_ID => AssetSchema::Pfa,
             _ => panic!("unknown schema ID"),
         }
     }
@@ -231,6 +236,12 @@ pub enum AssetInfo {
         terms: ContractTerms,
         issue_amounts: Vec<u64>,
     },
+    Pfa {
+        spec: AssetSpec,
+        terms: ContractTerms,
+        issue_amounts: Vec<u64>,
+        pubkey: PublicKey,
+    },
 }
 
 impl AssetInfo {
@@ -239,6 +250,7 @@ impl AssetInfo {
             Self::Nia { .. } => AssetSchema::Nia,
             Self::Uda { .. } => AssetSchema::Uda,
             Self::Cfa { .. } => AssetSchema::Cfa,
+            Self::Pfa { .. } => AssetSchema::Pfa,
         }
     }
 
@@ -267,6 +279,19 @@ impl AssetInfo {
             "NIA terms",
             None,
             issue_amounts,
+        )
+    }
+
+    pub fn default_pfa(issue_amounts: Vec<u64>, pubkey: PublicKey) -> Self {
+        AssetInfo::pfa(
+            "PFATCKR",
+            "PFA asset name",
+            2,
+            None,
+            "PFA terms",
+            None,
+            issue_amounts,
+            pubkey,
         )
     }
 
@@ -355,6 +380,38 @@ impl AssetInfo {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn pfa(
+        ticker: &str,
+        name: &str,
+        precision: u8,
+        details: Option<&str>,
+        terms_text: &str,
+        terms_media_fpath: Option<&str>,
+        issue_amounts: Vec<u64>,
+        pubkey: PublicKey,
+    ) -> Self {
+        let spec = AssetSpec::with(
+            ticker,
+            name,
+            Precision::try_from(precision).unwrap(),
+            details,
+        )
+        .unwrap();
+        let text = RicardianContract::from_str(terms_text).unwrap();
+        let attachment = terms_media_fpath.map(attachment_from_fpath);
+        let terms = ContractTerms {
+            text,
+            media: attachment,
+        };
+        Self::Pfa {
+            spec,
+            terms,
+            issue_amounts,
+            pubkey,
+        }
+    }
+
     pub fn add_global_state(&self, mut builder: ContractBuilder) -> ContractBuilder {
         match self {
             Self::Nia {
@@ -408,6 +465,23 @@ impl AssetInfo {
                 }
                 builder
             }
+            Self::Pfa {
+                spec,
+                terms,
+                issue_amounts,
+                pubkey,
+            } => builder
+                .add_global_state("pubkey", *pubkey)
+                .unwrap()
+                .add_global_state("spec", spec.clone())
+                .unwrap()
+                .add_global_state("terms", terms.clone())
+                .unwrap()
+                .add_global_state(
+                    "issuedSupply",
+                    Amount::from(issue_amounts.iter().sum::<u64>()),
+                )
+                .unwrap(),
         }
     }
 
@@ -417,7 +491,9 @@ impl AssetInfo {
         outpoints: Vec<Outpoint>,
     ) -> ContractBuilder {
         match self {
-            Self::Nia { issue_amounts, .. } | Self::Cfa { issue_amounts, .. } => {
+            Self::Nia { issue_amounts, .. }
+            | Self::Cfa { issue_amounts, .. }
+            | Self::Pfa { issue_amounts, .. } => {
                 for (amt, outpoint) in issue_amounts.iter().zip(outpoints.iter().cycle()) {
                     builder = builder
                         .add_fungible_state("assetOwner", get_builder_seal(*outpoint), *amt)
@@ -868,6 +944,16 @@ impl TestWallet {
         self.issue_with_info(asset_info, vec![outpoint.copied()])
     }
 
+    pub fn issue_pfa(
+        &mut self,
+        issued_supply: u64,
+        outpoint: Option<&Outpoint>,
+        pubkey: PublicKey,
+    ) -> ContractId {
+        let asset_info = AssetInfo::default_pfa(vec![issued_supply], pubkey);
+        self.issue_with_info(asset_info, vec![outpoint.copied()])
+    }
+
     pub fn invoice(
         &mut self,
         contract_id: ContractId,
@@ -938,6 +1024,19 @@ impl TestWallet {
         psbt.extract().unwrap()
     }
 
+    pub fn consign_transfer(
+        &self,
+        contract_id: ContractId,
+        outputs: impl AsRef<[OutputSeal]>,
+        secret_seal: Option<SecretSeal>,
+        witness_id: Option<Txid>,
+    ) -> Transfer {
+        self.wallet
+            .stock()
+            .transfer(contract_id, outputs, secret_seal, witness_id)
+            .unwrap()
+    }
+
     pub fn pay(
         &mut self,
         invoice: RgbInvoice,
@@ -950,18 +1049,18 @@ impl TestWallet {
         self.wallet.pay(&invoice, params).unwrap()
     }
 
-    pub fn transfer(
+    pub fn pay_full(
         &mut self,
         invoice: RgbInvoice,
         sats: Option<u64>,
         fee: Option<u64>,
         broadcast: bool,
         report: Option<&Report>,
-    ) -> (Transfer, Tx) {
+    ) -> (Transfer, Tx, Psbt, PsbtMeta) {
         self.sync();
 
         let pay_start = Instant::now();
-        let (mut psbt, _psbt_meta, consignment) = self.pay(invoice, sats, fee);
+        let (mut psbt, psbt_meta, consignment) = self.pay(invoice, sats, fee);
         let pay_duration = pay_start.elapsed();
         if let Some(report) = report {
             report.write_duration(pay_duration);
@@ -1003,7 +1102,7 @@ impl TestWallet {
             self.broadcast_tx(&tx);
         }
 
-        (consignment, tx)
+        (consignment, tx, psbt, psbt_meta)
     }
 
     pub fn accept_transfer(&mut self, consignment: Transfer, report: Option<&Report>) {
@@ -1271,7 +1370,7 @@ impl TestWallet {
         fee: Option<u64>,
         report: Option<&Report>,
     ) -> (Transfer, Tx) {
-        let (consignment, tx) = self.transfer(invoice, sats, fee, true, report);
+        let (consignment, tx, _, _) = self.pay_full(invoice, sats, fee, true, report);
         self.mine_tx(&tx.txid(), false);
         recv_wlt.accept_transfer(consignment.clone(), report);
         self.sync();
@@ -1286,7 +1385,7 @@ impl TestWallet {
         nonfungible_allocation: bool,
     ) {
         match asset_schema.into() {
-            AssetSchema::Nia | AssetSchema::Cfa => {
+            AssetSchema::Nia | AssetSchema::Cfa | AssetSchema::Pfa => {
                 let allocations = self.contract_fungible_allocations(contract_id, false);
                 let mut actual_fungible_allocations = allocations
                     .iter()

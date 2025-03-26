@@ -126,11 +126,13 @@ fn transfer_loop(
         AssetSchema::Nia => wlt_1.issue_nia(issued_supply_1, Some(&utxo)),
         AssetSchema::Uda => wlt_1.issue_uda(Some(&utxo)),
         AssetSchema::Cfa => wlt_1.issue_cfa(issued_supply_1, Some(&utxo)),
+        _ => unreachable!(),
     };
     let contract_id_2 = match asset_schema_2 {
         AssetSchema::Nia => wlt_1.issue_nia(issued_supply_2, Some(&utxo)),
         AssetSchema::Uda => wlt_1.issue_uda(Some(&utxo)),
         AssetSchema::Cfa => wlt_1.issue_cfa(issued_supply_2, Some(&utxo)),
+        _ => unreachable!(),
     };
     wlt_1.check_allocations(contract_id_1, asset_schema_1, vec![issued_supply_1], true);
     wlt_1.check_allocations(contract_id_2, asset_schema_2, vec![issued_supply_2], true);
@@ -376,7 +378,7 @@ fn rbf_transfer() {
 
     let amount = 400;
     let invoice = wlt_2.invoice(contract_id, schema_id, amount, InvoiceType::Witness);
-    let (consignment, _) = wlt_1.transfer(invoice.clone(), None, Some(500), true, None);
+    let (consignment, _, _, _) = wlt_1.pay_full(invoice.clone(), None, Some(500), true, None);
 
     wlt_2.accept_transfer(consignment.clone(), None);
 
@@ -384,7 +386,7 @@ fn rbf_transfer() {
     let mid_height = get_height();
     assert_eq!(initial_height, mid_height);
 
-    let (consignment, tx) = wlt_1.transfer(invoice, None, Some(1000), true, None);
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, Some(1000), true, None);
 
     let final_height = get_height();
     assert_eq!(initial_height, final_height);
@@ -427,9 +429,9 @@ fn same_transfer_twice_no_update_witnesses(#[case] transfer_type: TransferType) 
 
     let amount = 100;
     let invoice = wlt_2.invoice(contract_id, schema_id, amount, transfer_type.into());
-    let _ = wlt_1.transfer(invoice.clone(), None, Some(500), false, None);
+    let _ = wlt_1.pay_full(invoice.clone(), None, Some(500), false, None);
 
-    let (consignment, _) = wlt_1.transfer(invoice, None, Some(1000), true, None);
+    let (consignment, _, _, _) = wlt_1.pay_full(invoice, None, Some(1000), true, None);
 
     wlt_2.accept_transfer(consignment, None);
 
@@ -493,12 +495,12 @@ fn same_transfer_twice_update_witnesses(#[case] transfer_type: TransferType) {
 
     let amount = 100;
     let invoice = wlt_2.invoice(contract_id, schema_id, amount, transfer_type.into());
-    let _ = wlt_1.transfer(invoice.clone(), None, Some(500), false, None);
+    let _ = wlt_1.pay_full(invoice.clone(), None, Some(500), false, None);
 
     wlt_1.sync_and_update_witnesses(None);
 
     // with TransferType::Blinded this fails with an AbsentValidWitness error
-    let (consignment, tx) = wlt_1.transfer(invoice, None, Some(1000), true, None);
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, Some(1000), true, None);
 
     wlt_1.mine_tx(&tx.txid(), false);
     wlt_2.accept_transfer(consignment, None);
@@ -559,7 +561,7 @@ fn accept_0conf() {
 
     let amt = 200;
     let invoice = wlt_2.invoice(contract_id, schema_id, amt, InvoiceType::Witness);
-    let (consignment, tx) = wlt_1.transfer(invoice.clone(), None, None, true, None);
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice.clone(), None, None, true, None);
     let txid = tx.txid();
 
     wlt_2.accept_transfer(consignment.clone(), None);
@@ -1019,7 +1021,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
         InvoiceType::Blinded(Some(utxo)),
     );
     // create transfer but do not broadcast its TX
-    let (consignment, tx) = wlt_1.transfer(invoice.clone(), None, Some(500), false, None);
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice.clone(), None, Some(500), false, None);
     let witness_id = tx.txid();
 
     struct OffchainResolver<'a, 'cons, const TRANSFER: bool> {
@@ -1060,7 +1062,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
     wlt_2.accept_transfer_custom_resolver(consignment.clone(), None, &resolver);
 
     let invoice = wlt_3.invoice(contract_id, schema_id, 50, InvoiceType::Witness);
-    let (consignment, tx) = wlt_2.transfer(invoice, Some(2000), None, true, None);
+    let (consignment, tx, _, _) = wlt_2.pay_full(invoice, Some(2000), None, true, None);
     wlt_2.mine_tx(&tx.txid(), false);
 
     // consignment validation fails because it notices an unbroadcasted TX in the history
@@ -1130,7 +1132,7 @@ fn send_to_oneself() {
 
     let invoice = wlt.invoice(contract_id, schema_id, amt, InvoiceType::Witness);
 
-    let (consignment, tx) = wlt.transfer(invoice.clone(), None, None, true, None);
+    let (consignment, tx, _, _) = wlt.pay_full(invoice.clone(), None, None, true, None);
     wlt.mine_tx(&tx.txid(), false);
     wlt.accept_transfer(consignment, None);
     wlt.sync();
@@ -1360,6 +1362,89 @@ fn tapret_commitments_on_beneficiary_output() {
     wlt_2.sync();
     let sats_post = wlt_2.balance();
     assert_eq!(sats_post, sats_pre + sats);
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn pfa() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+
+    let (secret_key, public_key) = Secp256k1::new().generate_keypair(&mut rand::thread_rng());
+    let pubkey = PublicKey::new(public_key.serialize()).unwrap();
+
+    let utxo = wlt_1.get_utxo(None);
+
+    let issued_amt_1 = 600;
+    let contract_id_1 = wlt_1.issue_pfa(issued_amt_1, Some(&utxo), pubkey);
+    let schema_id_1 = wlt_1.schema_id(contract_id_1);
+
+    let issued_amt_2 = 400;
+    let contract_id_2 = wlt_1.issue_pfa(issued_amt_2, Some(&utxo), pubkey);
+    let schema_id_2 = wlt_1.schema_id(contract_id_2);
+
+    let transition_signer = |bundle: &mut WitnessBundle| {
+        for transition in bundle
+            .anchored_bundle
+            .bundle_mut()
+            .known_transitions
+            .values_mut()
+        {
+            let transition_id: [u8; 32] = transition.id().as_ref().into_inner();
+            let msg = Message::from_digest(transition_id);
+            let signature = secret_key.sign_ecdsa(msg);
+            transition.signature = Some(Bytes64::from_array(signature.serialize_compact()).into());
+        }
+    };
+
+    let mut send_pfa = |contract_id: ContractId, schema_id: SchemaId, amt: u64| {
+        let invoice = wlt_2.invoice(contract_id, schema_id, amt, InvoiceType::Witness);
+        let (mut consignment, tx, psbt, psbt_meta) =
+            wlt_1.pay_full(invoice, None, None, true, None);
+        let txid = tx.txid();
+        consignment.modify_bundle(txid, transition_signer);
+        wlt_1.accept_transfer(consignment.clone(), None);
+        let output_seal: OutputSeal =
+            ExplicitSeal::new(Outpoint::new(txid, psbt_meta.change_vout.unwrap()));
+        let mut extra_transition = false;
+        for cid in psbt.rgb_contract_ids().unwrap() {
+            if cid == contract_id {
+                continue;
+            }
+            let mut extra_cons = wlt_1.consign_transfer(cid, vec![output_seal], None, Some(txid));
+            let changed = extra_cons.modify_bundle(txid, transition_signer);
+            assert!(changed);
+            wlt_1.accept_transfer(extra_cons.clone(), None);
+            extra_transition = true;
+        }
+        assert!(extra_transition);
+        wlt_1.mine_tx(&txid, false);
+        wlt_2.accept_transfer(consignment.clone(), None);
+        wlt_1.sync();
+    };
+
+    let amt_1 = 42;
+    send_pfa(contract_id_1, schema_id_1, amt_1);
+
+    let amt_2 = 66;
+    send_pfa(contract_id_2, schema_id_2, amt_2);
+
+    wlt_1.check_allocations(
+        contract_id_1,
+        schema_id_1,
+        vec![issued_amt_1 - amt_1],
+        false,
+    );
+    wlt_2.check_allocations(contract_id_1, schema_id_1, vec![amt_1], false);
+    wlt_1.check_allocations(
+        contract_id_2,
+        schema_id_2,
+        vec![issued_amt_2 - amt_2],
+        false,
+    );
+    wlt_2.check_allocations(contract_id_2, schema_id_2, vec![amt_2], false);
 }
 
 #[cfg(not(feature = "altered"))]
@@ -1811,7 +1896,7 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
                 assert_eq!(assets_history, expected_history);
             }
             // sender proceeds with the tranfer even if there's unsafe history
-            let (consignment, tx_2) = wlt_2.transfer(invoice, None, None, true, None);
+            let (consignment, tx_2, _, _) = wlt_2.pay_full(invoice, None, None, true, None);
             wlt_2.mine_tx(&tx_2.txid(), false);
             // receiver checks if it's safe to receive allocations
             let safe_height = height_pre_transfer; // min 1 confirmation
