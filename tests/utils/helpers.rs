@@ -1265,17 +1265,6 @@ impl TestWallet {
                     );
                 }
             }
-            if let Ok(allocations) = contract.attachments(details.name.clone(), &filter) {
-                for allocation in allocations {
-                    println!(
-                        "    {: >9}\t{}\t{} {}",
-                        allocation.state,
-                        allocation.seal,
-                        witness(&allocation, &contract),
-                        filter.comment(allocation.seal.to_outpoint())
-                    );
-                }
-            }
             if let Ok(allocations) = contract.rights(details.name.clone(), &filter) {
                 for allocation in allocations {
                     println!(
