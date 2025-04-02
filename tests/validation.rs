@@ -333,11 +333,37 @@ fn validate_consignment_resolver_error() {
     let txid =
         Txid::from_str("be58fb43c3bdda0e472ace9dbe345548c5558bc53b4c2604d6d35ef5f2fbde12").unwrap();
 
+    struct ConsignmentResolver<'a, 'cons, const TRANSFER: bool> {
+        consignment: &'cons IndexedConsignment<'cons, TRANSFER>,
+        fallback: &'a MockResolver,
+    }
+    impl<const TRANSFER: bool> ResolveWitness for ConsignmentResolver<'_, '_, TRANSFER> {
+        fn resolve_pub_witness(&self, witness_id: Txid) -> Result<Tx, WitnessResolverError> {
+            self.consignment
+                .pub_witness(witness_id)
+                .and_then(|p| p.tx().cloned())
+                .ok_or(WitnessResolverError::Unknown(witness_id))
+                .or_else(|_| self.fallback.resolve_pub_witness(witness_id))
+        }
+        fn resolve_pub_witness_ord(&self, _: Txid) -> Result<WitnessOrd, WitnessResolverError> {
+            Ok(WitnessOrd::Tentative)
+        }
+        fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
+            Ok(())
+        }
+    }
+
     // resolve_pub_witness error
     *resolver.pub_witnesses.get_mut(&txid).unwrap() =
         MockResolvePubWitness::Error(WitnessResolverError::Other(txid, s!("unexpected error")));
     let consignment = get_consignment_from_yaml("attack_resolver_error");
-    let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
+    let consignment_resolver = ConsignmentResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+        fallback: &resolver,
+    };
+    let res = consignment
+        .clone()
+        .validate(&consignment_resolver, ChainNet::BitcoinRegtest, None);
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
@@ -358,7 +384,13 @@ fn validate_consignment_resolver_error() {
     *resolver.pub_witness_ords.get_mut(&txid).unwrap() =
         MockResolvePubWitnessOrd::Error(WitnessResolverError::Other(txid, s!("unexpected error")));
     let consignment = get_consignment_from_yaml("attack_resolver_error");
-    let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
+    let consignment_resolver = ConsignmentResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+        fallback: &resolver,
+    };
+    let res = consignment
+        .clone()
+        .validate(&consignment_resolver, ChainNet::BitcoinRegtest, None);
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
