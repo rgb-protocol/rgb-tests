@@ -728,7 +728,7 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
         txid_same_bundle_2 = psbt.txid();
         offset += 1;
     }
-    fascia.witness = PubWitness::with(psbt.to_unsigned_tx().into());
+    fascia.seal_witness.public = PubWitness::with(psbt.to_unsigned_tx().into());
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     let mut old_psbt = psbt.clone();
 
@@ -1385,13 +1385,8 @@ fn pfa() {
     let contract_id_2 = wlt_1.issue_pfa(issued_amt_2, Some(&utxo), pubkey);
     let schema_id_2 = wlt_1.schema_id(contract_id_2);
 
-    let transition_signer = |bundle: &mut WitnessBundle| {
-        for transition in bundle
-            .anchored_bundle
-            .bundle_mut()
-            .known_transitions
-            .values_mut()
-        {
+    let transition_signer = |witness_bundle: &mut WitnessBundle| {
+        for transition in witness_bundle.bundle_mut().known_transitions.values_mut() {
             let transition_id: [u8; 32] = transition.id().as_ref().into_inner();
             let msg = Message::from_digest(transition_id);
             let signature = secret_key.sign_ecdsa(msg);

@@ -65,11 +65,11 @@ impl Scenario {
         match self {
             Self::A => {
                 let (tx_1, witness_id_1) =
-                    get_tx("64da64bb15b2a3a867c649805d0358ec2da8e92cb726c67086d05d946b186795");
+                    get_tx("ed244888f624bc246600cdb55c4600a5336222cc79c32c4784344b9519d4e5c1");
                 let (tx_2, witness_id_2) =
-                    get_tx("5cfea3a18485350ee90d551c9c60c127e609bb045e7068212fa4fe04a86b6aa4");
+                    get_tx("ad11863ce5d36a304d0f96fe53aeebb3c6d6facd24e96fd65ae07acebf096d54");
                 let (tx_3, witness_id_3) =
-                    get_tx("b46aa686fff702e273e464dfebe91fc0a8e71e1592ddf1b10dac96d554b8e04a");
+                    get_tx("3e006aa7a973221b49e26229423c6d316beb6a9e4452c571b80e4cd247325299");
                 MockResolver {
                     pub_witnesses: map![
                         witness_id_1 => MockResolvePubWitness::Success(tx_1),
@@ -85,11 +85,11 @@ impl Scenario {
             }
             Self::B => {
                 let (tx_1, witness_id_1) =
-                    get_tx("fee9b71509fdeee5fef72cc3c00bf33385cc08d441abfd7fe455afafcbaaec10");
+                    get_tx("60bac11f6e8a82ef6a44ad686b49db898117a2096750ad2bee82caa7e75092ee");
                 let (tx_2, witness_id_2) =
-                    get_tx("fd1de360f465af02a48acf1ac9f21a03b54e754ddd06efec262bf1f6e2dfe5a8");
+                    get_tx("8e8f840464e4a092b20bc7cd75feb30fbd1cc1fdaf1951a8808365803efc4294");
                 let (tx_3, witness_id_3) =
-                    get_tx("84601e185c71f1c43b3b7f10db2d758b8af74411292f1d92617b56f325e98bae");
+                    get_tx("b0f54ec2c1598208d63f51d4ba217d7b8d4b613e970befcbb12b57c6ed9e9b1c");
                 MockResolver {
                     pub_witnesses: map![
                         witness_id_1 => MockResolvePubWitness::Success(tx_1),
@@ -331,7 +331,7 @@ fn validate_consignment_resolver_error() {
     let scenario = Scenario::A;
     let mut resolver = scenario.resolver();
     let txid =
-        Txid::from_str("5cfea3a18485350ee90d551c9c60c127e609bb045e7068212fa4fe04a86b6aa4").unwrap();
+        Txid::from_str("ad11863ce5d36a304d0f96fe53aeebb3c6d6facd24e96fd65ae07acebf096d54").unwrap();
 
     struct ConsignmentResolver<'a, 'cons, const TRANSFER: bool> {
         consignment: &'cons IndexedConsignment<'cons, TRANSFER>,
