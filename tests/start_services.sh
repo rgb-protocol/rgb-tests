@@ -25,7 +25,14 @@ _prepare_bitcoin_nodes() {
 _wait_for_bitcoind() {
     # wait for bitcoind to be up
     bitcoind_service_name="$1"
+    start_time=$(date +%s)
     until $COMPOSE logs $bitcoind_service_name |grep -q 'Bound to'; do
+        current_time=$(date +%s)
+        if [ $((current_time - start_time)) -gt $TIMEOUT ]; then
+            echo "Timeout waiting for $bitcoind_service_name to start"
+            $COMPOSE logs $bitcoind_service_name
+            exit 1
+        fi
         sleep 1
     done
 }
@@ -33,7 +40,14 @@ _wait_for_bitcoind() {
 _wait_for_electrs() {
     # wait for electrs to have completed startup
     electrs_service_name="$1"
+    start_time=$(date +%s)
     until $COMPOSE logs $electrs_service_name |grep -q 'finished full compaction'; do
+        current_time=$(date +%s)
+        if [ $((current_time - start_time)) -gt $TIMEOUT ]; then
+            echo "Timeout waiting for $electrs_service_name to start"
+            $COMPOSE logs $electrs_service_name
+            exit 1
+        fi
         sleep 1
     done
 }
@@ -41,7 +55,14 @@ _wait_for_electrs() {
 _wait_for_esplora() {
     # wait for esplora to have completed startup
     esplora_service_name="$1"
+    start_time=$(date +%s)
     until $COMPOSE logs $esplora_service_name |grep -q 'run: nginx:'; do
+        current_time=$(date +%s)
+        if [ $((current_time - start_time)) -gt $TIMEOUT ]; then
+            echo "Timeout waiting for $esplora_service_name to start"
+            $COMPOSE logs $esplora_service_name
+            exit 1
+        fi
         sleep 1
     done
 }
@@ -68,7 +89,7 @@ _start_services() {
             _die "port $port is already bound, services can't be started"
         fi
     done
-    $COMPOSE up -d
+    $COMPOSE --profile "$PROFILE" up -d
 }
 
 COMPOSE="docker compose"
@@ -77,8 +98,8 @@ if ! $COMPOSE >/dev/null; then
 fi
 COMPOSE="$COMPOSE -f tests/compose.yaml"
 PROFILE=${PROFILE:-"esplora"}
-COMPOSE="$COMPOSE --profile $PROFILE"
 TEST_DATA_DIR="./test-data"
+TIMEOUT=100
 
 # see compose.yaml for the exposed ports
 if [ "$PROFILE" == "esplora" ]; then
