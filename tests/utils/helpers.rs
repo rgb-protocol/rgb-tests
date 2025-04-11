@@ -1079,14 +1079,14 @@ impl TestWallet {
         std::fs::create_dir_all(&cs_path).unwrap();
         let consignment_id = consignment.consignment_id();
         cs_path.push(consignment_id.to_string());
-        cs_path.set_extension("yaml");
+        cs_path.set_extension("json");
         let mut file = std::fs::File::options()
             .read(true)
             .write(true)
             .create_new(true)
             .open(cs_path)
             .unwrap();
-        serde_yaml::to_writer(&mut file, &consignment).unwrap();
+        serde_json::to_writer(&mut file, &consignment).unwrap();
 
         let tx = self.sign_finalize_extract(&mut psbt);
 
@@ -1096,16 +1096,16 @@ impl TestWallet {
         let mut tx_path = self.wallet_dir.join("transactions");
         std::fs::create_dir_all(&tx_path).unwrap();
         tx_path.push(&txid);
-        tx_path.set_extension("yaml");
+        tx_path.set_extension("json");
         let mut file = std::fs::File::options()
             .read(true)
             .write(true)
             .create_new(true)
             .open(tx_path)
             .unwrap();
-        serde_yaml::to_writer(&mut file, &tx).unwrap();
+        serde_json::to_writer(&mut file, &tx).unwrap();
         writeln!(file, "\n---\n").unwrap();
-        serde_yaml::to_writer(&mut file, &psbt).unwrap();
+        serde_json::to_writer(&mut file, &psbt).unwrap();
 
         if broadcast {
             self.broadcast_tx(&tx);

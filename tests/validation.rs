@@ -65,11 +65,11 @@ impl Scenario {
         match self {
             Self::A => {
                 let (tx_1, witness_id_1) =
-                    get_tx("ed244888f624bc246600cdb55c4600a5336222cc79c32c4784344b9519d4e5c1");
+                    get_tx("1e5723d2882d6c6e503568b04f91ded8c8dca17751a232f333d156853798df41");
                 let (tx_2, witness_id_2) =
-                    get_tx("ad11863ce5d36a304d0f96fe53aeebb3c6d6facd24e96fd65ae07acebf096d54");
+                    get_tx("a2f6ef883bb290392b12e8927ebb5dc93abc06e8ab74d43345342274822b68e1");
                 let (tx_3, witness_id_3) =
-                    get_tx("3e006aa7a973221b49e26229423c6d316beb6a9e4452c571b80e4cd247325299");
+                    get_tx("9a07f29c912f3b6b3d6abdc926031fa200513664b4f419f346535b7f56225abc");
                 MockResolver {
                     pub_witnesses: map![
                         witness_id_1 => MockResolvePubWitness::Success(tx_1),
@@ -85,11 +85,11 @@ impl Scenario {
             }
             Self::B => {
                 let (tx_1, witness_id_1) =
-                    get_tx("60bac11f6e8a82ef6a44ad686b49db898117a2096750ad2bee82caa7e75092ee");
+                    get_tx("7d85b58646c102273a1353f5632c4c09a2cd4d5fade4275cf5259909d4fcfb62");
                 let (tx_2, witness_id_2) =
-                    get_tx("8e8f840464e4a092b20bc7cd75feb30fbd1cc1fdaf1951a8808365803efc4294");
+                    get_tx("83b8ddef78a28e304dfe785d8dac46f3a0b5c58110f949ace9c336a6c5516e67");
                 let (tx_3, witness_id_3) =
-                    get_tx("b0f54ec2c1598208d63f51d4ba217d7b8d4b613e970befcbb12b57c6ed9e9b1c");
+                    get_tx("09988f49ba04caca13fcbc31d17dc6e0bd34c8a365bb86e6bc8c091fbc9f1ebc");
                 MockResolver {
                     pub_witnesses: map![
                         witness_id_1 => MockResolvePubWitness::Success(tx_1),
@@ -143,12 +143,12 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
     (consignment, txes)
 }
 
-// run once to generate tests/fixtures/consignemnt_<scenario>.yaml
+// run once to generate tests/fixtures/consignemnt_<scenario>.json
 // for example:
 // SCENARIO=B cargo test --test validation validate_consignment_generate -- --ignored --show-output
 //
-// then copy the generated consignemnt file to tests/fixtures/attack_<n>.yaml
-// manually change tests/fixtures/attack_<n>.yaml files to simulate attacks
+// then copy the generated consignemnt file to tests/fixtures/attack_<n>.json
+// manually change tests/fixtures/attack_<n>.json files to simulate attacks
 #[cfg(not(feature = "altered"))]
 #[test]
 #[ignore = "one-shot"]
@@ -161,32 +161,32 @@ fn validate_consignment_generate() {
     };
     let (consignment, txes) = get_consignment(scenario);
     println!();
-    let cons_path = format!("tests/fixtures/consignment_{scenario}.yaml");
-    let yaml = serde_yaml::to_string(&consignment).unwrap();
-    std::fs::write(&cons_path, yaml).unwrap();
+    let cons_path = format!("tests/fixtures/consignment_{scenario}.json");
+    let json = serde_json::to_string_pretty(&consignment).unwrap();
+    std::fs::write(&cons_path, json).unwrap();
     println!("written consignment in: {cons_path}");
     for tx in txes {
         let txid = tx.txid().to_string();
-        let yaml = serde_yaml::to_string(&tx).unwrap();
-        let yaml_path = format!("tests/fixtures/{txid}.yaml");
-        std::fs::write(&yaml_path, yaml).unwrap();
+        let json = serde_json::to_string_pretty(&tx).unwrap();
+        let json_path = format!("tests/fixtures/{txid}.json");
+        std::fs::write(&json_path, json).unwrap();
         println!("written tx: {txid}");
     }
 }
 
-fn get_consignment_from_yaml(fname: &str) -> Transfer {
-    let cons_path = format!("tests/fixtures/{fname}.yaml");
+fn get_consignment_from_json(fname: &str) -> Transfer {
+    let cons_path = format!("tests/fixtures/{fname}.json");
     println!("loading {cons_path}");
     let file = std::fs::File::open(cons_path).unwrap();
-    let consignment: Transfer = serde_yaml::from_reader(file).unwrap();
+    let consignment: Transfer = serde_json::from_reader(file).unwrap();
     consignment
 }
 
 fn get_tx(txid: &str) -> (Tx, Txid) {
     let normalized_txid = txid.replace(":", "_");
-    let yaml_path = format!("tests/fixtures/{normalized_txid}.yaml");
-    let file = std::fs::File::open(yaml_path).unwrap();
-    let tx: Tx = serde_yaml::from_reader(file).unwrap();
+    let json_path = format!("tests/fixtures/{normalized_txid}.json");
+    let file = std::fs::File::open(json_path).unwrap();
+    let tx: Tx = serde_json::from_reader(file).unwrap();
     let txid = Txid::from_str(txid).unwrap();
     (tx, txid)
 }
@@ -196,7 +196,7 @@ fn get_tx(txid: &str) -> (Tx, Txid) {
 fn validate_consignment_success() {
     for scenario in Scenario::iter() {
         let resolver = scenario.resolver();
-        let consignment = get_consignment_from_yaml(&format!("consignment_{scenario}"));
+        let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
         let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
         assert!(res.is_ok());
         let validation_status = match res {
@@ -218,7 +218,7 @@ fn validate_consignment_chain_fail() {
     let resolver = Scenario::A.resolver();
 
     // genesis chainNet: change from bitcoinRegtest to liquidTestnet
-    let consignment = get_consignment_from_yaml("attack_chain");
+    let consignment = get_consignment_from_json("attack_chain");
     let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
     assert!(res.is_err());
     let validation_status = match res {
@@ -238,7 +238,7 @@ fn validate_consignment_genesis_fail() {
     let resolver = Scenario::B.resolver();
 
     // schema ID: change genesis[schemaId] with CFA schema ID
-    let consignment = get_consignment_from_yaml("attack_genesis_schema_id");
+    let consignment = get_consignment_from_json("attack_genesis_schema_id");
     let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
     assert!(res.is_err());
     let validation_status = match res {
@@ -273,7 +273,7 @@ fn validate_consignment_genesis_fail() {
     assert_eq!(validity, Validity::Invalid);
 
     // genesis chainNet: change from bitcoinRegtest to bitcoinMainnet
-    let consignment = get_consignment_from_yaml("attack_genesis_testnet");
+    let consignment = get_consignment_from_json("attack_genesis_testnet");
     let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
     assert!(res.is_err());
     let validation_status = match res {
@@ -298,7 +298,7 @@ fn validate_consignment_bundles_fail() {
     let resolver = Scenario::A.resolver();
 
     // bundles first in time pubWitness inputs[0] sequence: change from 0 to 1
-    let consignment = get_consignment_from_yaml("attack_bundles_pubWitness_data_input_sequence");
+    let consignment = get_consignment_from_json("attack_bundles_pubWitness_data_input_sequence");
     let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
     assert!(res.is_err());
     let validation_status = match res {
@@ -309,15 +309,15 @@ fn validate_consignment_bundles_fail() {
     assert_eq!(validation_status.failures.len(), 3);
     assert!(matches!(
         validation_status.failures[0],
-        Failure::SealsInvalid(_, _, _)
+        Failure::SealNoPubWitness(_, _, _)
     ));
     assert!(matches!(
         validation_status.failures[1],
-        Failure::BundleInvalidCommitment(_, _, _, _)
+        Failure::SealsInvalid(_, _, _)
     ));
     assert!(matches!(
         validation_status.failures[2],
-        Failure::SealNoPubWitness(_, _, _)
+        Failure::BundleInvalidCommitment(_, _, _, _)
     ));
     assert!(validation_status.warnings.is_empty());
     assert!(validation_status.info.is_empty());
@@ -331,7 +331,7 @@ fn validate_consignment_resolver_error() {
     let scenario = Scenario::A;
     let mut resolver = scenario.resolver();
     let txid =
-        Txid::from_str("ad11863ce5d36a304d0f96fe53aeebb3c6d6facd24e96fd65ae07acebf096d54").unwrap();
+        Txid::from_str("a2f6ef883bb290392b12e8927ebb5dc93abc06e8ab74d43345342274822b68e1").unwrap();
 
     struct ConsignmentResolver<'a, 'cons, const TRANSFER: bool> {
         consignment: &'cons IndexedConsignment<'cons, TRANSFER>,
@@ -356,7 +356,7 @@ fn validate_consignment_resolver_error() {
     // resolve_pub_witness error
     *resolver.pub_witnesses.get_mut(&txid).unwrap() =
         MockResolvePubWitness::Error(WitnessResolverError::Other(txid, s!("unexpected error")));
-    let consignment = get_consignment_from_yaml("attack_resolver_error");
+    let consignment = get_consignment_from_json("attack_resolver_error");
     let consignment_resolver = ConsignmentResolver {
         consignment: &IndexedConsignment::new(&consignment),
         fallback: &resolver,
@@ -383,7 +383,7 @@ fn validate_consignment_resolver_error() {
     // resolve_pub_witness_ord error
     *resolver.pub_witness_ords.get_mut(&txid).unwrap() =
         MockResolvePubWitnessOrd::Error(WitnessResolverError::Other(txid, s!("unexpected error")));
-    let consignment = get_consignment_from_yaml("attack_resolver_error");
+    let consignment = get_consignment_from_json("attack_resolver_error");
     let consignment_resolver = ConsignmentResolver {
         consignment: &IndexedConsignment::new(&consignment),
         fallback: &resolver,

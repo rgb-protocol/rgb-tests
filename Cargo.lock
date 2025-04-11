@@ -1850,7 +1850,6 @@ dependencies = [
  "rgb-psbt 0.11.1-alpha.1",
  "rgb-std",
  "serde",
- "serde_yaml",
  "strict_types",
  "wasm-bindgen",
 ]
@@ -1885,12 +1884,7 @@ dependencies = [
  "aluvm",
  "amplify",
  "bp-core",
- "chrono",
  "rgb-std",
- "serde",
- "serde_json",
- "sha2",
- "strict_encoding",
  "strict_types",
 ]
 
@@ -1945,7 +1939,7 @@ dependencies = [
  "rgb-std",
  "rstest",
  "rstest_reuse",
- "serde_yaml",
+ "serde_json",
  "serial_test",
  "strict_encoding",
  "strict_types",
@@ -2419,7 +2413,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "strict_encoding"
-version = "2.7.2"
+version = "2.7.3"
 dependencies = [
  "amplify",
  "serde",
@@ -2429,7 +2423,7 @@ dependencies = [
 
 [[package]]
 name = "strict_encoding_derive"
-version = "2.7.2"
+version = "2.7.3"
 dependencies = [
  "amplify_syn",
  "heck",

@@ -1,0 +1,950 @@
+{
+  "version": "v2",
+  "transfer": true,
+  "terminals": {
+    "60b2806bdfe4cb8b1e3f81af7ff6ad48f4749472f2ac7227e016ba8006300c00": "652859b94fb61b851c831552286f9c6a0fb4350ecfe622e689b1127b0866c6a0"
+  },
+  "genesis": {
+    "ffv": 0,
+    "schemaId": "rgb:sch:HnOVUjK8IgpDApgIoHVmMlhjbpDdNxZbWqPwqsi$$ag#broken-elegant-victor",
+    "flags": null,
+    "timestamp": 1744382283,
+    "issuer": "ssi:anonymous",
+    "chainNet": "bitcoinRegtest",
+    "metadata": {},
+    "globals": {
+      "2000": [
+        "074e494154434b520e4e4941206173736574206e616d650002"
+      ],
+      "2001": [
+        "09004e4941207465726d7300"
+      ],
+      "2010": [
+        "9a02000000000000"
+      ]
+    },
+    "assignments": {
+      "4000": {
+        "type": "fungible",
+        "items": [
+          {
+            "seal": {
+              "txid": "c9f92a1989d21bd1ac90f6d92b209e2c80ad42b69ed78db2d1481a4c14891880",
+              "vout": 1,
+              "blinding": 11581248251326978517
+            },
+            "state": {
+              "value": 666
+            },
+            "lock": null
+          }
+        ]
+      }
+    },
+    "validator": null
+  },
+  "bundles": [
+    {
+      "pubWitness": {
+        "tx": {
+          "version": 2,
+          "inputs": [
+            {
+              "prevOutput": "c9f92a1989d21bd1ac90f6d92b209e2c80ad42b69ed78db2d1481a4c14891880:1",
+              "sigScript": "",
+              "sequence": 0,
+              "witness": []
+            }
+          ],
+          "outputs": [
+            {
+              "value": 0,
+              "scriptPubkey": "6a207d68b3ae725cee3a91cf7f832b112019dfc0e8d9c2b85b16748d117643740567"
+            },
+            {
+              "value": 99999600,
+              "scriptPubkey": "001485852d4f3921346e28e8022ad833e7abb16edbcd"
+            }
+          ],
+          "lockTime": 0
+        }
+      },
+      "anchor": {
+        "mpcProof": {
+          "pos": 0,
+          "cofactor": 0,
+          "path": [
+            "93338005f54b5b25700070ac9ef49ece4a6586d605f32cdbda7b987fc14e1ecb",
+            "82c21f9ea4f706f9baa5e1474f6a7d0e61de7d3320def6bbb8e1fa093605add2",
+            "2e7821831d40eb94c4f8932e2c1c3d9a76c1aa9d3c364af3ab608cf64ffe9243"
+          ]
+        },
+        "dbcProof": null
+      },
+      "bundle": {
+        "inputMap": {
+          "0": [
+            "350c5b60744fac924862df946d50d71fe75cca9d1e9a41d1333b1f0a9a60543f"
+          ]
+        },
+        "knownTransitions": {
+          "350c5b60744fac924862df946d50d71fe75cca9d1e9a41d1333b1f0a9a60543f": {
+            "ffv": 0,
+            "contractId": "rgb:WLrN5DLk-bSGabXA-0sGHWeF-Rc7Tw98-Zypk49M-9$e8hEE",
+            "nonce": 18446744073709551615,
+            "transitionType": 10000,
+            "metadata": {},
+            "globals": {},
+            "inputs": [
+              {
+                "prevOut": {
+                  "op": "58bacde432e46d219a6d7034b061d678545ced3c3df19ca9938f4cf7f7bc8441",
+                  "ty": 4000,
+                  "no": 0
+                }
+              }
+            ],
+            "assignments": {
+              "4000": {
+                "type": "fungible",
+                "items": [
+                  {
+                    "seal": {
+                      "txid": null,
+                      "vout": 1,
+                      "blinding": 6575701392758181811
+                    },
+                    "state": {
+                      "value": 666
+                    },
+                    "lock": null
+                  }
+                ]
+              }
+            },
+            "validator": null,
+            "witness": null,
+            "signature": null
+          }
+        }
+      }
+    },
+    {
+      "pubWitness": {
+        "tx": {
+          "version": 2,
+          "inputs": [
+            {
+              "prevOutput": "a2f6ef883bb290392b12e8927ebb5dc93abc06e8ab74d43345342274822b68e1:1",
+              "sigScript": "",
+              "sequence": 0,
+              "witness": []
+            }
+          ],
+          "outputs": [
+            {
+              "value": 0,
+              "scriptPubkey": "6a20f471cb0f5ebcaa52a54e27a8b2612ca9a1751bafbe8d7f894f752d63fc333f91"
+            },
+            {
+              "value": 99998800,
+              "scriptPubkey": "001461ab676abcece6c43472d8d387679eed99be3402"
+            }
+          ],
+          "lockTime": 0
+        }
+      },
+      "anchor": {
+        "mpcProof": {
+          "pos": 0,
+          "cofactor": 0,
+          "path": [
+            "b4c9cef4faab4de162df722596399951a8fe2c223a99d28b17a6912e1b40c8c0",
+            "27c26fb6617dbf85e84993323b0539363ccd7d4a8e2f20172fa0d1426d946061",
+            "748225e8ae61e38a1ce2c06dfbc6a435ae05e9a9e5e30fc470714021f72e5375"
+          ]
+        },
+        "dbcProof": null
+      },
+      "bundle": {
+        "inputMap": {
+          "0": [
+            "1d690d90147ce48bac7d6e8bc943dfbd1fff3085faf6c547b9d4437597041866"
+          ]
+        },
+        "knownTransitions": {
+          "1d690d90147ce48bac7d6e8bc943dfbd1fff3085faf6c547b9d4437597041866": {
+            "ffv": 0,
+            "contractId": "rgb:WLrN5DLk-bSGabXA-0sGHWeF-Rc7Tw98-Zypk49M-9$e8hEE",
+            "nonce": 18446744073709551615,
+            "transitionType": 10000,
+            "metadata": {},
+            "globals": {},
+            "inputs": [
+              {
+                "prevOut": {
+                  "op": "9c006668e21a64a001337a46b5b46245b3e983409063c21f87b5418061124815",
+                  "ty": 4000,
+                  "no": 0
+                }
+              }
+            ],
+            "assignments": {
+              "4000": {
+                "type": "fungible",
+                "items": [
+                  {
+                    "seal": {
+                      "txid": null,
+                      "vout": 1,
+                      "blinding": 18432205961221552687
+                    },
+                    "state": {
+                      "value": 539
+                    },
+                    "lock": null
+                  },
+                  {
+                    "seal": "652859b94fb61b851c831552286f9c6a0fb4350ecfe622e689b1127b0866c6a0",
+                    "state": {
+                      "value": 77
+                    },
+                    "lock": null
+                  }
+                ]
+              }
+            },
+            "validator": null,
+            "witness": null,
+            "signature": null
+          }
+        }
+      }
+    },
+    {
+      "pubWitness": {
+        "txid": "a2f6ef883bb290392b12e8927ebb5dc93abc06e8ab74d43345342274822b68e1"
+      },
+      "anchor": {
+        "mpcProof": {
+          "pos": 0,
+          "cofactor": 0,
+          "path": [
+            "f782c62474ddcbc54717b5009093f1c7b125c230b1491c4019ee5622734caac1",
+            "372b8f585065c1f0ced0df619acba50bb69f98c288043d550dbca150324f8b65",
+            "41fd78cb58027d4bf6500dedd88c1e732567e37c940046320c300ea3c193a0dd"
+          ]
+        },
+        "dbcProof": null
+      },
+      "bundle": {
+        "inputMap": {
+          "0": [
+            "9c006668e21a64a001337a46b5b46245b3e983409063c21f87b5418061124815"
+          ]
+        },
+        "knownTransitions": {
+          "9c006668e21a64a001337a46b5b46245b3e983409063c21f87b5418061124815": {
+            "ffv": 0,
+            "contractId": "rgb:WLrN5DLk-bSGabXA-0sGHWeF-Rc7Tw98-Zypk49M-9$e8hEE",
+            "nonce": 18446744073709551615,
+            "transitionType": 10000,
+            "metadata": {},
+            "globals": {},
+            "inputs": [
+              {
+                "prevOut": {
+                  "op": "350c5b60744fac924862df946d50d71fe75cca9d1e9a41d1333b1f0a9a60543f",
+                  "ty": 4000,
+                  "no": 0
+                }
+              }
+            ],
+            "assignments": {
+              "4000": {
+                "type": "fungible",
+                "items": [
+                  {
+                    "seal": {
+                      "txid": null,
+                      "vout": 1,
+                      "blinding": 2058246303008636699
+                    },
+                    "state": {
+                      "value": 616
+                    },
+                    "lock": null
+                  },
+                  {
+                    "seal": "2efe4b40ae1b8bdce7e4c98d4b3eac679c51b8ea4b5fd3fa9c7f2a5f7d112799",
+                    "state": {
+                      "value": 50
+                    },
+                    "lock": null
+                  }
+                ]
+              }
+            },
+            "validator": null,
+            "witness": null,
+            "signature": null
+          }
+        }
+      }
+    }
+  ],
+  "schema": {
+    "ffv": 0,
+    "flags": null,
+    "name": "NonInflatableAsset",
+    "timestamp": 1713343888,
+    "developer": "ssi:LZS1ux-gjD9nXPF-OcetUUkW-6r3uSCS6-aQhs9W5f-8JE7w",
+    "metaTypes": {},
+    "globalTypes": {
+      "2000": {
+        "globalStateSchema": {
+          "semId": "d7fcbee31ef0a85d5f973bda1b0b8c9e7efbcbc5572577382cacd3bdb4218a01",
+          "maxItems": 1
+        },
+        "name": "spec"
+      },
+      "2001": {
+        "globalStateSchema": {
+          "semId": "5b8bc7543832054a1d22be94226be7538b133a26881cba4613027878e05c6cf7",
+          "maxItems": 1
+        },
+        "name": "terms"
+      },
+      "2010": {
+        "globalStateSchema": {
+          "semId": "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84",
+          "maxItems": 1
+        },
+        "name": "issuedSupply"
+      }
+    },
+    "ownedTypes": {
+      "4000": {
+        "ownedStateSchema": {
+          "fungible": "unsigned64Bit"
+        },
+        "name": "assetOwner",
+        "defaultTransition": 10000
+      }
+    },
+    "genesis": {
+      "metadata": [],
+      "globals": {
+        "2000": "once",
+        "2001": "once",
+        "2010": "once"
+      },
+      "assignments": {
+        "4000": "onceOrMore"
+      },
+      "validator": {
+        "lib": "abf099d28bed50df5e065715327f3a9b329f777cb0b9fefff634c193a03cb626",
+        "pos": 9
+      }
+    },
+    "transitions": {
+      "10000": {
+        "transitionSchema": {
+          "metadata": [],
+          "globals": {},
+          "inputs": {
+            "4000": "onceOrMore"
+          },
+          "assignments": {
+            "4000": "onceOrMore"
+          },
+          "validator": {
+            "lib": "abf099d28bed50df5e065715327f3a9b329f777cb0b9fefff634c193a03cb626",
+            "pos": 0
+          }
+        },
+        "name": "transfer"
+      }
+    },
+    "reserved": null
+  },
+  "types": {
+    "0af65fd62581de85cbd14e23e2db9a92bbef8b7974ffe1b50c4c74db8f86e751": {
+      "List": [
+        "5f5e26e5c5053c1b4544515bc6a0653da02a0791fb31116d71a4fad916e15355",
+        {
+          "min": 0,
+          "max": 7
+        }
+      ]
+    },
+    "18cb946f1293cf180e9d78dcc65bc59b472ffffeadfbf58db198cc8328f64b01": {
+      "Tuple": [
+        "560d96f7a47924b2c3df040e6463398fd65fd591652c294342bfa5f939155154"
+      ]
+    },
+    "1cabbfc3d826c0bfd1e9770a889efacc8b6716ad014a3eec10b6591530229042": {
+      "Primitive": 64
+    },
+    "1cb0758e14c2008c0f008ce6d2d41e9e1937e1cd0f9914c59a7e29e1ce7ba0bb": {
+      "Tuple": [
+        "ccc272928f793803d91f5dad8d51cc986b4332380f9224f7c7c1514d768ebb90"
+      ]
+    },
+    "2a5baaac5089ff098d150b482cfed8bcd01a91c0d7b45d32216ed576ab71ebdd": {
+      "Array": [
+        "1cabbfc3d826c0bfd1e9770a889efacc8b6716ad014a3eec10b6591530229042",
+        32
+      ]
+    },
+    "2fd8f27a172712903e6a3e96f0f85c0480b4211a17acd13059fc51d4a4bbde2c": {
+      "Union": {
+        "none:0": "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c",
+        "some:1": "b070d38ff6d20c5ae5d80715ca31541d5a52bbdecbd3529d38e6ddb672200997"
+      }
+    },
+    "3cd1a29dccad9b917b26305f89a8a4fb2118302a4e73c5ac0a780de6ab005e73": {
+      "Enum": [
+        "excl:33",
+        "hash:35",
+        "dollar:36",
+        "amp:38",
+        "plus:43",
+        "dash:45",
+        "dot:46",
+        "zero:48",
+        "one:49",
+        "two:50",
+        "three:51",
+        "four:52",
+        "five:53",
+        "six:54",
+        "seven:55",
+        "eight:56",
+        "nine:57",
+        "caret:94",
+        "lodash:95",
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122"
+      ]
+    },
+    "3f2b72b7c4af1a630cb6d3ff088baf351093ee465b9e7d472a610082e449d7e4": {
+      "Tuple": [
+        "63aa2314e8b147c8b284dfb39a9e10d19caad5faea848e3cb9849d9167d6344a"
+      ]
+    },
+    "43aa7fc5f6f5644fe5a2ae5e1aa99042cdeb879442e34c723ff5827fb133de8a": {
+      "Struct": [
+        {
+          "name": "type",
+          "ty": "b10ddefe8020add8a0ca08292150abb13c514d76de5168c1c97105a27e676660"
+        },
+        {
+          "name": "digest",
+          "ty": "2a5baaac5089ff098d150b482cfed8bcd01a91c0d7b45d32216ed576ab71ebdd"
+        }
+      ]
+    },
+    "45b780258601c526b23b5b4861460a9050e13f35fbbe8305a8001157e4013888": {
+      "Union": {
+        "none:0": "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c",
+        "some:1": "caff8faeb38a00a04e3621538f8e61d75a85a465cb0a0e48c3593e7eaa6c5fc7"
+      }
+    },
+    "48be23172ae884459ae78334a0063f09fa0e317bea8b233ce782a38875e796b8": {
+      "Enum": [
+        "space:32",
+        "excl:33",
+        "quotes:34",
+        "hash:35",
+        "dollar:36",
+        "percent:37",
+        "ampersand:38",
+        "apostrophe:39",
+        "bracketL:40",
+        "bracketR:41",
+        "asterisk:42",
+        "plus:43",
+        "comma:44",
+        "minus:45",
+        "dot:46",
+        "slash:47",
+        "zero:48",
+        "one:49",
+        "two:50",
+        "three:51",
+        "four:52",
+        "five:53",
+        "six:54",
+        "seven:55",
+        "eight:56",
+        "nine:57",
+        "colon:58",
+        "semiColon:59",
+        "less:60",
+        "equal:61",
+        "greater:62",
+        "question:63",
+        "at:64",
+        "_A:65",
+        "_B:66",
+        "_C:67",
+        "_D:68",
+        "_E:69",
+        "_F:70",
+        "_G:71",
+        "_H:72",
+        "_I:73",
+        "_J:74",
+        "_K:75",
+        "_L:76",
+        "_M:77",
+        "_N:78",
+        "_O:79",
+        "_P:80",
+        "_Q:81",
+        "_R:82",
+        "_S:83",
+        "_T:84",
+        "_U:85",
+        "_V:86",
+        "_W:87",
+        "_X:88",
+        "_Y:89",
+        "_Z:90",
+        "sqBracketL:91",
+        "backSlash:92",
+        "sqBracketR:93",
+        "caret:94",
+        "lodash:95",
+        "backtick:96",
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122",
+        "cBracketL:123",
+        "pipe:124",
+        "cBracketR:125",
+        "tilde:126"
+      ]
+    },
+    "560d96f7a47924b2c3df040e6463398fd65fd591652c294342bfa5f939155154": {
+      "List": [
+        "fba958721a3d335406b368c36f5a82790960cce239febcafe189ba9839d5da78",
+        {
+          "min": 0,
+          "max": 65535
+        }
+      ]
+    },
+    "5b772c8eb15fd74700c79241f60f8fda37e736b3fd462ab017ce4d454efa81aa": {
+      "Tuple": [
+        "5e5ec8924f73cd72c4225c96ab47796658ef1b729ca306e260bca42b25891d0f"
+      ]
+    },
+    "5b8bc7543832054a1d22be94226be7538b133a26881cba4613027878e05c6cf7": {
+      "Struct": [
+        {
+          "name": "text",
+          "ty": "18cb946f1293cf180e9d78dcc65bc59b472ffffeadfbf58db198cc8328f64b01"
+        },
+        {
+          "name": "media",
+          "ty": "e087a83496338799afc48a9211683a427d2bd33e2ea7ebb8a8b880ea4ab4eb81"
+        }
+      ]
+    },
+    "5ca149585de534ee91b3e3a030b7efd4cdb79abea9152f101f3759b4c7210e1f": {
+      "Primitive": 8
+    },
+    "5d03c4178da98e7e3f3af343e3997d74201d11f42732cfbea2b04b8e3ff15f22": {
+      "Enum": [
+        "indivisible:0",
+        "deci:1",
+        "centi:2",
+        "milli:3",
+        "deciMilli:4",
+        "centiMilli:5",
+        "micro:6",
+        "deciMicro:7",
+        "centiMicro:8",
+        "nano:9",
+        "deciNano:10",
+        "centiNano:11",
+        "pico:12",
+        "deciPico:13",
+        "centiPico:14",
+        "femto:15",
+        "deciFemto:16",
+        "centiFemto:17",
+        "atto:18"
+      ]
+    },
+    "5e5ec8924f73cd72c4225c96ab47796658ef1b729ca306e260bca42b25891d0f": {
+      "Tuple": [
+        "822380f475f0edb4b5dc517991de7390ada2dbb3752c4c066851aa01630296c2",
+        "0af65fd62581de85cbd14e23e2db9a92bbef8b7974ffe1b50c4c74db8f86e751"
+      ]
+    },
+    "5f5e26e5c5053c1b4544515bc6a0653da02a0791fb31116d71a4fad916e15355": {
+      "Enum": [
+        "zero:48",
+        "one:49",
+        "two:50",
+        "three:51",
+        "four:52",
+        "five:53",
+        "six:54",
+        "seven:55",
+        "eight:56",
+        "nine:57",
+        "_A:65",
+        "_B:66",
+        "_C:67",
+        "_D:68",
+        "_E:69",
+        "_F:70",
+        "_G:71",
+        "_H:72",
+        "_I:73",
+        "_J:74",
+        "_K:75",
+        "_L:76",
+        "_M:77",
+        "_N:78",
+        "_O:79",
+        "_P:80",
+        "_Q:81",
+        "_R:82",
+        "_S:83",
+        "_T:84",
+        "_U:85",
+        "_V:86",
+        "_W:87",
+        "_X:88",
+        "_Y:89",
+        "_Z:90",
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122"
+      ]
+    },
+    "63aa2314e8b147c8b284dfb39a9e10d19caad5faea848e3cb9849d9167d6344a": {
+      "List": [
+        "fba958721a3d335406b368c36f5a82790960cce239febcafe189ba9839d5da78",
+        {
+          "min": 1,
+          "max": 255
+        }
+      ]
+    },
+    "805ec5bc5312c84190445da16aa1c08a09e300e8323acfae6a23420a29ad003d": {
+      "Tuple": [
+        "c43a7d9eb9b3027973c98f5dd6e1ac04f5cbd34240c0bebc0a0fb808140094d4"
+      ]
+    },
+    "822380f475f0edb4b5dc517991de7390ada2dbb3752c4c066851aa01630296c2": {
+      "Enum": [
+        "_A:65",
+        "_B:66",
+        "_C:67",
+        "_D:68",
+        "_E:69",
+        "_F:70",
+        "_G:71",
+        "_H:72",
+        "_I:73",
+        "_J:74",
+        "_K:75",
+        "_L:76",
+        "_M:77",
+        "_N:78",
+        "_O:79",
+        "_P:80",
+        "_Q:81",
+        "_R:82",
+        "_S:83",
+        "_T:84",
+        "_U:85",
+        "_V:86",
+        "_W:87",
+        "_X:88",
+        "_Y:89",
+        "_Z:90",
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122"
+      ]
+    },
+    "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84": {
+      "Tuple": [
+        "5ca149585de534ee91b3e3a030b7efd4cdb79abea9152f101f3759b4c7210e1f"
+      ]
+    },
+    "b070d38ff6d20c5ae5d80715ca31541d5a52bbdecbd3529d38e6ddb672200997": {
+      "Tuple": [
+        "1cb0758e14c2008c0f008ce6d2d41e9e1937e1cd0f9914c59a7e29e1ce7ba0bb"
+      ]
+    },
+    "b10ddefe8020add8a0ca08292150abb13c514d76de5168c1c97105a27e676660": {
+      "Struct": [
+        {
+          "name": "type",
+          "ty": "1cb0758e14c2008c0f008ce6d2d41e9e1937e1cd0f9914c59a7e29e1ce7ba0bb"
+        },
+        {
+          "name": "subtype",
+          "ty": "2fd8f27a172712903e6a3e96f0f85c0480b4211a17acd13059fc51d4a4bbde2c"
+        },
+        {
+          "name": "charset",
+          "ty": "2fd8f27a172712903e6a3e96f0f85c0480b4211a17acd13059fc51d4a4bbde2c"
+        }
+      ]
+    },
+    "bf8fcbe9c5395731a6b4cd61fb00dfe7a5d629365339c55aeae087a3b90aaa46": {
+      "List": [
+        "3cd1a29dccad9b917b26305f89a8a4fb2118302a4e73c5ac0a780de6ab005e73",
+        {
+          "min": 0,
+          "max": 63
+        }
+      ]
+    },
+    "c43a7d9eb9b3027973c98f5dd6e1ac04f5cbd34240c0bebc0a0fb808140094d4": {
+      "Tuple": [
+        "48be23172ae884459ae78334a0063f09fa0e317bea8b233ce782a38875e796b8",
+        "f5ad172144ccd2dd62ece74ff0fb14641d936a80c1a0c93ebf97727184897cbc"
+      ]
+    },
+    "caff8faeb38a00a04e3621538f8e61d75a85a465cb0a0e48c3593e7eaa6c5fc7": {
+      "Tuple": [
+        "3f2b72b7c4af1a630cb6d3ff088baf351093ee465b9e7d472a610082e449d7e4"
+      ]
+    },
+    "ccc272928f793803d91f5dad8d51cc986b4332380f9224f7c7c1514d768ebb90": {
+      "Tuple": [
+        "f9170804ddae0479f8d5af74ab3bd202e6ea4172d9a9b93707151adb7fc40ca1",
+        "bf8fcbe9c5395731a6b4cd61fb00dfe7a5d629365339c55aeae087a3b90aaa46"
+      ]
+    },
+    "d7fcbee31ef0a85d5f973bda1b0b8c9e7efbcbc5572577382cacd3bdb4218a01": {
+      "Struct": [
+        {
+          "name": "ticker",
+          "ty": "5b772c8eb15fd74700c79241f60f8fda37e736b3fd462ab017ce4d454efa81aa"
+        },
+        {
+          "name": "name",
+          "ty": "805ec5bc5312c84190445da16aa1c08a09e300e8323acfae6a23420a29ad003d"
+        },
+        {
+          "name": "details",
+          "ty": "45b780258601c526b23b5b4861460a9050e13f35fbbe8305a8001157e4013888"
+        },
+        {
+          "name": "precision",
+          "ty": "5d03c4178da98e7e3f3af343e3997d74201d11f42732cfbea2b04b8e3ff15f22"
+        }
+      ]
+    },
+    "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c": {
+      "Primitive": 0
+    },
+    "dc1e2f52567f725fd730ad84867f0da4c9ba9af0813311dfe4ef3e3c4a612548": {
+      "Tuple": [
+        "43aa7fc5f6f5644fe5a2ae5e1aa99042cdeb879442e34c723ff5827fb133de8a"
+      ]
+    },
+    "e087a83496338799afc48a9211683a427d2bd33e2ea7ebb8a8b880ea4ab4eb81": {
+      "Union": {
+        "none:0": "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c",
+        "some:1": "dc1e2f52567f725fd730ad84867f0da4c9ba9af0813311dfe4ef3e3c4a612548"
+      }
+    },
+    "f5ad172144ccd2dd62ece74ff0fb14641d936a80c1a0c93ebf97727184897cbc": {
+      "List": [
+        "48be23172ae884459ae78334a0063f09fa0e317bea8b233ce782a38875e796b8",
+        {
+          "min": 0,
+          "max": 39
+        }
+      ]
+    },
+    "f9170804ddae0479f8d5af74ab3bd202e6ea4172d9a9b93707151adb7fc40ca1": {
+      "Enum": [
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122"
+      ]
+    },
+    "fba958721a3d335406b368c36f5a82790960cce239febcafe189ba9839d5da78": "UnicodeChar"
+  },
+  "scripts": [
+    {
+      "isae": [
+        "ALU",
+        "BPDIGEST",
+        "RGB"
+      ],
+      "code": [
+        11,
+        0,
+        0,
+        0,
+        208,
+        160,
+        15,
+        1,
+        7,
+        11,
+        0,
+        1,
+        0,
+        11,
+        8,
+        0,
+        0,
+        11,
+        1,
+        2,
+        0,
+        200,
+        218,
+        7,
+        1,
+        57,
+        48,
+        0,
+        209,
+        160,
+        15,
+        1,
+        7
+      ],
+      "data": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "libs": []
+    }
+  ],
+  "signatures": {}
+}
