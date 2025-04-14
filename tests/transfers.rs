@@ -382,7 +382,7 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
         AssetSchema::Pfa => {
             let (secret_key, public_key) =
                 Secp256k1::new().generate_keypair(&mut rand::thread_rng());
-            let pubkey = PublicKey::new(public_key.serialize()).unwrap();
+            let pubkey = CompressedPk::from_byte_array(public_key.serialize()).unwrap();
             (wlt_1.issue_pfa(600, None, pubkey), Some(secret_key))
         }
     };
@@ -1419,7 +1419,7 @@ fn pfa() {
     let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
 
     let (secret_key, public_key) = Secp256k1::new().generate_keypair(&mut rand::thread_rng());
-    let pubkey = PublicKey::new(public_key.serialize()).unwrap();
+    let pubkey = CompressedPk::from_byte_array(public_key.serialize()).unwrap();
 
     let utxo = wlt_1.get_utxo(None);
 

@@ -240,7 +240,7 @@ pub enum AssetInfo {
         spec: AssetSpec,
         terms: ContractTerms,
         issue_amounts: Vec<u64>,
-        pubkey: PublicKey,
+        pubkey: CompressedPk,
     },
 }
 
@@ -282,7 +282,7 @@ impl AssetInfo {
         )
     }
 
-    pub fn default_pfa(issue_amounts: Vec<u64>, pubkey: PublicKey) -> Self {
+    pub fn default_pfa(issue_amounts: Vec<u64>, pubkey: CompressedPk) -> Self {
         AssetInfo::pfa(
             "PFATCKR",
             "PFA asset name",
@@ -389,7 +389,7 @@ impl AssetInfo {
         terms_text: &str,
         terms_media_fpath: Option<&str>,
         issue_amounts: Vec<u64>,
-        pubkey: PublicKey,
+        pubkey: CompressedPk,
     ) -> Self {
         let spec = AssetSpec::with(
             ticker,
@@ -957,7 +957,7 @@ impl TestWallet {
         &mut self,
         issued_supply: u64,
         outpoint: Option<&Outpoint>,
-        pubkey: PublicKey,
+        pubkey: CompressedPk,
     ) -> ContractId {
         let asset_info = AssetInfo::default_pfa(vec![issued_supply], pubkey);
         self.issue_with_info(asset_info, vec![outpoint.copied()])

@@ -46,7 +46,7 @@ use bitcoin_hashes::{sha256, Hash};
 pub use bp::{
     seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
     secp256k1::{Message, Secp256k1, SecretKey},
-    ConsensusDecode, LockTime, Outpoint, Sats, ScriptPubkey, SeqNo, Tx, Txid, Vout,
+    CompressedPk, ConsensusDecode, LockTime, Outpoint, Sats, ScriptPubkey, SeqNo, Tx, Txid, Vout,
 };
 pub use bpstd::{
     h, signers::TestnetSigner, Address, DerivationPath, DerivationSeg, Derive, DerivedAddr,
@@ -76,7 +76,7 @@ pub use rgb::{
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::{ContractTerms, PublicKey},
+    stl::ContractTerms,
     validation::{Failure, ResolveWitness, Scripts, Validity, Warning, WitnessResolverError},
     vm::{WitnessOrd, WitnessPos},
     AssignmentType, DescriptorRgb, GenesisSeal, GraphSeal, Identity, OpId, RgbDescr, RgbKeychain,
@@ -89,7 +89,7 @@ pub use rgb_altered::{
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::{ContractTerms, PublicKey},
+    stl::ContractTerms,
     validation::{Failure, ResolveWitness, Scripts, Validity, Warning, WitnessResolverError},
     vm::{WitnessOrd, WitnessPos},
     AssignmentType, DescriptorRgb, GenesisSeal, GraphSeal, Identity, OpId, RgbDescr, RgbKeychain,
