@@ -362,6 +362,52 @@ fn transfer_loop(
 }
 
 #[cfg(not(feature = "altered"))]
+#[rstest]
+#[case(AS::Nia)]
+#[case(AS::Cfa)]
+#[case(AS::Uda)]
+#[case(AS::Pfa)]
+fn unknown_kit(#[case] asset_schema: AssetSchema) {
+    println!("asset_schema {asset_schema:?}");
+
+    initialize();
+
+    let mut wlt_1 = get_wallet_custom(&DescriptorType::Wpkh, None, false);
+    let mut wlt_2 = get_wallet_custom(&DescriptorType::Wpkh, None, false);
+
+    let (contract_id, secret_key) = match asset_schema {
+        AssetSchema::Nia => (wlt_1.issue_nia(600, None), None),
+        AssetSchema::Uda => (wlt_1.issue_uda(None), None),
+        AssetSchema::Cfa => (wlt_1.issue_cfa(600, None), None),
+        AssetSchema::Pfa => {
+            let (secret_key, public_key) =
+                Secp256k1::new().generate_keypair(&mut rand::thread_rng());
+            let pubkey = PublicKey::new(public_key.serialize()).unwrap();
+            (wlt_1.issue_pfa(600, None, pubkey), Some(secret_key))
+        }
+    };
+
+    if asset_schema == AssetSchema::Pfa {
+        wlt_1.send_pfa(
+            &mut wlt_2,
+            TransferType::Blinded,
+            contract_id,
+            1,
+            secret_key.unwrap(),
+        );
+    } else {
+        wlt_1.send(
+            &mut wlt_2,
+            TransferType::Blinded,
+            contract_id,
+            1,
+            2000,
+            None,
+        );
+    }
+}
+
+#[cfg(not(feature = "altered"))]
 #[test]
 fn rbf_transfer() {
     initialize();
@@ -1385,46 +1431,23 @@ fn pfa() {
     let contract_id_2 = wlt_1.issue_pfa(issued_amt_2, Some(&utxo), pubkey);
     let schema_id_2 = wlt_1.schema_id(contract_id_2);
 
-    let transition_signer = |witness_bundle: &mut WitnessBundle| {
-        for transition in witness_bundle.bundle_mut().known_transitions.values_mut() {
-            let transition_id: [u8; 32] = transition.id().as_ref().into_inner();
-            let msg = Message::from_digest(transition_id);
-            let signature = secret_key.sign_ecdsa(msg);
-            transition.signature = Some(Bytes64::from_array(signature.serialize_compact()).into());
-        }
-    };
-
-    let mut send_pfa = |contract_id: ContractId, schema_id: SchemaId, amt: u64| {
-        let invoice = wlt_2.invoice(contract_id, schema_id, amt, InvoiceType::Witness);
-        let (mut consignment, tx, psbt, psbt_meta) =
-            wlt_1.pay_full(invoice, None, None, true, None);
-        let txid = tx.txid();
-        consignment.modify_bundle(txid, transition_signer);
-        wlt_1.accept_transfer(consignment.clone(), None);
-        let output_seal: OutputSeal =
-            ExplicitSeal::new(Outpoint::new(txid, psbt_meta.change_vout.unwrap()));
-        let mut extra_transition = false;
-        for cid in psbt.rgb_contract_ids().unwrap() {
-            if cid == contract_id {
-                continue;
-            }
-            let mut extra_cons = wlt_1.consign_transfer(cid, vec![output_seal], None, Some(txid));
-            let changed = extra_cons.modify_bundle(txid, transition_signer);
-            assert!(changed);
-            wlt_1.accept_transfer(extra_cons.clone(), None);
-            extra_transition = true;
-        }
-        assert!(extra_transition);
-        wlt_1.mine_tx(&txid, false);
-        wlt_2.accept_transfer(consignment.clone(), None);
-        wlt_1.sync();
-    };
-
     let amt_1 = 42;
-    send_pfa(contract_id_1, schema_id_1, amt_1);
+    wlt_1.send_pfa(
+        &mut wlt_2,
+        TransferType::Witness,
+        contract_id_1,
+        amt_1,
+        secret_key,
+    );
 
     let amt_2 = 66;
-    send_pfa(contract_id_2, schema_id_2, amt_2);
+    wlt_1.send_pfa(
+        &mut wlt_2,
+        TransferType::Witness,
+        contract_id_2,
+        amt_2,
+        secret_key,
+    );
 
     wlt_1.check_allocations(
         contract_id_1,
@@ -1457,8 +1480,8 @@ fn reorg_history(#[case] history_type: HistoryType, #[case] reorg_type: ReorgTyp
     initialize();
     connect_reorg_nodes();
 
-    let mut wlt_1 = get_wallet_custom(&DescriptorType::Wpkh, INSTANCE_2);
-    let mut wlt_2 = get_wallet_custom(&DescriptorType::Wpkh, INSTANCE_2);
+    let mut wlt_1 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_2 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     let contract_id = match history_type {
         HistoryType::Linear | HistoryType::Branching => wlt_1.issue_nia(600, None),
@@ -1651,7 +1674,7 @@ fn reorg_history(#[case] history_type: HistoryType, #[case] reorg_type: ReorgTyp
     wlt_1.switch_to_instance(INSTANCE_2);
     wlt_2.switch_to_instance(INSTANCE_2);
 
-    let mut wlt_3 = get_wallet_custom(&DescriptorType::Wpkh, INSTANCE_2);
+    let mut wlt_3 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     match history_type {
         HistoryType::Linear => {
@@ -1762,8 +1785,8 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
     initialize();
     connect_reorg_nodes();
 
-    let mut wlt_1 = get_wallet_custom(&DescriptorType::Wpkh, INSTANCE_2);
-    let mut wlt_2 = get_wallet_custom(&DescriptorType::Wpkh, INSTANCE_2);
+    let mut wlt_1 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_2 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     let contract_id = match history_type {
         HistoryType::Linear | HistoryType::Branching => wlt_1.issue_nia(600, None),
@@ -1962,7 +1985,7 @@ fn revert_genesis(#[case] with_transfers: bool) {
     connect_reorg_nodes();
     disconnect_reorg_nodes();
 
-    let mut wlt = get_wallet_custom(&DescriptorType::Wpkh, INSTANCE_2);
+    let mut wlt = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     let issued_supply = 600;
     let utxo = wlt.get_utxo(None);
@@ -1972,7 +1995,7 @@ fn revert_genesis(#[case] with_transfers: bool) {
     wlt.check_allocations(contract_id, schema_id, vec![issued_supply], false);
 
     if with_transfers {
-        let mut recv_wlt = get_wallet_custom(&DescriptorType::Wpkh, INSTANCE_2);
+        let mut recv_wlt = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
         let amt = 200;
         wlt.send(
             &mut recv_wlt,

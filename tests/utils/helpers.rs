@@ -557,6 +557,7 @@ fn _get_wallet(
     wallet_dir: PathBuf,
     wallet_account: WalletAccount,
     instance: u8,
+    import_kits: bool,
 ) -> TestWallet {
     std::fs::create_dir_all(&wallet_dir).unwrap();
     println!("wallet dir: {wallet_dir:?}");
@@ -599,9 +600,11 @@ fn _get_wallet(
     stock.make_persistent(stock_provider, true).unwrap();
     let mut wallet = RgbWallet::new(stock, bp_wallet);
 
-    for asset_schema in AssetSchema::iter() {
-        let valid_kit = asset_schema.get_valid_kit();
-        wallet.stock_mut().import_kit(valid_kit).unwrap();
+    if import_kits {
+        for asset_schema in AssetSchema::iter() {
+            let valid_kit = asset_schema.get_valid_kit();
+            wallet.stock_mut().import_kit(valid_kit).unwrap();
+        }
     }
 
     let signer = match wallet_account {
@@ -622,10 +625,14 @@ fn _get_wallet(
 }
 
 pub fn get_wallet(descriptor_type: &DescriptorType) -> TestWallet {
-    get_wallet_custom(descriptor_type, INSTANCE_1)
+    get_wallet_custom(descriptor_type, None, true)
 }
 
-pub fn get_wallet_custom(descriptor_type: &DescriptorType, instance: u8) -> TestWallet {
+pub fn get_wallet_custom(
+    descriptor_type: &DescriptorType,
+    instance: Option<u8>,
+    import_kits: bool,
+) -> TestWallet {
     let mut seed = vec![0u8; 128];
     rand::thread_rng().fill_bytes(&mut seed);
 
@@ -641,7 +648,8 @@ pub fn get_wallet_custom(descriptor_type: &DescriptorType, instance: u8) -> Test
         Network::Regtest,
         wallet_dir,
         WalletAccount::Private(xpriv_account),
-        instance,
+        instance.unwrap_or(INSTANCE_1),
+        import_kits,
     )
 }
 
@@ -660,6 +668,7 @@ pub fn get_mainnet_wallet() -> TestWallet {
         wallet_dir,
         WalletAccount::Public(xpub_account),
         INSTANCE_1,
+        true,
     )
 }
 
@@ -1364,6 +1373,47 @@ impl TestWallet {
         recv_wlt.accept_transfer(consignment.clone(), report);
         self.sync();
         (consignment, tx)
+    }
+
+    pub fn send_pfa(
+        &mut self,
+        recv_wlt: &mut TestWallet,
+        transfer_type: TransferType,
+        contract_id: ContractId,
+        amount: u64,
+        secret_key: SecretKey,
+    ) {
+        let transition_signer = |witness_bundle: &mut WitnessBundle| {
+            for transition in witness_bundle.bundle_mut().known_transitions.values_mut() {
+                let transition_id: [u8; 32] = transition.id().as_ref().into_inner();
+                let msg = Message::from_digest(transition_id);
+                let signature = secret_key.sign_ecdsa(msg);
+                transition.signature =
+                    Some(Bytes64::from_array(signature.serialize_compact()).into());
+            }
+        };
+
+        let schema_id = self.schema_id(contract_id);
+        assert_eq!(schema_id, AssetSchema::Pfa.schema().schema_id());
+        let invoice = recv_wlt.invoice(contract_id, schema_id, amount, transfer_type.into());
+        let (mut consignment, tx, psbt, psbt_meta) = self.pay_full(invoice, None, None, true, None);
+        let txid = tx.txid();
+        consignment.modify_bundle(txid, transition_signer);
+        self.accept_transfer(consignment.clone(), None);
+        let output_seal: OutputSeal =
+            ExplicitSeal::new(Outpoint::new(txid, psbt_meta.change_vout.unwrap()));
+        for cid in psbt.rgb_contract_ids().unwrap() {
+            if cid == contract_id {
+                continue;
+            }
+            let mut extra_cons = self.consign_transfer(cid, vec![output_seal], None, Some(txid));
+            let changed = extra_cons.modify_bundle(txid, transition_signer);
+            assert!(changed);
+            self.accept_transfer(extra_cons.clone(), None);
+        }
+        self.mine_tx(&txid, false);
+        recv_wlt.accept_transfer(consignment.clone(), None);
+        self.sync();
     }
 
     pub fn check_allocations(
