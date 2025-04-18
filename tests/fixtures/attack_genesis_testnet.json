@@ -4,9 +4,8 @@
   "terminals": {},
   "genesis": {
     "ffv": 0,
-    "schemaId": "rgb:sch:hO1Nx$HgB1gctRfRxyXtmJVtgiIMS!TzqLe61SBPfLQ#pony-sound-apropos",
-    "flags": null,
-    "timestamp": 1744823956,
+    "schemaId": "rgb:sch:XvmU3d4!nQQ8S7oagbXi07x5vjMm7P$ERukQNX6SC4M#ladder-ecology-civil",
+    "timestamp": 1745322503,
     "issuer": "ssi:anonymous",
     "chainNet": "bitcoinMainnet",
     "metadata": {},
@@ -27,19 +26,17 @@
         "items": [
           {
             "seal": {
-              "txid": "004eb95a6efb85c36aa1474ee2aca071d1cf4086e19e55b7e3cbea9f02d6ce29",
+              "txid": "8208e7c917ed5c6ba259a575ffd48948a23383c59502069d7cca7bc3d4bbe3ec",
               "vout": 0,
-              "blinding": 14511552275593899814
+              "blinding": 5707521041527243028
             },
             "state": {
               "value": 666
-            },
-            "lock": null
+            }
           }
         ]
       }
-    },
-    "validator": null
+    }
   },
   "bundles": [
     {
@@ -48,7 +45,7 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "72ef9d21b838c9baebbfe109eb9a1668ccdc936595a02759050ed68435cc44a4:2",
+              "prevOutput": "f80744f9630dab903f64705a5ea76c2511bc2ead92db1b2fa7b378aa85e71996:2",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -57,15 +54,15 @@
           "outputs": [
             {
               "value": 0,
-              "scriptPubkey": "6a20e64f50211d4601f4c8f504a122a05a4f4c7c28ff98bac1df90af92b9ab060743"
+              "scriptPubkey": "6a20faa01eefc5dc2dc8c25681d1ca9f7da976d0f3a8020918424a23838bfd525de2"
             },
             {
               "value": 9000,
-              "scriptPubkey": "00146aca341f21477a1c5cbf5f831c7b36f86268f46b"
+              "scriptPubkey": "0014ea56dbbd03d82d4a89ae03c6761592de47a6e408"
             },
             {
               "value": 99981200,
-              "scriptPubkey": "00140e8bc102f8fa1d2e1d3a1c3e03af472d1f225bd9"
+              "scriptPubkey": "001451b7667cf2f7f732eb6e33ba732acacc37b3255e"
             }
           ],
           "lockTime": 0
@@ -73,12 +70,12 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 1,
+          "pos": 4,
           "cofactor": 0,
           "path": [
-            "380f7c8460173ef14451dfe30cb8288c9b3f985e27e4b495966c69690a4be96f",
-            "6f234c98e58156c035eb111e4ebb2f1a25b07981f9b7dc6ba22c82b227b5659a",
-            "b9287a7fa220d994b557b4c08b8e5a0f7d7a7557f7865bada1dd15cbc89645b3"
+            "055ee604800b3b0e815cfa691ff18949c9d901f4417b0426e72bf1527a8a70a8",
+            "31b09005a6c7d39589d9e4bb7579a258913002afd5495ccab3715ca23957d330",
+            "1dca7b95403d08d45a6d9263f1719fdb7a6decdc3986fe9cea05594907e862bb"
           ]
         },
         "dbcProof": null
@@ -86,24 +83,22 @@
       "bundle": {
         "inputMap": {
           "0": [
-            "f3edfcfff25191e3a3f77e674ff8cff3e9034a4a7b176177d38c787d681669c7"
+            "d5fdfa454d0610e9e5ce24f8eeb95e5454961a75e809070e5c70613e6cac8c99"
           ]
         },
         "knownTransitions": {
-          "f3edfcfff25191e3a3f77e674ff8cff3e9034a4a7b176177d38c787d681669c7": {
+          "d5fdfa454d0610e9e5ce24f8eeb95e5454961a75e809070e5c70613e6cac8c99": {
             "ffv": 0,
-            "contractId": "rgb:Kb0tArVL-n$5HrIK-LqO2aKq-RItFg4J-ajiqu8$-dUvd05k",
+            "contractId": "rgb:5KbvTBGz-6XpdqWF-WDv8jrT-LwI2F9H-5uT$NZe-SFMFSZs",
             "nonce": 18446744073709551615,
             "transitionType": 10000,
             "metadata": {},
             "globals": {},
             "inputs": [
               {
-                "prevOut": {
-                  "op": "33ea253b0eca63c19f5a8bf11c0764e0c9ec2c4d8def8330897bdad9c7201f96",
-                  "ty": 4000,
-                  "no": 0
-                }
+                "op": "799923c888c8a65b28dc7f67f101326824fc7d198372c522214417cac9fd7b93",
+                "ty": 4000,
+                "no": 0
               }
             ],
             "assignments": {
@@ -114,29 +109,25 @@
                     "seal": {
                       "txid": null,
                       "vout": 1,
-                      "blinding": 11756056934113737742
+                      "blinding": 12839453736146007769
                     },
                     "state": {
                       "value": 50
-                    },
-                    "lock": null
+                    }
                   },
                   {
                     "seal": {
                       "txid": null,
                       "vout": 2,
-                      "blinding": 15170032579465090815
+                      "blinding": 778208162768444000
                     },
                     "state": {
                       "value": 616
-                    },
-                    "lock": null
+                    }
                   }
                 ]
               }
             },
-            "validator": null,
-            "witness": null,
             "signature": null
           }
         }
@@ -148,7 +139,7 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "004eb95a6efb85c36aa1474ee2aca071d1cf4086e19e55b7e3cbea9f02d6ce29:0",
+              "prevOutput": "8208e7c917ed5c6ba259a575ffd48948a23383c59502069d7cca7bc3d4bbe3ec:0",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -157,15 +148,15 @@
           "outputs": [
             {
               "value": 0,
-              "scriptPubkey": "6a207c20d77f8e21262749f4dade9de2573789f2beb8b43d9b6764e1eea4b0578386"
+              "scriptPubkey": "6a2037bf3adc0bbdbf3d50609eeeb2f85766128eeedd9235d06dec1bb34b08617af6"
             },
             {
               "value": 9000,
-              "scriptPubkey": "0014e0b959effc165ffdbb24f41a322ad8c52679a4d6"
+              "scriptPubkey": "00141d145fd28b7649e90d66d56a842d765596f530b8"
             },
             {
               "value": 99990600,
-              "scriptPubkey": "0014655d90f0c3db755d122dfea18d85c82cac1a198c"
+              "scriptPubkey": "0014e58fc003814a36acd5fbe36594c59c5b87dbcae9"
             }
           ],
           "lockTime": 0
@@ -173,12 +164,12 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 1,
+          "pos": 4,
           "cofactor": 0,
           "path": [
-            "ad61d82b18cc4d7d89024d2322ea5b11d23ba4015b8dfbab2d532927b4c991f1",
-            "31d02a4455049794feb9a5a1c305e1cbf0af2504f845efe11467da96b9a93d9b",
-            "42d4fd184e938435d5ab5aeb023a4adf0980cd6e32bd584ef84e5f900f18465e"
+            "cd3f6b79a3f801a96a10477084700d59ef1c06c483ad93ac29f2117e55b88172",
+            "06d9825eac8d483d85943cf547485669468a1ea1c0d29c178e1fa4dfccb9441a",
+            "6dd9b0c251280cde055ea80cb27ebebc94106f698a3416ab2c3ec6fddea8ee8b"
           ]
         },
         "dbcProof": null
@@ -186,24 +177,22 @@
       "bundle": {
         "inputMap": {
           "0": [
-            "33ea253b0eca63c19f5a8bf11c0764e0c9ec2c4d8def8330897bdad9c7201f96"
+            "799923c888c8a65b28dc7f67f101326824fc7d198372c522214417cac9fd7b93"
           ]
         },
         "knownTransitions": {
-          "33ea253b0eca63c19f5a8bf11c0764e0c9ec2c4d8def8330897bdad9c7201f96": {
+          "799923c888c8a65b28dc7f67f101326824fc7d198372c522214417cac9fd7b93": {
             "ffv": 0,
-            "contractId": "rgb:Kb0tArVL-n$5HrIK-LqO2aKq-RItFg4J-ajiqu8$-dUvd05k",
+            "contractId": "rgb:5KbvTBGz-6XpdqWF-WDv8jrT-LwI2F9H-5uT$NZe-SFMFSZs",
             "nonce": 18446744073709551615,
             "transitionType": 10000,
             "metadata": {},
             "globals": {},
             "inputs": [
               {
-                "prevOut": {
-                  "op": "29bd2d02b54b9ffe47ac828ba8ed9a2aa448b4583825a8e2aaef3f754bddd399",
-                  "ty": 4000,
-                  "no": 0
-                }
+                "op": "e4a6ef4c11b3e97a5da961560eff23ad32f023617d1f9b93fcd65e485305499b",
+                "ty": 4000,
+                "no": 0
               }
             ],
             "assignments": {
@@ -214,18 +203,15 @@
                     "seal": {
                       "txid": null,
                       "vout": 2,
-                      "blinding": 6136024513945659965
+                      "blinding": 2235692232595076856
                     },
                     "state": {
                       "value": 666
-                    },
-                    "lock": null
+                    }
                   }
                 ]
               }
             },
-            "validator": null,
-            "witness": null,
             "signature": null
           }
         }
@@ -237,7 +223,7 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "3e1493641cc180eec1654f6b41f77c6dd6f7b7ac7405648d810af2e15d58e348:2",
+              "prevOutput": "c543c47b42baa9874f7271f50da56b7dbfd0b4d96b209d52a80d28bc90e5cb53:2",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -246,15 +232,15 @@
           "outputs": [
             {
               "value": 0,
-              "scriptPubkey": "6a2040f1871dae4c3694a0ee77cac50ba454103eddde85890cf1216fb7be3e2100d9"
+              "scriptPubkey": "6a208fe5b5e9ee5caa3cb6c9afd8c99c0f4dba48dbf97eec315f681f25c5c8a9e8db"
             },
             {
               "value": 9000,
-              "scriptPubkey": "0014a373b16685eb3e3c782f52c1674e720076d6a9af"
+              "scriptPubkey": "001462d55ed0f3ccf92aad5676ef1631fe7a252fd4fd"
             },
             {
               "value": 99971800,
-              "scriptPubkey": "00140aa18e01da86c7254bca2e557972067a0b2bea54"
+              "scriptPubkey": "0014d82da06565763b9a7ec4c8236a04dacdadc88942"
             }
           ],
           "lockTime": 0
@@ -262,12 +248,12 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 1,
+          "pos": 4,
           "cofactor": 0,
           "path": [
-            "1c51b39ec164e56957c553fc0faa9ba27f5c1b312c9f15e8f34a52372129aa20",
-            "6d1f246ba9283863a00736a8bcc50aafdf51ae700551eb78be98f809ce982830",
-            "4d9bffe01b776ed940f0f05cbfdc1abd13853c3ad605d397812fb4a3bfce1c92"
+            "51c792bf4ee7b5929f4a1a21c43eb19232fd9aa7630902f7fa0bce9697be816f",
+            "027d67ddefcd217eafd2735e61caceb62fd53c25f58c0b1f6d4be31b165c0534",
+            "130abe7aa353969e90dfdea88c146c572498b19b1d13bf6492c502da645ab9b3"
           ]
         },
         "dbcProof": null
@@ -275,24 +261,22 @@
       "bundle": {
         "inputMap": {
           "0": [
-            "06f705514999a6cc7233e057f39cf0229c467e01e1b945186efd53db4948f80b"
+            "b13375cb1b6f75368cbf383560cf13f88b923b2b6d92a8fcf359c82950bcb999"
           ]
         },
         "knownTransitions": {
-          "06f705514999a6cc7233e057f39cf0229c467e01e1b945186efd53db4948f80b": {
+          "b13375cb1b6f75368cbf383560cf13f88b923b2b6d92a8fcf359c82950bcb999": {
             "ffv": 0,
-            "contractId": "rgb:Kb0tArVL-n$5HrIK-LqO2aKq-RItFg4J-ajiqu8$-dUvd05k",
+            "contractId": "rgb:5KbvTBGz-6XpdqWF-WDv8jrT-LwI2F9H-5uT$NZe-SFMFSZs",
             "nonce": 18446744073709551615,
             "transitionType": 10000,
             "metadata": {},
             "globals": {},
             "inputs": [
               {
-                "prevOut": {
-                  "op": "f3edfcfff25191e3a3f77e674ff8cff3e9034a4a7b176177d38c787d681669c7",
-                  "ty": 4000,
-                  "no": 1
-                }
+                "op": "d5fdfa454d0610e9e5ce24f8eeb95e5454961a75e809070e5c70613e6cac8c99",
+                "ty": 4000,
+                "no": 1
               }
             ],
             "assignments": {
@@ -303,29 +287,25 @@
                     "seal": {
                       "txid": null,
                       "vout": 1,
-                      "blinding": 3954401226095737122
+                      "blinding": 448285301046360607
                     },
                     "state": {
                       "value": 77
-                    },
-                    "lock": null
+                    }
                   },
                   {
                     "seal": {
                       "txid": null,
                       "vout": 2,
-                      "blinding": 4457962065232054117
+                      "blinding": 11867610603322406543
                     },
                     "state": {
                       "value": 539
-                    },
-                    "lock": null
+                    }
                   }
                 ]
               }
             },
-            "validator": null,
-            "witness": null,
             "signature": null
           }
         }
@@ -334,7 +314,6 @@
   ],
   "schema": {
     "ffv": 0,
-    "flags": null,
     "name": "NonInflatableAsset",
     "metaTypes": {},
     "globalTypes": {
@@ -402,8 +381,7 @@
         },
         "name": "transfer"
       }
-    },
-    "reserved": null
+    }
   },
   "types": {
     "0af65fd62581de85cbd14e23e2db9a92bbef8b7974ffe1b50c4c74db8f86e751": {

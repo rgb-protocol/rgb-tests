@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "inputs": [
+    {
+      "prevOutput": "f476d57f0279507ce6030b83b1d025aa62a73522f173d61d599b128fbd8cd585:1",
+      "sigScript": "",
+      "sequence": 0,
+      "witness": [
+        "304402202af56ffaf01b199c4190a720c966486d0c60e13b1f49ec4a4b8b0ed93ce1de3b02203c61884a4d77eb325145d5073c8138d65f89e30f785d9091e6d14db6b9ed7d3601",
+        "03d977a5e3f3fc3cbf7709e279756d25ade18513c8d60579fdce7b14bc57b8a1b1"
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "value": 0,
+      "scriptPubkey": "6a2038d6201e04a7aabd88daecf58e3c7f4960c538ebc2fb11a5d0e0af69878dac20"
+    },
+    {
+      "value": 99998800,
+      "scriptPubkey": "001418535622a6d2d7c8ddc66cc64cf3a432d6ac7ea9"
+    }
+  ],
+  "lockTime": 0
+}
