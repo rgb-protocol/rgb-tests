@@ -39,7 +39,7 @@ services:
     depends_on:
       - bitcoind_3
   esplora_1:
-    image: blockstream/esplora:4de8457de518526425d4f872d98d5cdb9efdaf0e
+    image: blockstream/esplora:latest
     profiles: [esplora]
     command: /srv/explorer/run.sh bitcoin-regtest explorer
     environment:
@@ -51,7 +51,7 @@ services:
       - 50004:50001
       - 8094:80
   esplora_2:
-    image: blockstream/esplora:4de8457de518526425d4f872d98d5cdb9efdaf0e
+    image: blockstream/esplora:latest
     profiles: [esplora]
     command: /srv/explorer/run.sh bitcoin-regtest explorer
     environment:
@@ -63,7 +63,7 @@ services:
       - 50005:50001
       - 8095:80
   esplora_3:
-    image: blockstream/esplora:4de8457de518526425d4f872d98d5cdb9efdaf0e
+    image: blockstream/esplora:latest
     profiles: [esplora]
     command: /srv/explorer/run.sh bitcoin-regtest explorer
     environment:
