@@ -1,5 +1,5 @@
 {
-  "version": "v2",
+  "version": "v0",
   "transfer": true,
   "terminals": {},
   "genesis": {
@@ -960,6 +960,5 @@
       ],
       "libs": []
     }
-  ],
-  "signatures": {}
+  ]
 }

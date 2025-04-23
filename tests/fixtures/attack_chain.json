@@ -1,5 +1,5 @@
 {
-  "version": "v2",
+  "version": "v0",
   "transfer": true,
   "terminals": {
     "cdfef72592cb4edad0780bad305608d174340850dccb30f8e0ff2eb1777cca73": "e003a8117ba9b2f0492c2a65648a5d3fdab97b75a816c8f23c245fea86963f42"
@@ -942,6 +942,5 @@
       ],
       "libs": []
     }
-  ],
-  "signatures": {}
+  ]
 }
