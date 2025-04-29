@@ -21,6 +21,10 @@ pub const INSTANCE_1: u8 = 1;
 pub const INSTANCE_2: u8 = 2;
 pub const INSTANCE_3: u8 = 3;
 
+pub type TT = TransferType;
+pub type DT = DescriptorType;
+pub type AS = AssetSchema;
+
 pub use std::{
     cell::OnceCell,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -57,6 +61,7 @@ pub use bpwallet::{
     fs::FsTextStore, indexers::esplora::Client as EsploraClient, AnyIndexer, Indexer as BpIndexer,
     Wallet, WalletUtxo,
 };
+pub use chrono::Utc;
 pub use descriptors::Wpkh;
 pub use electrum::{Client as ElectrumClient, ElectrumApi, Param};
 pub use file_format::FileFormat;
@@ -106,7 +111,7 @@ pub use rgbstd::{
     },
     indexers::AnyResolver,
     invoice::{Beneficiary, RgbInvoice, RgbInvoiceBuilder, XChainNet},
-    persistence::{fs::FsBinStore, PersistedState, StashReadProvider},
+    persistence::{fs::FsBinStore, StashReadProvider},
     schema::SchemaId,
     stl::{
         AssetSpec, Attachment, Details, EmbeddedMedia, MediaType, Name, ProofOfReserves,

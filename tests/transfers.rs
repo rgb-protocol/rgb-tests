@@ -2,10 +2,6 @@ pub mod utils;
 
 use utils::*;
 
-type TT = TransferType;
-type DT = DescriptorType;
-type AS = AssetSchema;
-
 #[cfg(not(feature = "altered"))]
 #[rstest]
 // blinded: nia - nia
@@ -578,7 +574,7 @@ fn invoice_reuse(#[case] transfer_type: TransferType) {
     let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
 
     let asset_info = AssetInfo::default_nia(vec![500, 400]);
-    let contract_id = wlt_1.issue_with_info(asset_info, vec![None, None]);
+    let contract_id = wlt_1.issue_with_info(asset_info, vec![None, None], None, None);
     let schema_id = wlt_1.schema_id(contract_id);
 
     let amount = 300;
@@ -652,7 +648,7 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     let amounts = vec![600, 300];
     let outpoints = vec![Some(utxo_1), Some(utxo_2)];
     let asset_info = AssetInfo::default_nia(amounts.clone());
-    let contract_id = wlt_1.issue_with_info(asset_info, outpoints);
+    let contract_id = wlt_1.issue_with_info(asset_info, outpoints, None, None);
 
     struct LNFasciaResolver {}
     impl ResolveWitness for LNFasciaResolver {
@@ -1487,7 +1483,7 @@ fn reorg_history(#[case] history_type: HistoryType, #[case] reorg_type: ReorgTyp
         HistoryType::Linear | HistoryType::Branching => wlt_1.issue_nia(600, None),
         HistoryType::Merging => {
             let asset_info = AssetInfo::default_nia(vec![400, 200]);
-            wlt_1.issue_with_info(asset_info, vec![None, None])
+            wlt_1.issue_with_info(asset_info, vec![None, None], None, None)
         }
     };
     let schema_id = wlt_1.schema_id(contract_id);
@@ -1792,7 +1788,7 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
         HistoryType::Linear | HistoryType::Branching => wlt_1.issue_nia(600, None),
         HistoryType::Merging => {
             let asset_info = AssetInfo::default_nia(vec![400, 200]);
-            wlt_1.issue_with_info(asset_info, vec![None, None])
+            wlt_1.issue_with_info(asset_info, vec![None, None], None, None)
         }
     };
     let schema_id = wlt_1.schema_id(contract_id);

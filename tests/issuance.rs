@@ -36,7 +36,7 @@ fn issue_nia(wallet_desc: DescriptorType) {
         terms_media_fpath,
         vec![issued_supply],
     );
-    let contract_id = wallet.issue_with_info(asset_info, vec![]);
+    let contract_id = wallet.issue_with_info(asset_info, vec![], None, None);
 
     let contract = wallet.contract_wrapper::<NonInflatableAsset>(contract_id);
     let spec = contract.spec();
@@ -109,7 +109,7 @@ fn issue_uda(wallet_desc: DescriptorType) {
         terms_media_fpath,
         token_data,
     );
-    let contract_id = wallet.issue_with_info(asset_info, vec![]);
+    let contract_id = wallet.issue_with_info(asset_info, vec![], None, None);
 
     let contract = wallet.contract_wrapper::<UniqueDigitalAsset>(contract_id);
     let spec = contract.spec();
@@ -166,7 +166,7 @@ fn issue_cfa(wallet_desc: DescriptorType) {
         terms_media_fpath,
         vec![issued_supply],
     );
-    let contract_id = wallet.issue_with_info(asset_info, vec![]);
+    let contract_id = wallet.issue_with_info(asset_info, vec![], None, None);
 
     let contract = wallet.contract_wrapper::<CollectibleFungibleAsset>(contract_id);
     assert_eq!(contract.name().to_string(), name.to_string());
@@ -205,7 +205,7 @@ fn issue_nia_multiple_utxos(wallet_desc: DescriptorType) {
         .map(|_| Some(wallet.get_utxo(None)))
         .collect();
     let asset_info = AssetInfo::default_nia(amounts.clone());
-    let contract_id = wallet.issue_with_info(asset_info, outpoints.clone());
+    let contract_id = wallet.issue_with_info(asset_info, outpoints.clone(), None, None);
 
     let contract = wallet.contract_wrapper::<NonInflatableAsset>(contract_id);
     assert_eq!(
@@ -239,7 +239,7 @@ fn issue_cfa_multiple_utxos(wallet_desc: DescriptorType) {
         .map(|_| Some(wallet.get_utxo(None)))
         .collect();
     let asset_info = AssetInfo::default_cfa(amounts.clone());
-    let contract_id = wallet.issue_with_info(asset_info, outpoints.clone());
+    let contract_id = wallet.issue_with_info(asset_info, outpoints.clone(), None, None);
 
     let contract = wallet.contract_wrapper::<CollectibleFungibleAsset>(contract_id);
     assert_eq!(
@@ -302,7 +302,7 @@ fn issue_on_different_layers(#[case] scenario: &str) {
     };
 
     builder = builder
-        .add_fungible_state("assetOwner", get_builder_seal(outpoint), amounts[0])
+        .add_fungible_state("assetOwner", get_builder_seal(outpoint, None), amounts[0])
         .unwrap();
 
     let contract = builder.issue_contract().expect("failure issuing contract");
@@ -350,4 +350,53 @@ fn issue_on_different_layers(#[case] scenario: &str) {
         }
         _ => unreachable!(),
     }
+}
+
+#[cfg(not(feature = "altered"))]
+#[rstest]
+#[case(AS::Nia)]
+#[case(AS::Cfa)]
+#[case(AS::Uda)]
+#[case(AS::Pfa)]
+fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
+    println!("asset_schema {asset_schema:?}");
+
+    initialize();
+
+    let created_at = Some(1713261744);
+    let outpoints = vec![Some(
+        Outpoint::from_str("8d54c98d4c29a1ec4fd90635f543f0f7a871a78eb6a6e706342f831d92e3ba19:0")
+            .unwrap(),
+    )];
+    let blinding = Some(654321);
+
+    let (asset_info, expected_cid) = match asset_schema {
+        AssetSchema::Nia => (
+            AssetInfo::default_nia(vec![999]),
+            "rgb:yZ4vYrcp-U0TGOKE-8OI9pIx-KI7kvYn-E~eZ6x7-HQedWw0",
+        ),
+        AssetSchema::Cfa => (
+            AssetInfo::default_cfa(vec![999]),
+            "rgb:Nkm0naXJ-TLQjJbZ-z1PbBWm-N9ZSlrM-NHPsyM8-KUB~Pog",
+        ),
+        AssetSchema::Uda => (
+            AssetInfo::default_uda(),
+            "rgb:AYzddSFf-K_6Piay-l_nnowW-YMDgUlJ-LniVRJP-C3b7uNQ",
+        ),
+        AssetSchema::Pfa => {
+            let pubkey = CompressedPk::from_str(
+                "03b2dbebaf199c3e49bb18d2690f3d6777e566d6b075dce432c8f4f5cf2ffd3d8d",
+            )
+            .unwrap();
+            (
+                AssetInfo::default_pfa(vec![999], pubkey),
+                "rgb:L9pgSVBV-SZak7SD-HG5YZbz-zQYuV01-oMKcHpO-RAQQ2zM",
+            )
+        }
+    };
+
+    let mut wallet = get_wallet(&DescriptorType::Wpkh);
+    let contract_id = wallet.issue_with_info(asset_info, outpoints, created_at, blinding);
+
+    assert_eq!(contract_id.to_string(), expected_cid.to_string());
 }

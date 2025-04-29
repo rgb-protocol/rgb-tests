@@ -492,9 +492,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chrono"
-version = "0.4.40"
+version = "0.4.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a7964611d71df112cb1730f2ee67324fcf4d0fc6606acbbe9bfe06df124637c"
+checksum = "c469d952047f47f91b68d1cba3f10d63c11d73e4636f24f08daf0278abf01c4d"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
@@ -1868,7 +1868,7 @@ dependencies = [
 [[package]]
 name = "rgb-psbt"
 version = "0.11.1-alpha.1"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#06601374219d974f691441b877e7d6ff1aa59189"
+source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#a4a70f568d0a6693960d123e0b11a0bda9d4089c"
 dependencies = [
  "amplify",
  "baid64",
@@ -1905,7 +1905,7 @@ dependencies = [
 [[package]]
 name = "rgb-runtime"
 version = "0.11.1-alpha.1"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#06601374219d974f691441b877e7d6ff1aa59189"
+source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#a4a70f568d0a6693960d123e0b11a0bda9d4089c"
 dependencies = [
  "amplify",
  "baid64",
@@ -1973,6 +1973,7 @@ dependencies = [
  "bp-invoice",
  "bp-std",
  "bp-wallet",
+ "chrono",
  "descriptors",
  "file-format",
  "once_cell",

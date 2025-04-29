@@ -194,12 +194,11 @@ impl AssetSchema {
         }
     }
 
-    fn persisted_state(&self, value: u64) -> PersistedState {
+    fn allocated_state(&self, value: u64) -> AllocatedState {
         match self {
-            Self::Cfa | Self::Nia | Self::Pfa => PersistedState::Amount(value.into()),
-            Self::Uda => PersistedState::Data(
+            Self::Cfa | Self::Nia | Self::Pfa => AllocatedState::Amount(value.into()),
+            Self::Uda => AllocatedState::Data(
                 Allocation::with(UDA_FIXED_INDEX, OwnedFraction::from(1)).into(),
-                1,
             ),
         }
     }
@@ -489,6 +488,7 @@ impl AssetInfo {
         &self,
         mut builder: ContractBuilder,
         outpoints: Vec<Outpoint>,
+        blinding: Option<u64>,
     ) -> ContractBuilder {
         match self {
             Self::Nia { issue_amounts, .. }
@@ -496,7 +496,11 @@ impl AssetInfo {
             | Self::Pfa { issue_amounts, .. } => {
                 for (amt, outpoint) in issue_amounts.iter().zip(outpoints.iter().cycle()) {
                     builder = builder
-                        .add_fungible_state("assetOwner", get_builder_seal(*outpoint), *amt)
+                        .add_fungible_state(
+                            "assetOwner",
+                            get_builder_seal(*outpoint, blinding),
+                            *amt,
+                        )
                         .unwrap();
                 }
                 builder
@@ -505,7 +509,11 @@ impl AssetInfo {
                 let fraction = OwnedFraction::from(1);
                 let allocation = Allocation::with(token_data.index, fraction);
                 builder
-                    .add_data("assetOwner", get_builder_seal(outpoints[0]), allocation)
+                    .add_data(
+                        "assetOwner",
+                        get_builder_seal(outpoints[0], blinding),
+                        allocation,
+                    )
                     .unwrap()
             }
         }
@@ -546,8 +554,12 @@ impl Report {
     }
 }
 
-pub fn get_builder_seal(outpoint: Outpoint) -> BuilderSeal<BlindSeal<Txid>> {
-    let blind_seal = BlindSeal::new_random(outpoint.txid, outpoint.vout);
+pub fn get_builder_seal(outpoint: Outpoint, blinding: Option<u64>) -> BuilderSeal<BlindSeal<Txid>> {
+    let blind_seal = if let Some(blinding) = blinding {
+        BlindSeal::with_blinding(outpoint.txid, outpoint.vout, blinding)
+    } else {
+        BlindSeal::new_random(outpoint.txid, outpoint.vout)
+    };
     BuilderSeal::from(blind_seal)
 }
 
@@ -909,6 +921,8 @@ impl TestWallet {
         &mut self,
         asset_info: AssetInfo,
         outpoints: Vec<Option<Outpoint>>,
+        created_at: Option<i64>,
+        blinding: Option<u64>,
     ) -> ContractId {
         let outpoints = if outpoints.is_empty() {
             vec![self.get_utxo(None)]
@@ -929,9 +943,10 @@ impl TestWallet {
 
         builder = asset_info.add_global_state(builder);
 
-        builder = asset_info.add_asset_owner(builder, outpoints);
+        builder = asset_info.add_asset_owner(builder, outpoints, blinding);
 
-        let contract = builder.issue_contract().expect("failure issuing contract");
+        let created_at = created_at.unwrap_or_else(|| Utc::now().timestamp());
+        let contract = builder.issue_contract_raw(created_at).unwrap();
         let resolver = self.get_resolver();
         self.import_contract(&contract, resolver);
 
@@ -940,17 +955,17 @@ impl TestWallet {
 
     pub fn issue_nia(&mut self, issued_supply: u64, outpoint: Option<&Outpoint>) -> ContractId {
         let asset_info = AssetInfo::default_nia(vec![issued_supply]);
-        self.issue_with_info(asset_info, vec![outpoint.copied()])
+        self.issue_with_info(asset_info, vec![outpoint.copied()], None, None)
     }
 
     pub fn issue_uda(&mut self, outpoint: Option<&Outpoint>) -> ContractId {
         let asset_info = AssetInfo::default_uda();
-        self.issue_with_info(asset_info, vec![outpoint.copied()])
+        self.issue_with_info(asset_info, vec![outpoint.copied()], None, None)
     }
 
     pub fn issue_cfa(&mut self, issued_supply: u64, outpoint: Option<&Outpoint>) -> ContractId {
         let asset_info = AssetInfo::default_cfa(vec![issued_supply]);
-        self.issue_with_info(asset_info, vec![outpoint.copied()])
+        self.issue_with_info(asset_info, vec![outpoint.copied()], None, None)
     }
 
     pub fn issue_pfa(
@@ -960,7 +975,7 @@ impl TestWallet {
         pubkey: CompressedPk,
     ) -> ContractId {
         let asset_info = AssetInfo::default_pfa(vec![issued_supply], pubkey);
-        self.issue_with_info(asset_info, vec![outpoint.copied()])
+        self.issue_with_info(asset_info, vec![outpoint.copied()], None, None)
     }
 
     pub fn invoice(
@@ -1318,7 +1333,7 @@ impl TestWallet {
         {
             print!("{:9}\t", direction.to_string());
             if let AllocatedState::Amount(amount) = state {
-                print!("{: >9}", amount.value());
+                print!("{: >9}", amount.as_u64());
             } else {
                 print!("{state:>9}");
             }
@@ -1469,7 +1484,7 @@ impl TestWallet {
                     && co.witness.map_or(true, |w| Some(w.id) == txid.copied())
             })
             .unwrap();
-        assert!(matches!(operation.state, AllocatedState::Amount(amt) if amt.value() == amount));
+        assert!(matches!(operation.state, AllocatedState::Amount(amt) if amt.as_u64() == amount));
     }
 
     fn _construct_psbt_offchain(
@@ -1669,8 +1684,8 @@ impl TestWallet {
                 .unwrap()
             {
                 for (opout, state) in opout_state_map {
-                    if let PersistedState::Amount(amt) = &state {
-                        asset_available_amt += amt.value();
+                    if let AllocatedState::Amount(amt) = &state {
+                        asset_available_amt += amt.as_u64();
                     }
                     asset_transition_builder =
                         asset_transition_builder.add_input(opout, state).unwrap();
@@ -1699,7 +1714,7 @@ impl TestWallet {
                     .add_owned_state_raw(
                         *assignment_type,
                         seal,
-                        asset_schema.persisted_state(amount),
+                        asset_schema.allocated_state(amount),
                     )
                     .unwrap();
             }
