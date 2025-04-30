@@ -1,9 +1,6 @@
 [submodule "rgb-std"]
 	path = rgb-std
 	url = https://github.com/RGB-WG/rgb-std.git
-[submodule "rust-aluvm"]
-	path = rust-aluvm
-	url = https://github.com/aluvm/rust-aluvm
 [submodule "client_side_validation"]
 	path = client_side_validation
 	url = https://github.com/LNP-BP/client_side_validation/
@@ -61,3 +58,6 @@
 [submodule "altered_submodules/rgb"]
 	path = altered_submodules/rgb
 	url = https://github.com/RGB-WG/rgb
+[submodule "aluvm"]
+	path = aluvm
+	url = https://github.com/aluvm/aluvm

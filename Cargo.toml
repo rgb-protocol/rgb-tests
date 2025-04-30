@@ -74,6 +74,8 @@ strict_types = { path = "./strict-types" }
 
 [patch.crates-io]
 # patching all RGB-related deps, to measure code coverage
+## aluvm
+aluvm = { path = "./aluvm" }
 ## amplify-derive
 amplify_derive = { path = "./amplify-derive" }
 amplify_syn = { path = "./amplify-derive/syn" }
@@ -117,8 +119,6 @@ rgb-schemata = { path = "./rgb-schemata" }
 ## rgb-std
 rgb-std = { path = "./rgb-std" }
 rgb-invoice = { path = "./rgb-std/invoice" }
-## rust-aluvm
-aluvm = { path = "./rust-aluvm" }
 ## rust-amplify
 amplify = { path = "./rust-amplify" }
 ## strict-encoding
