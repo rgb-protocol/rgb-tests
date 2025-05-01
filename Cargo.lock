@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "aluvm"
-version = "0.11.0"
+version = "0.11.1-alpha.2"
 dependencies = [
  "amplify",
  "ascii-armor",
@@ -293,7 +293,7 @@ checksum = "3eeab4423108c5d7c744f4d234de88d18d636100093ae04caf4825134b9c3a32"
 
 [[package]]
 name = "bp-consensus"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "chrono",
@@ -306,7 +306,7 @@ dependencies = [
 
 [[package]]
 name = "bp-core"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "bp-consensus",
@@ -324,7 +324,7 @@ dependencies = [
 
 [[package]]
 name = "bp-dbc"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "base85",
@@ -337,7 +337,7 @@ dependencies = [
 
 [[package]]
 name = "bp-derive"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "bp-consensus",
@@ -351,7 +351,7 @@ dependencies = [
 
 [[package]]
 name = "bp-electrum"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "bp-core",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "bp-esplora"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "bp-core",
@@ -384,7 +384,7 @@ dependencies = [
 
 [[package]]
 name = "bp-invoice"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "bech32",
@@ -395,7 +395,7 @@ dependencies = [
 
 [[package]]
 name = "bp-seals"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "baid64",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "bp-std"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "bp-consensus",
@@ -428,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "bp-wallet"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "bp-electrum",
@@ -527,7 +527,7 @@ dependencies = [
 
 [[package]]
 name = "commit_encoding_derive"
-version = "0.11.0"
+version = "0.11.1-alpha.2"
 dependencies = [
  "amplify",
  "amplify_syn",
@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "commit_verify"
-version = "0.11.0"
+version = "0.11.1-alpha.2"
 dependencies = [
  "amplify",
  "commit_encoding_derive",
@@ -645,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "descriptors"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "bp-derive",
@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "psbt"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "base64",
@@ -1813,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-core"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1833,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-invoice"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "baid64",
@@ -1852,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-psbt"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "baid64",
@@ -1867,8 +1867,8 @@ dependencies = [
 
 [[package]]
 name = "rgb-psbt"
-version = "0.11.1-alpha.1"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#a4a70f568d0a6693960d123e0b11a0bda9d4089c"
+version = "0.11.1-alpha.2+unreviewed"
+source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#5dd5033cc59d8c99bbe21f9b3478e61d210b8d74"
 dependencies = [
  "amplify",
  "baid64",
@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-runtime"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "amplify",
  "baid64",
@@ -1895,7 +1895,7 @@ dependencies = [
  "getrandom 0.3.2",
  "indexmap 2.9.0",
  "nonasync",
- "rgb-psbt 0.11.1-alpha.1",
+ "rgb-psbt 0.11.1-alpha.2+unreviewed",
  "rgb-std",
  "serde",
  "strict_types",
@@ -1904,8 +1904,8 @@ dependencies = [
 
 [[package]]
 name = "rgb-runtime"
-version = "0.11.1-alpha.1"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#a4a70f568d0a6693960d123e0b11a0bda9d4089c"
+version = "0.11.1-alpha.2+unreviewed"
+source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#5dd5033cc59d8c99bbe21f9b3478e61d210b8d74"
 dependencies = [
  "amplify",
  "baid64",
@@ -1917,7 +1917,7 @@ dependencies = [
  "getrandom 0.3.2",
  "indexmap 2.9.0",
  "nonasync",
- "rgb-psbt 0.11.1-alpha.1 (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
+ "rgb-psbt 0.11.1-alpha.2+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
  "rgb-std",
  "serde",
  "strict_types",
@@ -1926,7 +1926,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-schemata"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1937,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-std"
-version = "0.11.1-alpha.1"
+version = "0.11.1-alpha.2+unreviewed"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1979,10 +1979,10 @@ dependencies = [
  "once_cell",
  "psbt",
  "rand 0.8.5",
- "rgb-psbt 0.11.1-alpha.1",
- "rgb-psbt 0.11.1-alpha.1 (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
- "rgb-runtime 0.11.1-alpha.1",
- "rgb-runtime 0.11.1-alpha.1 (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
+ "rgb-psbt 0.11.1-alpha.2+unreviewed",
+ "rgb-psbt 0.11.1-alpha.2+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
+ "rgb-runtime 0.11.1-alpha.2+unreviewed",
+ "rgb-runtime 0.11.1-alpha.2+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
  "rgb-schemata",
  "rgb-std",
  "rstest",
@@ -2423,7 +2423,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "single_use_seals"
-version = "0.11.0"
+version = "0.11.1-alpha.2"
 dependencies = [
  "amplify_derive",
 ]
