@@ -1,24 +1,24 @@
 #!/bin/bash
 set -u
 
-_die () {
+_die() {
     echo "ERR: $*" >&2
     exit 1
 }
 
 _prepare_bitcoin_nodes() {
-    $BCLI_1 createwallet miner
-    $BCLI_2 createwallet miner
-    $BCLI_3 createwallet miner
-    $BCLI_1 -rpcwallet=miner -generate 103
-    $BCLI_2 -rpcwallet=miner -generate 103
+    $BCLI_1 createwallet miner >/dev/null
+    $BCLI_2 createwallet miner >/dev/null
+    $BCLI_3 createwallet miner >/dev/null
+    $BCLI_1 -rpcwallet=miner -generate 103 >/dev/null
+    $BCLI_2 -rpcwallet=miner -generate 103 >/dev/null
     # connect the 2 bitcoin services for the reorg
     if [ "$PROFILE" == "esplora" ]; then
-        $BCLI_2 addnode "esplora_3:18444" "onetry"
-        $BCLI_3 addnode "esplora_2:18444" "onetry"
+        $BCLI_2 addnode "esplora_3:18444" "onetry" >/dev/null
+        $BCLI_3 addnode "esplora_2:18444" "onetry" >/dev/null
     elif [ "$PROFILE" == "electrum" ]; then
-        $BCLI_2 addnode "bitcoind_3:18444" "onetry"
-        $BCLI_3 addnode "bitcoind_2:18444" "onetry"
+        $BCLI_2 addnode "bitcoind_3:18444" "onetry" >/dev/null
+        $BCLI_3 addnode "bitcoind_2:18444" "onetry" >/dev/null
     fi
 }
 
@@ -26,7 +26,7 @@ _wait_for_bitcoind() {
     # wait for bitcoind to be up
     bitcoind_service_name="$1"
     start_time=$(date +%s)
-    until $COMPOSE logs $bitcoind_service_name |grep -q 'Bound to'; do
+    until $COMPOSE logs $bitcoind_service_name | grep -q 'Bound to'; do
         current_time=$(date +%s)
         if [ $((current_time - start_time)) -gt $TIMEOUT ]; then
             echo "Timeout waiting for $bitcoind_service_name to start"
@@ -41,7 +41,7 @@ _wait_for_electrs() {
     # wait for electrs to have completed startup
     electrs_service_name="$1"
     start_time=$(date +%s)
-    until $COMPOSE logs $electrs_service_name |grep -q 'finished full compaction'; do
+    until $COMPOSE logs $electrs_service_name | grep -q 'finished full compaction'; do
         current_time=$(date +%s)
         if [ $((current_time - start_time)) -gt $TIMEOUT ]; then
             echo "Timeout waiting for $electrs_service_name to start"
@@ -56,7 +56,7 @@ _wait_for_esplora() {
     # wait for esplora to have completed startup
     esplora_service_name="$1"
     start_time=$(date +%s)
-    until $COMPOSE logs $esplora_service_name |grep -q 'run: nginx:'; do
+    until $COMPOSE logs $esplora_service_name | grep -q 'run: nginx:'; do
         current_time=$(date +%s)
         if [ $((current_time - start_time)) -gt $TIMEOUT ]; then
             echo "Timeout waiting for $esplora_service_name to start"
@@ -69,7 +69,7 @@ _wait_for_esplora() {
 
 _stop_esplora_tor() {
     esplora_service_name="$1"
-    if $COMPOSE ps |grep -q $esplora_service_name; then
+    if $COMPOSE ps | grep -q $esplora_service_name; then
         for SRV in socat tor; do
             $COMPOSE exec $esplora_service_name bash -c "sv -w 60 force-stop /etc/service/$SRV"
         done
@@ -85,7 +85,7 @@ _start_services() {
     _stop_services
     mkdir -p $TEST_DATA_DIR
     for port in "${EXPOSED_PORTS[@]}"; do
-        if [ -n "$(ss -HOlnt "sport = :$port")" ];then
+        if [ -n "$(ss -HOlnt "sport = :$port")" ]; then
             _die "port $port is already bound, services can't be started"
         fi
     done
