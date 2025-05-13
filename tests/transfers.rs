@@ -1298,6 +1298,15 @@ fn multiple_transitions_per_vin() {
         1000,
         None,
     );
+
+    wlt_2.send(
+        &mut wlt_1,
+        TransferType::Blinded,
+        contract_id_1,
+        250,
+        1000,
+        None,
+    );
 }
 
 #[cfg(not(feature = "altered"))]
