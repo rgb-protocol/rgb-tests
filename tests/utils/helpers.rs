@@ -1221,12 +1221,12 @@ impl TestWallet {
         &self,
         contract_id: ContractId,
         outputs: impl AsRef<[OutputSeal]>,
-        secret_seal: Option<SecretSeal>,
+        secret_seals: impl AsRef<[SecretSeal]>,
         witness_id: Option<Txid>,
     ) -> Transfer {
         self.wallet
             .stock()
-            .transfer(contract_id, outputs, secret_seal, witness_id)
+            .transfer(contract_id, outputs, secret_seals, witness_id)
             .unwrap()
     }
 
@@ -1591,7 +1591,7 @@ impl TestWallet {
             if cid == contract_id {
                 continue;
             }
-            let mut extra_cons = self.consign_transfer(cid, vec![output_seal], None, Some(txid));
+            let mut extra_cons = self.consign_transfer(cid, vec![output_seal], vec![], Some(txid));
             let changed = extra_cons.modify_bundle(txid, transition_signer);
             assert!(changed);
             self.accept_transfer(extra_cons.clone(), None);
@@ -1809,7 +1809,6 @@ impl TestWallet {
         right_owner.sync();
 
         let consignments = self.create_consignments(bmap![contract_id => beneficiaries], tx.txid());
-        assert_eq!(consignments.len(), 2);
         for consignment in consignments {
             let trusted_op_seals = consignment.replace_transitions_input_ops();
             let validated_consignment = consignment
@@ -2279,25 +2278,29 @@ impl TestWallet {
         let stock = self.wallet.stock();
 
         for (contract_id, beneficiaries) in asset_beneficiaries {
+            let mut beneficiaries_witness = vec![];
+            let mut beneficiaries_blinded = vec![];
             for beneficiary in beneficiaries {
                 match beneficiary {
                     BuilderSeal::Revealed(seal) => {
                         let explicit_seal = ExplicitSeal::new(Outpoint::new(witness_id, seal.vout));
-                        transfers.push(
-                            stock
-                                .transfer(contract_id, [explicit_seal], None, Some(witness_id))
-                                .unwrap(),
-                        );
+                        beneficiaries_witness.push(explicit_seal);
                     }
-                    BuilderSeal::Concealed(seal) => {
-                        transfers.push(
-                            stock
-                                .transfer(contract_id, vec![], Some(seal), Some(witness_id))
-                                .unwrap(),
-                        );
+                    BuilderSeal::Concealed(secret_seal) => {
+                        beneficiaries_blinded.push(secret_seal);
                     }
                 }
             }
+            transfers.push(
+                stock
+                    .transfer(
+                        contract_id,
+                        beneficiaries_witness,
+                        beneficiaries_blinded,
+                        Some(witness_id),
+                    )
+                    .unwrap(),
+            )
         }
         transfers
     }
