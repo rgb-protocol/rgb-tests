@@ -2142,6 +2142,100 @@ fn concealed_known_transition() {
 }
 
 #[cfg(not(feature = "altered"))]
+#[test]
+fn unordered_transitions_within_bundle() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+
+    let utxo_0 = wlt_1.get_utxo(Some(8000));
+    let issued_amt = 666;
+    let contract_id = wlt_1.issue_nia(issued_amt, Some(&utxo_0));
+    let asset_schema = wlt_1.asset_schema(contract_id);
+    let contract = wlt_1.wallet.stock().contract_data(contract_id).unwrap();
+    let assignment_type = contract
+        .schema
+        .assignment_types_for_state(asset_schema.default_state_type())[0];
+    let transition_type = contract
+        .schema
+        .default_transition_for_assignment(assignment_type);
+
+    let utxo_1 = wlt_1.get_utxo(Some(7000));
+
+    let utxo_2 = wlt_2.get_utxo(None);
+    let btc_change = wlt_1.get_address();
+    let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo_0, utxo_1], vec![(btc_change, None)], None);
+    psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
+    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+
+    let mut beneficiaries = AssetBeneficiariesMap::new();
+    let mut transition_builder = wlt_1
+        .wallet
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let opout = Opout::new(
+        OpId::copy_from_slice(contract_id.as_slice()).unwrap(),
+        *assignment_type,
+        0,
+    );
+    let state = asset_schema.allocated_state(issued_amt);
+    transition_builder = transition_builder.add_input(opout, state.clone()).unwrap();
+    let seal = BuilderSeal::Revealed(GraphSeal::rand_from(utxo_1));
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, seal, state)
+        .unwrap();
+    beneficiaries.push((contract_id, vec![seal]));
+    let transition_1 = transition_builder.complete_transition().unwrap();
+    let opid_1 = transition_1.id();
+    psbt.push_rgb_transition(transition_1).unwrap();
+
+    let mut transition_builder = wlt_1
+        .wallet
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let opout = Opout::new(opid_1, *assignment_type, 0);
+    let state = asset_schema.allocated_state(issued_amt);
+    transition_builder = transition_builder.add_input(opout, state.clone()).unwrap();
+    let seal = BuilderSeal::Concealed(wlt_2.get_secret_seal(Some(utxo_2), None));
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, seal, state)
+        .unwrap();
+    beneficiaries.push((contract_id, vec![seal]));
+    let mut transition_2 = transition_builder.clone().complete_transition().unwrap();
+    // mine transition_2 until its opid is lower than transition_1
+    while opid_1 < transition_2.id() {
+        transition_2.nonce -= 1;
+    }
+    psbt.push_rgb_transition(transition_2).unwrap();
+    psbt.complete_construction();
+    let fascia = psbt.rgb_commit().unwrap();
+    let witness_id = psbt.txid();
+    wlt_1.consume_fascia(fascia, witness_id);
+
+    let tx = wlt_1.sign_finalize_extract(&mut psbt);
+    wlt_1.broadcast_tx(&tx);
+    wlt_2.sync();
+
+    let consignments = wlt_1.create_consignments(beneficiaries, witness_id);
+    for consignment in consignments {
+        wlt_2.accept_transfer(consignment, None);
+    }
+
+    wlt_2.send(
+        &mut wlt_1,
+        InvoiceType::Witness,
+        contract_id,
+        issued_amt,
+        1000,
+        None,
+    );
+}
+
+#[cfg(not(feature = "altered"))]
 #[rstest]
 #[case(HistoryType::Linear, ReorgType::ChangeOrder)]
 #[case(HistoryType::Linear, ReorgType::Revert)]
