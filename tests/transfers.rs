@@ -1983,6 +1983,175 @@ fn uncommitted_input_opout() {
 }
 
 #[cfg(not(feature = "altered"))]
+#[test]
+fn concealed_known_transition() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+
+    let issued_amt = 700;
+    let contract_id = wlt_1.issue_nia(issued_amt, None);
+    let asset_schema = wlt_1.asset_schema(contract_id);
+    let schema_id = wlt_1.schema_id(contract_id);
+    let contract = wlt_1.stock().contract_data(contract_id).unwrap();
+    let assignment_type = contract
+        .schema
+        .assignment_types_for_state(asset_schema.default_state_type())[0];
+    let transition_type = contract
+        .schema
+        .default_transition_for_assignment(assignment_type);
+
+    // prepare 2 allocations on utxo
+    let utxo = wlt_1.get_utxo(None);
+
+    let amt_1 = 300;
+    let invoice = wlt_1.invoice(
+        contract_id,
+        schema_id,
+        amt_1,
+        InvoiceType::Blinded(Some(utxo)),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.accept_transfer(consignment, None);
+    wlt_1.sync();
+
+    let amt_2 = 400;
+    let invoice = wlt_1.invoice(
+        contract_id,
+        schema_id,
+        amt_2,
+        InvoiceType::Blinded(Some(utxo)),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.accept_transfer(consignment, None);
+    wlt_1.sync();
+
+    // retrieve the two opouts on utxo
+    let allocations = wlt_1
+        .stock()
+        .contract_assignments_for(contract_id, vec![utxo])
+        .unwrap()
+        .into_values()
+        .flat_map(|v| v.into_iter())
+        .collect::<Vec<_>>();
+    assert_eq!(allocations.len(), 2);
+    let (opout_1, amt_1) = if let (opout, AllocatedState::Amount(state)) = allocations[0] {
+        (opout, state.as_u64())
+    } else {
+        panic!("unexpected state type");
+    };
+    let (opout_2, amt_2) = if let (opout, AllocatedState::Amount(state)) = allocations[1] {
+        (opout, state.as_u64())
+    } else {
+        panic!("unexpected state type");
+    };
+
+    // construct transaction committing to bundle with missing transition
+    let btc_change = wlt_1.get_address();
+    let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo], vec![(btc_change, None)], None);
+    psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
+    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+
+    // 1st transition
+    let mut transition_builder = wlt_1
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let state = asset_schema.allocated_state(amt_1);
+    transition_builder = transition_builder
+        .add_input(opout_1, state.clone())
+        .unwrap();
+    let secret_seal_1 = wlt_2.get_secret_seal(None, None);
+    let seal_1 = BuilderSeal::Concealed(secret_seal_1);
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, seal_1, state)
+        .unwrap();
+    let transition = transition_builder.complete_transition().unwrap();
+    let opid_1 = transition.id();
+    psbt.input_mut(0)
+        .unwrap()
+        .set_rgb_consumer(contract_id, opid_1)
+        .unwrap();
+    psbt.push_rgb_transition(transition).unwrap();
+
+    // 2nd transition
+    let mut transition_builder = wlt_1
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let state = asset_schema.allocated_state(amt_2);
+    transition_builder = transition_builder
+        .add_input(opout_2, state.clone())
+        .unwrap();
+    let secret_seal_2 = wlt_2.get_secret_seal(None, None);
+    let seal_2 = BuilderSeal::Concealed(secret_seal_2);
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, seal_2, state)
+        .unwrap();
+    let transition = transition_builder.complete_transition().unwrap();
+    let opid_2 = transition.id();
+    psbt.input_mut(0)
+        .unwrap()
+        .set_rgb_consumer(contract_id, opid_2)
+        .unwrap();
+    psbt.push_rgb_transition(transition).unwrap();
+
+    psbt.complete_construction();
+    let fascia = psbt.rgb_commit().unwrap();
+    let witness_id = psbt.txid();
+    wlt_1.consume_fascia(fascia, witness_id);
+    let tx = wlt_1.sign_finalize_extract(&mut psbt);
+    wlt_1.broadcast_tx(&tx);
+    wlt_2.sync();
+
+    let mut beneficiaries = AssetBeneficiariesMap::new();
+    beneficiaries.insert(contract_id, vec![seal_1, seal_2]);
+    let mut consignment = wlt_1.create_consignments(beneficiaries, witness_id)[0].clone();
+
+    // we finally have a consignment with 2 transitions in a bundle
+    // now we remove one of them to show that validation fails
+    let mut new_bundle = consignment
+        .bundles
+        .iter()
+        .find(|b| b.bundle.known_transitions.len() == 2)
+        .unwrap()
+        .clone();
+    let bundle_id = new_bundle.bundle.bundle_id();
+    new_bundle.bundle.known_transitions.remove(&opid_2).unwrap();
+    let mut bundles = consignment.bundles.release();
+    bundles.replace(new_bundle);
+    consignment.bundles = LargeOrdSet::from_checked(bundles);
+    // remove corresponding terminal
+    consignment.terminals.remove(&bundle_id).unwrap();
+    consignment
+        .terminals
+        .insert(bundle_id, NonEmptyOrdSet::with(secret_seal_1).into())
+        .unwrap();
+
+    // ensure the consignment contains the bundle with missing transition
+    let bundle = consignment
+        .bundles
+        .iter()
+        .find(|wb| {
+            wb.bundle
+                .input_map
+                .values()
+                .map(|io| io.opid)
+                .collect::<BTreeSet<_>>()
+                .contains(&opid_2)
+        })
+        .unwrap();
+    assert!(!bundle.bundle.known_transitions.contains_key(&opid_2));
+
+    // validation fails with BundleExtraTransition
+    wlt_2.accept_transfer(consignment, None);
+}
+
+#[cfg(not(feature = "altered"))]
 #[rstest]
 #[case(HistoryType::Linear, ReorgType::ChangeOrder)]
 #[case(HistoryType::Linear, ReorgType::Revert)]

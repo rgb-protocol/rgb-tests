@@ -1,7 +1,7 @@
 use super::*;
 
 pub struct TestWallet {
-    wallet: RgbWallet<Wallet<XpubDerivable, RgbDescr>>,
+    pub wallet: RgbWallet<Wallet<XpubDerivable, RgbDescr>>,
     signer: Option<TestnetSigner>,
     wallet_dir: PathBuf,
     instance: u8,
