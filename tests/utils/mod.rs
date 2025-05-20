@@ -46,8 +46,8 @@ pub use std::{
 pub use amplify::{
     bmap, bset,
     confinement::{
-        Confined, LargeOrdSet, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallOrdMap,
-        TinyOrdMap, TinyOrdSet, U16,
+        Confined, LargeVec, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallOrdMap, TinyOrdMap,
+        TinyOrdSet, U16,
     },
     map,
     num::u24,

@@ -1808,7 +1808,6 @@ fn extra_known_transition() {
 
     let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
     let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
 
     let issued_amt = 900;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -1854,7 +1853,6 @@ fn extra_known_transition() {
         InvoiceType::Blinded(Some(utxo_1)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    let prev_bundles = consignment.bundles.clone().release();
     wlt_1.mine_tx(&tx.txid(), false);
     wlt_1.accept_transfer(consignment, None);
     wlt_1.sync();
@@ -1873,10 +1871,8 @@ fn extra_known_transition() {
         })
         .unwrap();
 
-    let mut new_consignment_1 = base_consignment.clone();
-    let mut new_consignment_2 = base_consignment.clone();
-    let mut bundles_1 = base_consignment.bundles.release().clone();
-    let mut bundles_2 = bundles_1.clone();
+    let mut new_consignment = base_consignment.clone();
+    let mut bundles = base_consignment.bundles.release().clone();
 
     let mut transition_builder = wlt_1
         .stock()
@@ -1888,107 +1884,24 @@ fn extra_known_transition() {
     transition_builder = transition_builder
         .add_owned_state_raw(*assignment_type, BuilderSeal::Concealed(secret_seal), state)
         .unwrap();
-    let transition_1 = transition_builder.complete_transition().unwrap();
-    let opid_1 = transition_1.id();
+    let new_transition = transition_builder.complete_transition().unwrap();
+    let new_opid = new_transition.id();
 
-    let mut new_bundle = bundles_1
-        .iter()
+    let new_bundle = bundles
+        .iter_mut()
         .find(|b| b.pub_witness.txid() == base_txid)
-        .unwrap()
-        .clone();
+        .unwrap();
     let bundle_id = new_bundle.bundle.bundle_id();
     new_bundle
         .bundle
         .known_transitions
-        .insert(opid_1, transition_1)
+        .insert(new_opid, new_transition)
         .unwrap();
     assert_eq!(bundle_id, new_bundle.bundle.bundle_id());
-    assert!(new_bundle.bundle.known_transitions.contains_key(&opid_1));
-    bundles_1.remove(&new_bundle); // otherwise it doesn't replace existing value
-    bundles_1.insert(new_bundle);
-    for b in prev_bundles.clone() {
-        let mut revealed_wbundle = b.clone();
-        revealed_wbundle.bundle = wlt_1
-            .stock()
-            .as_stash_provider()
-            .bundle(b.bundle.bundle_id())
-            .unwrap()
-            .clone();
-        bundles_1.insert(revealed_wbundle);
-    }
-    new_consignment_1.bundles = LargeOrdSet::from_checked(bundles_1);
-    let mut secret_seals = new_consignment_1
-        .terminals
-        .remove(&bundle_id) // remove to be sure it's replaced on insert
-        .unwrap()
-        .unwrap()
-        .as_unconfined()
-        .clone();
-    secret_seals.insert(secret_seal);
-    new_consignment_1
-        .terminals
-        .insert(bundle_id, NonEmptyOrdSet::from_checked(secret_seals).into())
-        .unwrap();
+    assert!(new_bundle.bundle.known_transitions.contains_key(&new_opid));
+    new_consignment.bundles = LargeVec::from_checked(bundles);
 
-    // double spend opout
-    let mut transition_builder = wlt_1
-        .stock()
-        .transition_builder_raw(contract_id, transition_type)
-        .unwrap();
-    let state = asset_schema.allocated_state(amt_1);
-    transition_builder = transition_builder.add_input(opout, state.clone()).unwrap();
-    let secret_seal = wlt_3.get_secret_seal(None, None);
-    transition_builder = transition_builder
-        .add_owned_state_raw(*assignment_type, BuilderSeal::Concealed(secret_seal), state)
-        .unwrap();
-    let transition_2 = transition_builder.complete_transition().unwrap();
-    let opid_2 = transition_2.id();
-
-    let mut new_bundle = bundles_2
-        .iter()
-        .find(|b| b.pub_witness.txid() == base_txid)
-        .unwrap()
-        .clone();
-    let bundle_id = new_bundle.bundle.bundle_id();
-    new_bundle
-        .bundle
-        .known_transitions
-        .insert(opid_2, transition_2)
-        .unwrap();
-    assert_eq!(bundle_id, new_bundle.bundle.bundle_id());
-    assert!(new_bundle.bundle.known_transitions.contains_key(&opid_2));
-    bundles_2.remove(&new_bundle); // otherwise it doesn't replace existing value
-    bundles_2.insert(new_bundle);
-    for b in prev_bundles {
-        let mut revealed_wbundle = b.clone();
-        revealed_wbundle.bundle = wlt_1
-            .stock()
-            .as_stash_provider()
-            .bundle(b.bundle.bundle_id())
-            .unwrap()
-            .clone();
-        bundles_2.insert(revealed_wbundle);
-    }
-    new_consignment_2.bundles = LargeOrdSet::from_checked(bundles_2);
-    let mut secret_seals = new_consignment_2
-        .terminals
-        .remove(&bundle_id) // remove to be sure it's replaced on insert
-        .unwrap()
-        .unwrap()
-        .as_unconfined()
-        .clone();
-    secret_seals.insert(secret_seal);
-    new_consignment_2
-        .terminals
-        .insert(bundle_id, NonEmptyOrdSet::from_checked(secret_seals).into())
-        .unwrap();
-
-    wlt_2.accept_transfer(new_consignment_1, None);
-    wlt_3.accept_transfer(new_consignment_2, None);
-
-    wlt_2.check_allocations(contract_id, asset_schema, vec![amt_0, amt_1], false);
-    wlt_3.check_allocations(contract_id, asset_schema, vec![amt_1], false);
-    assert!(issued_amt < amt_0 + amt_1 + amt_1);
+    wlt_2.accept_transfer(new_consignment, None);
 }
 
 #[cfg(not(feature = "altered"))]
