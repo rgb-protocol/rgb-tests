@@ -1974,6 +1974,7 @@ dependencies = [
  "bp-std",
  "bp-wallet",
  "chrono",
+ "commit_verify",
  "descriptors",
  "file-format",
  "once_cell",

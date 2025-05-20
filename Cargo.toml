@@ -47,6 +47,8 @@ bp-wallet = { path = "./bp-wallet", features = [
     "esplora",
     "fs",
 ] }
+## client_side_validation
+commit_verify = { path = "./client_side_validation/commit_verify" }
 ## rgb
 rgb-runtime = { path = "./rgb", features = [
     "electrum_blocking",
