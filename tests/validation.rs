@@ -201,7 +201,7 @@ fn validate_consignment_success() {
         assert!(res.is_ok());
         let validation_status = match res {
             Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-            Err((status, _consignment)) => status,
+            Err(status) => status,
         };
         dbg!(&validation_status);
         assert!(validation_status.failures.is_empty());
@@ -223,7 +223,7 @@ fn validate_consignment_chain_fail() {
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err((status, _consignment)) => status,
+        Err(status) => status,
     };
     dbg!(&validation_status);
     assert!(validation_status.warnings.is_empty());
@@ -243,7 +243,7 @@ fn validate_consignment_genesis_fail() {
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err((status, _consignment)) => status,
+        Err(status) => status,
     };
     dbg!(&validation_status);
     assert_eq!(validation_status.failures.len(), 5);
@@ -278,7 +278,7 @@ fn validate_consignment_genesis_fail() {
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err((status, _consignment)) => status,
+        Err(status) => status,
     };
     dbg!(&validation_status);
     assert_eq!(validation_status.failures.len(), 1);
@@ -303,7 +303,7 @@ fn validate_consignment_bundles_fail() {
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err((status, _consignment)) => status,
+        Err(status) => status,
     };
     dbg!(&validation_status);
     assert_eq!(validation_status.failures.len(), 3);
@@ -367,7 +367,7 @@ fn validate_consignment_resolver_error() {
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err((status, _consignment)) => status,
+        Err(status) => status,
     };
     dbg!(&validation_status);
     assert_eq!(validation_status.failures.len(), 1);
@@ -394,7 +394,7 @@ fn validate_consignment_resolver_error() {
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err((status, _consignment)) => status,
+        Err(status) => status,
     };
     dbg!(&validation_status);
     assert_eq!(validation_status.failures.len(), 1);

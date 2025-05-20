@@ -1114,7 +1114,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err((status, _consignment)) => status,
+        Err(status) => status,
     };
     assert_eq!(validation_status.failures.len(), 1);
     assert!(matches!(
@@ -2156,7 +2156,6 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
                     wlt_1.chain_net(),
                     Some(NonZeroU32::new(safe_height).unwrap()),
                 )
-                .map_err(|(status, _)| status)
                 .unwrap();
             let validation_status = validated_consignment.clone().into_validation_status();
             assert_eq!(validation_status.warnings.len(), 1);

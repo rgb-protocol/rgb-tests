@@ -232,6 +232,7 @@ impl From<SchemaId> for AssetSchema {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum AssetInfo {
     Nia {
@@ -1318,7 +1319,6 @@ impl TestWallet {
         let validated_consignment = consignment
             .clone()
             .validate_with_opids(&resolver, self.chain_net(), None, trusted_op_seals)
-            .map_err(|(status, _)| status)
             .unwrap();
         let validate_duration = validate_start.elapsed();
         if let Some(report) = report {
@@ -1730,7 +1730,6 @@ impl TestWallet {
             let validated_consignment = consignment
                 .clone()
                 .validate_with_opids(&self.get_resolver(), self.chain_net(), None, bset![])
-                .map_err(|(status, _)| status)
                 .unwrap();
             assert_eq!(*validated_consignment.validated_opids(), all_opids);
         }
@@ -1821,7 +1820,6 @@ impl TestWallet {
                     None,
                     trusted_op_seals,
                 )
-                .map_err(|(status, _)| status)
                 .unwrap();
             let resolver = right_owner.get_resolver();
             right_owner
