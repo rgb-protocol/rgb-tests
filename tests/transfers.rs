@@ -1697,6 +1697,197 @@ fn ifa_replace() {
 }
 
 #[cfg(not(feature = "altered"))]
+#[should_panic(expected = "BundleExtraTransition")]
+#[test]
+fn extra_known_transition() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+
+    let issued_amt = 900;
+    let contract_id = wlt_1.issue_nia(issued_amt, None);
+    let asset_schema = wlt_1.asset_schema(contract_id);
+    let schema_id = wlt_1.schema_id(contract_id);
+    let contract = wlt_1.stock().contract_data(contract_id).unwrap();
+    let assignment_type = contract
+        .schema
+        .assignment_types_for_state(asset_schema.default_state_type())[0];
+    let transition_type = contract
+        .schema
+        .default_transition_for_assignment(assignment_type);
+
+    let utxo_1 = wlt_1.get_utxo(Some(8000));
+    let amt_0 = 500;
+    let invoice = wlt_1.invoice(
+        contract_id,
+        schema_id,
+        amt_0,
+        InvoiceType::Blinded(Some(utxo_1)),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.accept_transfer(consignment, None);
+    wlt_1.sync();
+
+    let (base_consignment, tx) = wlt_1.send(
+        &mut wlt_2,
+        InvoiceType::Blinded(None),
+        contract_id,
+        amt_0,
+        1000,
+        None,
+    );
+    let base_txid = tx.txid();
+
+    // allocate additional assets on spent utxo_1
+    let amt_1 = 400;
+    let invoice = wlt_1.invoice(
+        contract_id,
+        schema_id,
+        amt_1,
+        InvoiceType::Blinded(Some(utxo_1)),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    let prev_bundles = consignment.bundles.clone().release();
+    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.accept_transfer(consignment, None);
+    wlt_1.sync();
+
+    let (opout, _) = wlt_1
+        .stock()
+        .contract_assignments_for(contract_id, vec![utxo_1])
+        .unwrap()
+        .into_values()
+        .flat_map(|s| s.into_iter())
+        .find(|(_, s)| match s {
+            AllocatedState::Amount(a) => a.as_u64() == amt_1,
+            _ => {
+                panic!("unexpected allocatedState");
+            }
+        })
+        .unwrap();
+
+    let mut new_consignment_1 = base_consignment.clone();
+    let mut new_consignment_2 = base_consignment.clone();
+    let mut bundles_1 = base_consignment.bundles.release().clone();
+    let mut bundles_2 = bundles_1.clone();
+
+    let mut transition_builder = wlt_1
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let state = asset_schema.allocated_state(amt_1);
+    transition_builder = transition_builder.add_input(opout, state.clone()).unwrap();
+    let secret_seal = wlt_2.get_secret_seal(None, None);
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, BuilderSeal::Concealed(secret_seal), state)
+        .unwrap();
+    let transition_1 = transition_builder.complete_transition().unwrap();
+    let opid_1 = transition_1.id();
+
+    let mut new_bundle = bundles_1
+        .iter()
+        .find(|b| b.pub_witness.txid() == base_txid)
+        .unwrap()
+        .clone();
+    let bundle_id = new_bundle.bundle.bundle_id();
+    new_bundle
+        .bundle
+        .known_transitions
+        .insert(opid_1, transition_1)
+        .unwrap();
+    assert_eq!(bundle_id, new_bundle.bundle.bundle_id());
+    assert!(new_bundle.bundle.known_transitions.contains_key(&opid_1));
+    bundles_1.remove(&new_bundle); // otherwise it doesn't replace existing value
+    bundles_1.insert(new_bundle);
+    for b in prev_bundles.clone() {
+        let mut revealed_wbundle = b.clone();
+        revealed_wbundle.bundle = wlt_1
+            .stock()
+            .as_stash_provider()
+            .bundle(b.bundle.bundle_id())
+            .unwrap()
+            .clone();
+        bundles_1.insert(revealed_wbundle);
+    }
+    new_consignment_1.bundles = LargeOrdSet::from_checked(bundles_1);
+    let mut secret_seals = new_consignment_1
+        .terminals
+        .remove(&bundle_id) // remove to be sure it's replaced on insert
+        .unwrap()
+        .unwrap()
+        .as_unconfined()
+        .clone();
+    secret_seals.insert(secret_seal);
+    new_consignment_1
+        .terminals
+        .insert(bundle_id, NonEmptyOrdSet::from_checked(secret_seals).into())
+        .unwrap();
+
+    // double spend opout
+    let mut transition_builder = wlt_1
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let state = asset_schema.allocated_state(amt_1);
+    transition_builder = transition_builder.add_input(opout, state.clone()).unwrap();
+    let secret_seal = wlt_3.get_secret_seal(None, None);
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, BuilderSeal::Concealed(secret_seal), state)
+        .unwrap();
+    let transition_2 = transition_builder.complete_transition().unwrap();
+    let opid_2 = transition_2.id();
+
+    let mut new_bundle = bundles_2
+        .iter()
+        .find(|b| b.pub_witness.txid() == base_txid)
+        .unwrap()
+        .clone();
+    let bundle_id = new_bundle.bundle.bundle_id();
+    new_bundle
+        .bundle
+        .known_transitions
+        .insert(opid_2, transition_2)
+        .unwrap();
+    assert_eq!(bundle_id, new_bundle.bundle.bundle_id());
+    assert!(new_bundle.bundle.known_transitions.contains_key(&opid_2));
+    bundles_2.remove(&new_bundle); // otherwise it doesn't replace existing value
+    bundles_2.insert(new_bundle);
+    for b in prev_bundles {
+        let mut revealed_wbundle = b.clone();
+        revealed_wbundle.bundle = wlt_1
+            .stock()
+            .as_stash_provider()
+            .bundle(b.bundle.bundle_id())
+            .unwrap()
+            .clone();
+        bundles_2.insert(revealed_wbundle);
+    }
+    new_consignment_2.bundles = LargeOrdSet::from_checked(bundles_2);
+    let mut secret_seals = new_consignment_2
+        .terminals
+        .remove(&bundle_id) // remove to be sure it's replaced on insert
+        .unwrap()
+        .unwrap()
+        .as_unconfined()
+        .clone();
+    secret_seals.insert(secret_seal);
+    new_consignment_2
+        .terminals
+        .insert(bundle_id, NonEmptyOrdSet::from_checked(secret_seals).into())
+        .unwrap();
+
+    wlt_2.accept_transfer(new_consignment_1, None);
+    wlt_3.accept_transfer(new_consignment_2, None);
+
+    wlt_2.check_allocations(contract_id, asset_schema, vec![amt_0, amt_1], false);
+    wlt_3.check_allocations(contract_id, asset_schema, vec![amt_1], false);
+    assert!(issued_amt < amt_0 + amt_1 + amt_1);
+}
+
+#[cfg(not(feature = "altered"))]
 #[rstest]
 #[case(HistoryType::Linear, ReorgType::ChangeOrder)]
 #[case(HistoryType::Linear, ReorgType::Revert)]
