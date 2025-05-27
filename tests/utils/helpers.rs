@@ -492,6 +492,7 @@ impl AssetInfo {
             inflation_info,
         }
     }
+
     pub fn add_global_state(&self, mut builder: ContractBuilder) -> ContractBuilder {
         match self {
             Self::Nia {

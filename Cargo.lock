@@ -1813,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-core"
-version = "0.11.1-alpha.2+unreviewed"
+version = "0.11.1-alpha.3+unreviewed"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1833,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-invoice"
-version = "0.11.1-alpha.2+unreviewed"
+version = "0.11.1-alpha.3+unreviewed"
 dependencies = [
  "amplify",
  "baid64",
@@ -1853,6 +1853,7 @@ dependencies = [
 [[package]]
 name = "rgb-psbt"
 version = "0.11.1-alpha.2+unreviewed"
+source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#bd3f36f8d144047385f2e809e3b93a61b29b118f"
 dependencies = [
  "amplify",
  "baid64",
@@ -1867,8 +1868,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-psbt"
-version = "0.11.1-alpha.2+unreviewed"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#bd3f36f8d144047385f2e809e3b93a61b29b118f"
+version = "0.11.1-alpha.3+unreviewed"
 dependencies = [
  "amplify",
  "baid64",
@@ -1884,6 +1884,7 @@ dependencies = [
 [[package]]
 name = "rgb-runtime"
 version = "0.11.1-alpha.2+unreviewed"
+source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#bd3f36f8d144047385f2e809e3b93a61b29b118f"
 dependencies = [
  "amplify",
  "baid64",
@@ -1904,8 +1905,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-runtime"
-version = "0.11.1-alpha.2+unreviewed"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#bd3f36f8d144047385f2e809e3b93a61b29b118f"
+version = "0.11.1-alpha.3+unreviewed"
 dependencies = [
  "amplify",
  "baid64",
@@ -1917,7 +1917,7 @@ dependencies = [
  "getrandom 0.3.2",
  "indexmap 2.9.0",
  "nonasync",
- "rgb-psbt 0.11.1-alpha.2+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
+ "rgb-psbt 0.11.1-alpha.3+unreviewed",
  "rgb-std",
  "serde",
  "strict_types",
@@ -1937,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-std"
-version = "0.11.1-alpha.2+unreviewed"
+version = "0.11.1-alpha.3+unreviewed"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1980,9 +1980,9 @@ dependencies = [
  "psbt",
  "rand 0.8.5",
  "rgb-psbt 0.11.1-alpha.2+unreviewed",
- "rgb-psbt 0.11.1-alpha.2+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
+ "rgb-psbt 0.11.1-alpha.3+unreviewed",
  "rgb-runtime 0.11.1-alpha.2+unreviewed",
- "rgb-runtime 0.11.1-alpha.2+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
+ "rgb-runtime 0.11.1-alpha.3+unreviewed",
  "rgb-schemata",
  "rgb-std",
  "rstest",
