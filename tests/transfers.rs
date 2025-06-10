@@ -1697,7 +1697,7 @@ fn ifa_replace() {
 }
 
 #[cfg(not(feature = "altered"))]
-#[should_panic(expected = "BundleExtraTransition")]
+#[should_panic(expected = "ExtraKnownTransition")]
 #[test]
 fn extra_known_transition() {
     initialize();

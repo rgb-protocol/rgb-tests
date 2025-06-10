@@ -338,7 +338,7 @@ fn validate_consignment_genesis_fail() {
     ));
     assert!(matches!(
         validation_status.failures[2],
-        Failure::BundleExtraTransition(_, _)
+        Failure::MissingKnownTransition(_, _)
     ));
     assert!(matches!(
         validation_status.failures[3],
@@ -685,8 +685,9 @@ fn validate_consignment_commitments_fail() {
     let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
     let failures = res.unwrap_err().failures;
     dbg!(&failures);
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(failures[0], Failure::DoubleSpend(_)));
+    assert_eq!(failures.len(), 2);
+    assert!(matches!(failures[0], Failure::ExtraKnownTransition(_)));
+    assert!(matches!(failures[1], Failure::DoubleSpend(_)));
 
     // OperationAbsent: remove a bundle that contains spent assignments
     let mut consignment = base_consignment.clone();
@@ -850,7 +851,7 @@ fn validate_consignment_commitments_fail() {
         .iter()
         .any(|f| matches!(f, Failure::ConfidentialSeal(_))));
 
-    // BundleExtraTransition: replace known_transition referenced in input map
+    // MissingKnownTransition: replace known_transition referenced in input map
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let mut new_bundle = bundles.iter().last().unwrap().clone();
@@ -869,8 +870,9 @@ fn validate_consignment_commitments_fail() {
     let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
     let failures = res.unwrap_err().failures;
     dbg!(&failures);
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(failures[0], Failure::BundleExtraTransition(_, _)));
+    assert_eq!(failures.len(), 2);
+    assert!(matches!(failures[0], Failure::ExtraKnownTransition(_)));
+    assert!(matches!(failures[1], Failure::MissingKnownTransition(_, _)));
 
     // BundleInvalidCommitment: change witness txid in witness_bundle
     let mut consignment = base_consignment.clone();
