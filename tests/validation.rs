@@ -82,11 +82,11 @@ impl Scenario {
         match self {
             Self::A => {
                 let (tx_1, witness_id_1) =
-                    get_tx("e68c51aede5479db97384efe8f3d0d4aadbc4dca96923ab821c837713140f1d0");
+                    get_tx("b5a9ff2062fff9e71af1c30fc77680d60b3af847b854ae870b31955bdbd4e2b9");
                 let (tx_2, witness_id_2) =
-                    get_tx("c0098d330a9c091340f9ff11c415f8584cd6451aecd16af1c7ab870937e6a4b9");
+                    get_tx("f8cf3673813f074cd4775a4b77772a4185fa084c47949395fb0fc35c2908ad23");
                 let (tx_3, witness_id_3) =
-                    get_tx("b7729e80544704769c690e6c5d4f103d0183eba1ef2b81fa4f41158697dd4b2a");
+                    get_tx("f618e7e385105ddc8bb8b013a449993ded7476ee305466dffa2aee1a11416252");
                 MockResolver {
                     pub_witnesses: map![
                         witness_id_1 => MockResolvePubWitness::Success(tx_1),
@@ -102,11 +102,11 @@ impl Scenario {
             }
             Self::B => {
                 let (tx_1, witness_id_1) =
-                    get_tx("5f61c1f5db43f98b2274e90babd90e085f9089aa48b7aa685f78ad930142d5a9");
+                    get_tx("04d0bcc455d66123f31ef40be36220347df72ce654e0bae12686a236da4399ac");
                 let (tx_2, witness_id_2) =
-                    get_tx("5259f55018e26bf50bfa1813e1e174710b368ac6e196f15a280388b429a31a54");
+                    get_tx("89f7934cb06d672c769e2a723ac134e3cc5bb084451b0489af6d4925cb540f5e");
                 let (tx_3, witness_id_3) =
-                    get_tx("e031ca3d4cf33f8d003d9362b8c91692ee2eba943bb3ec3b86588d816fe965b9");
+                    get_tx("e759afa06dbcb23015ca05447cbb232b659601dec610e2604415d50540417745");
                 MockResolver {
                     pub_witnesses: map![
                         witness_id_1 => MockResolvePubWitness::Success(tx_1),
@@ -134,18 +134,12 @@ fn replace_transition_in_bundle(
     known_transitions.remove(&old_opid);
     let transition_id = transition.id();
     known_transitions.insert(transition_id, transition.clone());
-    let mut input_map = BTreeMap::<Vout, InputOpids>::new();
-    for (vin, input_opids) in witness_bundle.bundle.input_map.clone().into_iter() {
-        input_map.insert(
-            vin,
-            NonEmptyOrdSet::from_checked(
-                input_opids
-                    .into_iter()
-                    .map(|o| if o == old_opid { transition_id } else { o })
-                    .collect::<BTreeSet<_>>(),
-            )
-            .into(),
-        );
+    let mut input_map = BTreeMap::<Opout, InputOpid>::new();
+    for (opout, mut input_opid) in witness_bundle.bundle.input_map.clone().into_iter() {
+        if input_opid.opid == old_opid {
+            input_opid.opid = transition_id;
+        }
+        input_map.insert(opout, input_opid);
     }
     let mut witness_psbt = Psbt::from_tx(witness_bundle.pub_witness.tx().unwrap().clone());
     let idx = witness_psbt
@@ -330,19 +324,19 @@ fn validate_consignment_genesis_fail() {
     assert_eq!(validation_status.failures.len(), 5);
     assert!(matches!(
         validation_status.failures[0],
-        Failure::OperationAbsent(_)
+        Failure::MpcInvalid(_, _, _)
     ));
     assert!(matches!(
         validation_status.failures[1],
-        Failure::MpcInvalid(_, _, _)
+        Failure::OperationAbsent(_)
     ));
     assert!(matches!(
         validation_status.failures[2],
-        Failure::MissingKnownTransition(_, _)
+        Failure::MpcInvalid(_, _, _)
     ));
     assert!(matches!(
         validation_status.failures[3],
-        Failure::MpcInvalid(_, _, _)
+        Failure::MissingKnownTransition(_, _)
     ));
     assert!(matches!(
         validation_status.failures[4],
@@ -390,15 +384,15 @@ fn validate_consignment_bundles_fail() {
     assert_eq!(validation_status.failures.len(), 3);
     assert!(matches!(
         validation_status.failures[0],
-        Failure::SealNoPubWitness(_, _, _)
-    ));
-    assert!(matches!(
-        validation_status.failures[1],
         Failure::SealsInvalid(_, _, _)
     ));
     assert!(matches!(
-        validation_status.failures[2],
+        validation_status.failures[1],
         Failure::BundleInvalidCommitment(_, _, _, _)
+    ));
+    assert!(matches!(
+        validation_status.failures[2],
+        Failure::SealNoPubWitness(_, _, _)
     ));
     assert!(validation_status.warnings.is_empty());
     assert!(validation_status.info.is_empty());
@@ -413,7 +407,7 @@ fn validate_consignment_resolver_error() {
     let base_resolver = scenario.resolver();
     let consignment = get_consignment_from_json("attack_resolver_error");
     let txid =
-        Txid::from_str("c0098d330a9c091340f9ff11c415f8584cd6451aecd16af1c7ab870937e6a4b9").unwrap();
+        Txid::from_str("f8cf3673813f074cd4775a4b77772a4185fa084c47949395fb0fc35c2908ad23").unwrap();
     let wbundle = consignment
         .bundles
         .iter()
@@ -652,7 +646,13 @@ fn validate_consignment_commitments_fail() {
     new_bundle
         .bundle
         .input_map
-        .insert(Vout::from_u32(2), InputOpids::strict_dumb())
+        .insert(
+            Opout::strict_dumb(),
+            InputOpid {
+                opid: OpId::strict_dumb(),
+                vin: Vout::from_u32(2),
+            },
+        )
         .unwrap();
 
     consignment.bundles = LargeOrdSet::from_checked(bset![bundle.clone(), new_bundle]);
@@ -854,7 +854,21 @@ fn validate_consignment_commitments_fail() {
     // MissingKnownTransition: replace known_transition referenced in input map
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let mut new_bundle = bundles.iter().last().unwrap().clone();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let mut new_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
     let mut transition = new_bundle
         .bundle
         .known_transitions
@@ -877,7 +891,21 @@ fn validate_consignment_commitments_fail() {
     // BundleInvalidCommitment: change witness txid in witness_bundle
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let mut new_bundle = bundles.pop_last().unwrap();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let mut new_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
     let mut witness = new_bundle.pub_witness.tx().unwrap().clone();
     let fst_input = witness.inputs[0].clone();
     witness.inputs[0].prev_output = Outpoint::strict_dumb();
@@ -930,7 +958,22 @@ fn validate_consignment_logic_fail() {
     // SchemaUnknownTransitionType: replace transition with unsupported transition type
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let witness_bundle = bundles.pop_last().unwrap();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let witness_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
+    bundles.remove(&witness_bundle);
     let mut transition = witness_bundle
         .bundle
         .known_transitions
@@ -958,7 +1001,22 @@ fn validate_consignment_logic_fail() {
     // SchemaUnknownMetaType: replace transition with unsupported meta type
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let witness_bundle = bundles.pop_last().unwrap();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let witness_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
+    bundles.remove(&witness_bundle);
     let mut transition = witness_bundle
         .bundle
         .known_transitions
@@ -989,7 +1047,22 @@ fn validate_consignment_logic_fail() {
     // SchemaUnknownGlobalStateType: replace transition with unsupported global state type
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let witness_bundle = bundles.pop_last().unwrap();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let witness_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
+    bundles.remove(&witness_bundle);
     let mut transition = witness_bundle
         .bundle
         .known_transitions
@@ -1020,7 +1093,22 @@ fn validate_consignment_logic_fail() {
     // SchemaUnknownAssignmentType: add unsupported assignment type to transition
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let witness_bundle = bundles.pop_last().unwrap();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let witness_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
+    bundles.remove(&witness_bundle);
     let mut transition = witness_bundle
         .bundle
         .known_transitions
@@ -1051,7 +1139,22 @@ fn validate_consignment_logic_fail() {
     // SchemaAssignmentOccurrences: add transition with no assignments
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let witness_bundle = bundles.pop_last().unwrap();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let witness_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
+    bundles.remove(&witness_bundle);
     let mut transition = witness_bundle
         .bundle
         .known_transitions
@@ -1086,7 +1189,22 @@ fn validate_consignment_logic_fail() {
     // StateTypeMismatch
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let witness_bundle = bundles.pop_last().unwrap();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let witness_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
+    bundles.remove(&witness_bundle);
     let mut transition = witness_bundle
         .bundle
         .known_transitions
@@ -1131,7 +1249,22 @@ fn validate_consignment_logic_fail() {
     // ScriptFailure: e.g. one can't do simple inflation
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let witness_bundle = bundles.pop_last().unwrap();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let witness_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
+    bundles.remove(&witness_bundle);
     let mut transition = witness_bundle
         .bundle
         .known_transitions
@@ -1180,7 +1313,22 @@ fn validate_consignment_logic_fail() {
     // ContractMismatch: operations should commit to the correct contract
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let witness_bundle = bundles.pop_last().unwrap();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let witness_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
+    bundles.remove(&witness_bundle);
     let mut transition = witness_bundle
         .bundle
         .known_transitions
