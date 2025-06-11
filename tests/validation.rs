@@ -64,6 +64,7 @@ impl MockResolver {
 enum Scenario {
     A,
     B,
+    C,
 }
 
 impl fmt::Display for Scenario {
@@ -73,48 +74,34 @@ impl fmt::Display for Scenario {
 }
 
 impl Scenario {
+    fn txs_folder(&self) -> String {
+        format!("tests/fixtures/txs_{self}/")
+    }
+
     fn resolver(&self) -> MockResolver {
-        match self {
-            Self::A => {
-                let (tx_1, witness_id_1) =
-                    get_tx("b8880c28cf9163673b7e39f2af6b6fec952425354c17c74b0d5e69d3c467142b");
-                let (tx_2, witness_id_2) =
-                    get_tx("b411d8dd37353d243a527739fdc39cca22dbfe4fe92517ce16a33563803c5ad2");
-                let (tx_3, witness_id_3) =
-                    get_tx("b243f251cd06181c5568e041ed19106512886bf2c8617dfd3bf06c2321c5f8f4");
-                MockResolver {
-                    pub_witnesses: map![
-                        witness_id_1 => MockResolvePubWitness::Success(tx_1),
-                        witness_id_2 => MockResolvePubWitness::Success(tx_2),
-                        witness_id_3 => MockResolvePubWitness::Success(tx_3),
-                    ],
-                    pub_witness_ords: map![
-                        witness_id_1 => MockResolvePubWitnessOrd::Success(WitnessOrd::Mined(WitnessPos::bitcoin(NonZeroU32::new(106).unwrap(), 1726062111).unwrap())),
-                        witness_id_2 => MockResolvePubWitnessOrd::Success(WitnessOrd::Mined(WitnessPos::bitcoin(NonZeroU32::new(108).unwrap(), 1726062111).unwrap())),
-                        witness_id_3 => MockResolvePubWitnessOrd::Success(WitnessOrd::Mined(WitnessPos::bitcoin(NonZeroU32::new(110).unwrap(), 1726062112).unwrap())),
-                    ],
-                }
-            }
-            Self::B => {
-                let (tx_1, witness_id_1) =
-                    get_tx("143b34678a7e3e0d2dbbfbd14c6a163aed89d96e4992374154d3c1b5973a93cd");
-                let (tx_2, witness_id_2) =
-                    get_tx("84e3ac658455e8969e03ac02dc487c9ccd2fcb10314f9d19b0b223cfb85e7ed3");
-                let (tx_3, witness_id_3) =
-                    get_tx("333b0aea5cbf230791c57814de6dd86340e2626c1c1e8ac462f4f73c2645682c");
-                MockResolver {
-                    pub_witnesses: map![
-                        witness_id_1 => MockResolvePubWitness::Success(tx_1),
-                        witness_id_2 => MockResolvePubWitness::Success(tx_2),
-                        witness_id_3 => MockResolvePubWitness::Success(tx_3),
-                    ],
-                    pub_witness_ords: map![
-                        witness_id_1 => MockResolvePubWitnessOrd::Success(WitnessOrd::Mined(WitnessPos::bitcoin(NonZeroU32::new(105).unwrap(), 1726062423).unwrap())),
-                        witness_id_2 => MockResolvePubWitnessOrd::Success(WitnessOrd::Mined(WitnessPos::bitcoin(NonZeroU32::new(106).unwrap(), 1726062423).unwrap())),
-                        witness_id_3 => MockResolvePubWitnessOrd::Success(WitnessOrd::Mined(WitnessPos::bitcoin(NonZeroU32::new(106).unwrap(), 1726062423).unwrap())),
-                    ],
-                }
-            }
+        let mut txs = map![];
+        for entry in std::fs::read_dir(self.txs_folder()).unwrap() {
+            let file = std::fs::File::open(entry.unwrap().path()).unwrap();
+            let tx: Tx = serde_json::from_reader(file).unwrap();
+            txs.insert(tx.txid(), tx);
+        }
+        MockResolver {
+            pub_witnesses: txs
+                .iter()
+                .map(|(txid, tx)| (*txid, MockResolvePubWitness::Success(tx.clone())))
+                .collect(),
+            pub_witness_ords: txs
+                .keys()
+                .map(|txid| {
+                    (
+                        *txid,
+                        MockResolvePubWitnessOrd::Success(WitnessOrd::Mined(
+                            // FIXME: store actual values instead of this hardcoded stuff
+                            WitnessPos::bitcoin(NonZeroU32::new(106).unwrap(), 1726062111).unwrap(),
+                        )),
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -152,10 +139,10 @@ fn replace_transition_in_bundle(
         known_transitions: NonEmptyVec::from_checked(known_transitions),
     };
     witness_bundle.bundle = bundle;
-    update_witness_and_anchor(witness_bundle, None)
+    update_anchor(witness_bundle, None)
 }
 
-fn update_witness_and_anchor(witness_bundle: &mut WitnessBundle, contract_id: Option<ContractId>) {
+fn update_anchor(witness_bundle: &mut WitnessBundle, contract_id: Option<ContractId>) {
     let mut witness_psbt = Psbt::from_tx(witness_bundle.pub_witness.tx().unwrap().clone());
     let idx = witness_psbt
         .outputs()
@@ -198,12 +185,122 @@ fn update_witness_and_anchor(witness_bundle: &mut WitnessBundle, contract_id: Op
     witness_bundle.anchor = anchor;
 }
 
+/// Update children bundles to keep consistency with some modified transitions/transactions
+fn update_transition_children(
+    witness_bundles: &mut Vec<WitnessBundle>,
+    changed_opids: HashMap<OpId, OpId>,
+    changed_txids: HashMap<Txid, Txid>,
+) {
+    let mut changed_opids = changed_opids;
+    let mut changed_txids = changed_txids;
+    let mut something_changed = false;
+    for wbundle in witness_bundles.iter_mut() {
+        let old_txid = wbundle.witness_id();
+        if !changed_txids.contains_key(&old_txid)
+            && !wbundle
+                .bundle
+                .input_map
+                .keys()
+                .any(|o| changed_opids.contains_key(&o.op))
+        {
+            continue; // ignore unrelated bundles
+        }
+        // map current opouts to their new value
+        let opout_map = wbundle
+            .bundle
+            .input_map
+            .keys()
+            .map(|opout| {
+                (
+                    opout,
+                    Opout {
+                        op: *changed_opids.get(&opout.op).unwrap_or(&opout.op),
+                        ..*opout
+                    },
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        // update known transitions: change their input opouts
+        wbundle.bundle.known_transitions =
+            NonEmptyVec::from_iter_checked(wbundle.bundle.known_transitions.iter().map(
+                |KnownTransition { opid, transition }| {
+                    let new_t = Transition {
+                        inputs: NonEmptyOrdSet::from_iter_checked(
+                            transition.inputs.iter().map(|i| *opout_map.get(i).unwrap()),
+                        )
+                        .into(),
+                        ..transition.clone()
+                    };
+                    let new_opid = new_t.id();
+                    if *opid != new_opid {
+                        changed_opids.insert(*opid, new_opid);
+                        something_changed = true;
+                    }
+                    KnownTransition {
+                        opid: new_opid,
+                        transition: new_t,
+                    }
+                },
+            ));
+        // update input map: change input opouts and known transitions' opids
+        wbundle.bundle.input_map = NonEmptyOrdMap::from_iter_checked(
+            wbundle.bundle.input_map.iter().map(|(opout, opid)| {
+                (
+                    *opout_map.get(opout).unwrap(),
+                    *changed_opids.get(opid).unwrap_or(opid),
+                )
+            }),
+        );
+        // update transition: change inputs according to modified txids
+        let mut witness = wbundle.pub_witness.tx().unwrap().clone();
+        witness.inputs.iter_mut().for_each(|i| {
+            let txid = &i.prev_output.txid;
+            i.prev_output.txid = *changed_txids.get(txid).unwrap_or(txid);
+        });
+        wbundle.pub_witness = PubWitness::Tx(witness);
+        update_anchor(wbundle, None);
+        if old_txid != wbundle.witness_id() {
+            changed_txids.insert(old_txid, wbundle.witness_id());
+            something_changed = true;
+        }
+    }
+    if something_changed {
+        update_transition_children(witness_bundles, changed_opids, changed_txids)
+    }
+}
+
+/// Remove bundles that depend on some opids (optionally only ones spending a given allocation type)
+fn remove_transition_children(
+    witness_bundles: &mut Vec<WitnessBundle>,
+    affected_opids: BTreeSet<OpId>,
+    assignment_type: Option<AssignmentType>,
+) {
+    let mut removed_opids = bset![];
+    witness_bundles.retain(|wbundle| {
+        let delete = wbundle
+            .bundle
+            .input_map
+            .keys()
+            .filter(|o| assignment_type.map_or(true, |t| t == o.ty))
+            .any(|o| affected_opids.contains(&o.op));
+        if delete {
+            // overkill, removing whole bundle for just one transition
+            removed_opids.extend(wbundle.bundle.input_map.values());
+        }
+        !delete
+    });
+    if !removed_opids.is_empty() {
+        remove_transition_children(witness_bundles, removed_opids, None);
+    }
+}
+
 fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
     initialize();
 
     let transfer_type = match scenario {
         Scenario::A => TransferType::Blinded,
         Scenario::B => TransferType::Witness,
+        Scenario::C => TransferType::Witness,
     };
 
     let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
@@ -216,22 +313,119 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
 
     let utxo = wlt_1.get_utxo(None);
     let contract_id_1 = wlt_1.issue_nia(issued_supply_1, Some(&utxo));
-    let contract_id_2 = wlt_1.issue_nia(issued_supply_2, Some(&utxo));
+    let contract_id_2 = match scenario {
+        Scenario::C => wlt_1.issue_ifa(issued_supply_2, Some(&utxo), vec![utxo], vec![(utxo, 100)]),
+        _ => wlt_1.issue_nia(issued_supply_2, Some(&utxo)),
+    };
 
     let mut txes = vec![];
 
     let (_consignment, tx) = wlt_1.send(&mut wlt_2, transfer_type, contract_id_1, 66, sats, None);
     txes.push(tx);
 
-    // spend asset that was moved automatically
-    let (_consignment, tx) = wlt_1.send(&mut wlt_2, transfer_type, contract_id_2, 50, sats, None);
+    if scenario == Scenario::C {
+        // wlt_1 can't replace assets since its inflation right would also be included
+
+        // get inflation right out of the way
+        let schema_id_2 = wlt_1.schema_id(contract_id_2);
+        let mut invoice =
+            wlt_1.invoice(contract_id_2, schema_id_2, 100, InvoiceType::Blinded(None));
+        invoice.assignment_name = Some(FieldName::from_str("inflationAllowance").unwrap());
+        let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+        wlt_1.mine_tx(&tx.txid(), false);
+        wlt_1.accept_transfer(consignment, None);
+        wlt_1.sync();
+        txes.push(tx);
+
+        // send assets to be replaced to wlt_2
+        let amt = 666;
+        let (_, tx) = wlt_1.send(
+            &mut wlt_2,
+            transfer_type,
+            contract_id_2,
+            amt,
+            sats - 1000,
+            None,
+        );
+        let change_utxo = Outpoint::new(tx.txid(), Vin::from_u32(2));
+        txes.push(tx);
+
+        // replace assets
+        let tx = wlt_2.replace_ifa(&mut wlt_1, change_utxo, contract_id_2);
+        txes.push(tx);
+        // send them back to carry on with test
+        let (_, tx) = wlt_2.send(
+            &mut wlt_1,
+            transfer_type,
+            contract_id_2,
+            amt,
+            sats - 2000,
+            None,
+        );
+        txes.push(tx);
+    }
+
+    let (tx, next_amt) = if scenario == Scenario::C {
+        // inflate asset using right that was moved automatically
+        let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id_2);
+        let inflation_allocations = contract
+            .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+            .collect::<Vec<_>>();
+        let inflation_outpoints = inflation_allocations
+            .iter()
+            .map(|oa| oa.seal.outpoint().unwrap())
+            .collect::<Vec<_>>();
+        let tx = wlt_1.inflate_ifa(contract_id_2, inflation_outpoints, vec![60]);
+        let next_amt = issued_supply_2 + 5; //make sure we spend the new allocation
+        (tx, next_amt)
+    } else {
+        // spend asset that was moved automatically
+        let (_consignment, tx) =
+            wlt_1.send(&mut wlt_2, transfer_type, contract_id_2, 50, sats, None);
+        (tx, 77)
+    };
     txes.push(tx);
 
-    // spend change of previous send
-    let (consignment, tx) = wlt_1.send(&mut wlt_2, transfer_type, contract_id_2, 77, sats, None);
+    let (consignment, tx) = if scenario == Scenario::C {
+        // burn all allocations
+        let wlt_1_utxos = wlt_1
+            .utxos()
+            .iter()
+            .map(|wu| wu.outpoint)
+            .collect::<Vec<_>>();
+        wlt_1.burn_ifa(contract_id_2, wlt_1_utxos)
+    } else {
+        // spend change of previous send
+        wlt_1.send(
+            &mut wlt_2,
+            transfer_type,
+            contract_id_2,
+            next_amt,
+            sats,
+            None,
+        )
+    };
     txes.push(tx);
 
     (consignment, txes)
+}
+
+struct OfflineResolver<'cons, const TRANSFER: bool> {
+    consignment: &'cons IndexedConsignment<'cons, TRANSFER>,
+}
+impl<const TRANSFER: bool> ResolveWitness for OfflineResolver<'_, TRANSFER> {
+    fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
+        self.consignment
+            .pub_witness(witness_id)
+            .and_then(|p| p.tx().cloned())
+            .map_or_else(
+                || Err(WitnessResolverError::Unknown(witness_id)),
+                |tx| Ok(WitnessStatus::Resolved(tx, WitnessOrd::Tentative)),
+            )
+    }
+    fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
+        Ok(())
+    }
 }
 
 // run once to generate tests/fixtures/consignemnt_<scenario>.json
@@ -247,6 +441,7 @@ fn validate_consignment_generate() {
     let scenario = match std::env::var("SCENARIO") {
         Ok(val) if val.to_uppercase() == Scenario::A.to_string() => Scenario::A,
         Ok(val) if val.to_uppercase() == Scenario::B.to_string() => Scenario::B,
+        Ok(val) if val.to_uppercase() == Scenario::C.to_string() => Scenario::C,
         Err(VarError::NotPresent) => Scenario::A,
         _ => panic!("invalid scenario"),
     };
@@ -256,10 +451,12 @@ fn validate_consignment_generate() {
     let json = serde_json::to_string_pretty(&consignment).unwrap();
     std::fs::write(&cons_path, json).unwrap();
     println!("written consignment in: {cons_path}");
+    let _ = std::fs::remove_dir_all(scenario.txs_folder());
+    std::fs::create_dir_all(scenario.txs_folder()).unwrap();
     for tx in txes {
         let txid = tx.txid().to_string();
         let json = serde_json::to_string_pretty(&tx).unwrap();
-        let json_path = format!("tests/fixtures/{txid}.json");
+        let json_path = format!("{}/{txid}.json", scenario.txs_folder());
         std::fs::write(&json_path, json).unwrap();
         println!("written tx: {txid}");
     }
@@ -271,15 +468,6 @@ fn get_consignment_from_json(fname: &str) -> Transfer {
     let file = std::fs::File::open(cons_path).unwrap();
     let consignment: Transfer = serde_json::from_reader(file).unwrap();
     consignment
-}
-
-fn get_tx(txid: &str) -> (Tx, Txid) {
-    let normalized_txid = txid.replace(":", "_");
-    let json_path = format!("tests/fixtures/{normalized_txid}.json");
-    let file = std::fs::File::open(json_path).unwrap();
-    let tx: Tx = serde_json::from_reader(file).unwrap();
-    let txid = Txid::from_str(txid).unwrap();
-    (tx, txid)
 }
 
 #[cfg(not(feature = "altered"))]
@@ -985,7 +1173,7 @@ fn validate_consignment_commitments_fail() {
         &resolver,
         ChainNet::BitcoinRegtest,
         None,
-        trusted_typesystem,
+        trusted_typesystem.clone(),
     );
     let failures = res.unwrap_err().failures;
     dbg!(&failures);
@@ -995,6 +1183,106 @@ fn validate_consignment_commitments_fail() {
         failures[1],
         Failure::MissingInputMapTransition(_, _)
     ));
+
+    // MpcInvalid: cannot edit consignment since fields are private
+    let mut consignment: Value =
+        serde_json::from_str(&serde_json::to_string(&base_consignment).unwrap()).unwrap();
+    *consignment
+        .get_mut("bundles")
+        .unwrap()
+        .get_mut(0)
+        .unwrap()
+        .get_mut("anchor")
+        .unwrap()
+        .get_mut("mpcProof")
+        .unwrap()
+        .get_mut("cofactor")
+        .unwrap() = Value::Number(42.into());
+    let consignment: Transfer =
+        serde_json::from_str(&serde_json::to_string(&consignment).unwrap()).unwrap();
+    let res = consignment.validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    dbg!(&failures);
+    assert_eq!(failures.len(), 1);
+    assert!(matches!(failures[0], Failure::MpcInvalid(_, _, _)));
+
+    // NoDbcOutput
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let new_bundle = bundles.last_mut().unwrap();
+    let mut witness_tx = new_bundle.pub_witness.tx().unwrap().clone();
+    let mut outputs = witness_tx.outputs.release().clone();
+    outputs.retain(|o| !o.script_pubkey.is_op_return());
+    witness_tx.outputs = LargeVec::from_checked(outputs);
+    let witness_id = witness_tx.txid();
+    new_bundle.pub_witness = PubWitness::Tx(witness_tx);
+    //update_witness_and_anchor(witness_bundle, contract_id);
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let consignment_resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &consignment_resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    dbg!(&failures);
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0], Failure::NoDbcOutput(witness_id));
+
+    // InvalidProofType
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let new_bundle = bundles.last_mut().unwrap();
+    let witness_id = new_bundle.witness_id();
+    new_bundle.anchor.dbc_proof = DbcProof::Tapret(TapretProof::strict_dumb());
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let res = consignment.validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    dbg!(&failures);
+    assert_eq!(failures.len(), 2);
+    assert_eq!(
+        failures[0],
+        Failure::InvalidProofType(witness_id, bp::dbc::Method::TapretFirst)
+    );
+
+    // SealsInvalid
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let new_bundle = bundles.last_mut().unwrap();
+    let mut witness_tx = new_bundle.pub_witness.tx().unwrap().clone();
+    let mut inputs = witness_tx.inputs.release().clone();
+    inputs.pop();
+    witness_tx.inputs = LargeVec::from_checked(inputs);
+    new_bundle.pub_witness = PubWitness::Tx(witness_tx);
+    //update_witness_and_anchor(witness_bundle, contract_id);
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let consignment_resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &consignment_resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem,
+    );
+    let failures = res.unwrap_err().failures;
+    dbg!(&failures);
+    assert_eq!(failures.len(), 2);
+    assert!(matches!(failures[0], Failure::SealsInvalid(_, _, _)));
+    assert!(matches!(failures[1], Failure::WitnessMissingInput(_, _, _)));
 }
 
 #[cfg(not(feature = "altered"))]
@@ -1305,7 +1593,7 @@ fn validate_consignment_logic_fail() {
     assert_eq!(failures.len(), 1);
     assert_eq!(
         failures[0],
-        Failure::ScriptFailure(transition_id, Some(0), None)
+        Failure::ScriptFailure(transition_id, Some(ERRNO_NON_EQUAL_IN_OUT), None)
     );
 
     // ContractMismatch: operations should commit to the correct contract
@@ -1325,7 +1613,7 @@ fn validate_consignment_logic_fail() {
     let transition_id = transition.id();
     replace_transition_in_bundle(witness_bundle, old_opid, transition);
     // update again with the correct contract_id, otherwise we get SealsInvalid
-    update_witness_and_anchor(witness_bundle, Some(old_contract_id));
+    update_anchor(witness_bundle, Some(old_contract_id));
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
@@ -1375,11 +1663,211 @@ fn validate_consignment_logic_fail() {
         &alt_resolver,
         ChainNet::BitcoinRegtest,
         None,
-        trusted_typesystem,
+        trusted_typesystem.clone(),
     );
     let failures = res.unwrap_err().failures;
     assert_eq!(failures.len(), 1);
-    assert_eq!(failures[0], Failure::ScriptFailure(opid, Some(0), None));
+    assert_eq!(
+        failures[0],
+        Failure::ScriptFailure(opid, Some(ERRNO_NON_EQUAL_IN_OUT), None)
+    );
+
+    // UnsafeHistory
+    let consignment = base_consignment.clone();
+    let witness_tx = consignment
+        .bundles
+        .last()
+        .unwrap()
+        .pub_witness
+        .tx()
+        .unwrap()
+        .clone();
+    let witness_id = witness_tx.txid();
+    // transaction is added as tentative
+    let alt_resolver = resolver.with_new_transaction(witness_tx);
+    let res = consignment.validate(
+        &alt_resolver,
+        ChainNet::BitcoinRegtest,
+        Some(NonZeroU32::new(1000).unwrap()),
+        trusted_typesystem.clone(),
+    );
+    let warnings = res.unwrap().validation_status().warnings.clone();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(
+        warnings[0],
+        Warning::UnsafeHistory(map! {0 => set![ witness_id ]})
+    );
+
+    // the following test cases require a more complex schema (IFA)
+    let scenario = Scenario::C;
+    let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+
+    // find a "inflation" transition
+    let mut old_txid = None;
+    let mut base_transition = None;
+    let _spent_opouts = base_consignment
+        .bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.iter())
+        .flat_map(|kt| kt.transition.inputs.iter().map(|ti| ti.op))
+        .collect::<HashSet<_>>();
+    for wbun in base_consignment.bundled_witnesses() {
+        for KnownTransition { transition, .. } in wbun.bundle.known_transitions.iter() {
+            if transition.transition_type == TS_INFLATION {
+                old_txid = Some(wbun.witness_id());
+                base_transition = Some(transition.clone());
+                break;
+            }
+        }
+    }
+    let old_txid = old_txid.unwrap();
+    let base_transition = base_transition.unwrap();
+    let old_opid = base_transition.id();
+
+    // SchemaNoMetadata
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let wbundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == old_txid)
+        .unwrap();
+    let mut transition = base_transition.clone();
+    transition.metadata = none!();
+    let opid = transition.id();
+    replace_transition_in_bundle(wbundle, old_opid, transition);
+    let txid = wbundle.witness_id();
+    update_transition_children(
+        &mut bundles,
+        HashMap::from([(old_opid, opid)]),
+        HashMap::from([(old_txid, txid)]),
+    );
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    assert_eq!(failures.len(), 1);
+    assert_eq!(
+        failures[0],
+        Failure::SchemaNoMetadata(opid, MS_ALLOWED_INFLATION)
+    );
+
+    // SchemaInvalidMetadata
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let wbundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == old_txid)
+        .unwrap();
+    let mut transition = base_transition.clone();
+    transition
+        .metadata
+        .insert(MS_ALLOWED_INFLATION, MetaValue::from_hex("42").unwrap())
+        .unwrap();
+    let opid = transition.id();
+    replace_transition_in_bundle(wbundle, old_opid, transition);
+    let txid = wbundle.witness_id();
+    update_transition_children(
+        &mut bundles,
+        HashMap::from([(old_opid, opid)]),
+        HashMap::from([(old_txid, txid)]),
+    );
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    assert_eq!(failures.len(), 1);
+    let sem_id = StandardTypes::with(rgb_contract_stl()).get("RGBContract.Amount");
+    assert_eq!(failures[0], Failure::SchemaInvalidMetadata(opid, sem_id));
+
+    // SchemaGlobalStateOccurrences
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let wbundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == old_txid)
+        .unwrap();
+    let mut transition = base_transition.clone();
+    transition.globals = none!();
+    let opid = transition.id();
+    replace_transition_in_bundle(wbundle, old_opid, transition);
+    let txid = wbundle.witness_id();
+    update_transition_children(
+        &mut bundles,
+        HashMap::from([(old_opid, opid)]),
+        HashMap::from([(old_txid, txid)]),
+    );
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    assert_eq!(failures.len(), 1);
+    assert!(matches!(
+        failures[0],
+        Failure::SchemaGlobalStateOccurrences(_, _, _)
+    ));
+
+    // SchemaInvalidGlobalValue
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let wbundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == old_txid)
+        .unwrap();
+    let mut transition = base_transition.clone();
+    *transition
+        .globals
+        .get_mut(&GS_ISSUED_SUPPLY)
+        .unwrap()
+        .get_mut(0)
+        .unwrap() = RevealedData::strict_dumb();
+    let opid = transition.id();
+    replace_transition_in_bundle(wbundle, old_opid, transition);
+    let txid = wbundle.witness_id();
+    update_transition_children(
+        &mut bundles,
+        HashMap::from([(old_opid, opid)]),
+        HashMap::from([(old_txid, txid)]),
+    );
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem,
+    );
+    let failures = res.unwrap_err().failures;
+    dbg!(&failures);
+    assert_eq!(failures.len(), 1);
+    let sem_id = StandardTypes::with(rgb_contract_stl()).get("RGBContract.Amount");
+    assert_eq!(
+        failures[0],
+        Failure::SchemaInvalidGlobalValue(opid, GS_ISSUED_SUPPLY, sem_id)
+    );
 }
 
 #[cfg(not(feature = "altered"))]
@@ -1476,15 +1964,13 @@ fn validate_consignment_unmatching_transition_id() {
     // modified transition lies in witness_bundle, but is committed to in other_bundle
     let mut transition = transition.clone();
     transition.nonce -= 1;
-    if let Some(existing) = witness_bundle
+    witness_bundle
         .bundle
         .known_transitions
         .iter_mut()
         .find(|kt| kt.opid == opid)
-    {
-        existing.transition = transition.clone();
-    }
-
+        .unwrap()
+        .transition = transition.clone();
     let dumb_transition = Transition::strict_dumb();
     let dumb_id = dumb_transition.id();
     // known_transitions can't be empty, so we need to add something
@@ -1497,7 +1983,7 @@ fn validate_consignment_unmatching_transition_id() {
         .input_map
         .insert(Opout::strict_dumb(), dumb_id)
         .unwrap();
-    update_witness_and_anchor(&mut other_wbundle, Some(contract_id));
+    update_anchor(&mut other_wbundle, Some(contract_id));
 
     let alt_resolver =
         resolver.with_new_transaction(other_wbundle.pub_witness.tx().unwrap().clone());
@@ -1516,6 +2002,581 @@ fn validate_consignment_unmatching_transition_id() {
         Failure::TransitionIdMismatch(opid, transition.id())
     );
     assert_eq!(failures[1], Failure::OperationAbsent(OpId::strict_dumb()));
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn validate_consignment_ifa() {
+    let scenario = Scenario::C;
+    let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+
+    // find a "transfer" transition that moves a "replace right" allocation
+    let spent_replace_opouts = base_consignment
+        .bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.iter())
+        .filter(|kt| kt.transition.transition_type == TS_TRANSFER)
+        .flat_map(|kt| kt.transition.inputs.iter().map(|ti| (ti.op, ti.ty)))
+        .collect::<HashSet<_>>();
+    let mut witness_id = None;
+    let mut base_transition = None;
+    for wbun in base_consignment.bundled_witnesses() {
+        for KnownTransition { opid, transition } in wbun.bundle.known_transitions.iter() {
+            if transition.inputs.len() > 1
+                && transition.inputs.iter().any(|i| i.ty == OS_REPLACE)
+                && transition.transition_type == TS_TRANSFER
+                // need its child later in the test
+                && spent_replace_opouts.contains(&(*opid, OS_REPLACE))
+            {
+                witness_id = Some(wbun.witness_id());
+                base_transition = Some(transition.clone());
+                break;
+            }
+        }
+    }
+    let old_txid = witness_id.unwrap();
+    let base_transition = base_transition.unwrap();
+    let old_opid = base_transition.id();
+
+    // Success: replace right can be shared with others without losing it
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let wbundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == old_txid)
+        .unwrap();
+    let mut transition = base_transition.clone();
+    let TypedAssigns::Declarative(replace_assignments) =
+        transition.assignments.get_mut(&OS_REPLACE).unwrap()
+    else {
+        panic!("unexpected assignment type")
+    };
+    let replace_assignment = replace_assignments[0].clone();
+    replace_assignments.push(replace_assignment).unwrap();
+    let opid = transition.id();
+    replace_transition_in_bundle(wbundle, old_opid, transition);
+    let txid = wbundle.witness_id();
+    update_transition_children(
+        &mut bundles,
+        HashMap::from([(old_opid, opid)]),
+        HashMap::from([(old_txid, txid)]),
+    );
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    assert!(res.is_ok());
+
+    // Error: replace rights cannot be burned via transfer operation (2 in, 1 out)
+    // NOTE: reusing previous consignment to exploit duplicated allocation
+    let mut consignment = consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let mut child_witness_id = None;
+    let mut child_transition = None;
+    for wbun in bundles.iter() {
+        for KnownTransition { transition, .. } in wbun.bundle.known_transitions.iter() {
+            if transition
+                .inputs
+                .iter()
+                .any(|i| i.op == opid && i.ty == OS_REPLACE)
+            {
+                child_witness_id = Some(wbun.witness_id());
+                child_transition = Some(transition);
+                break;
+            }
+        }
+    }
+    let old_child_txid = child_witness_id.unwrap();
+    let child_transition = child_transition.unwrap();
+    let mut transition = child_transition.clone();
+    let old_child_opid = transition.id();
+    // add another replace right in input
+    let mut replace_input = *transition
+        .inputs
+        .iter()
+        .find(|i| i.ty == OS_REPLACE)
+        .unwrap();
+    replace_input.no = 1;
+    transition.inputs.push(replace_input).unwrap();
+    let child_opid = transition.id();
+    assert!(
+        transition
+            .inputs
+            .iter()
+            .filter(|i| i.ty == OS_REPLACE)
+            .count()
+            == 2
+    );
+    assert!(transition.assignments.get(&OS_REPLACE).iter().len() == 1);
+    assert_ne!(child_opid, old_child_opid);
+    let child_wbundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == old_child_txid)
+        .unwrap();
+    child_wbundle
+        .bundle
+        .input_map
+        .insert(replace_input, old_child_opid)
+        .unwrap();
+    replace_transition_in_bundle(child_wbundle, old_child_opid, transition);
+    let child_txid = child_wbundle.witness_id();
+    update_transition_children(
+        &mut bundles,
+        HashMap::from([(old_child_opid, child_opid)]),
+        HashMap::from([(old_child_txid, child_txid)]),
+    );
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    assert_eq!(
+        failures,
+        vec![Failure::ScriptFailure(child_opid, Some(0), None)]
+    );
+
+    // Error: replace rights cannot be created from thin air
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let wbundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == old_txid)
+        .unwrap();
+    let mut transition = base_transition.clone();
+    let old_opid = transition.id();
+    let TypedAssigns::Declarative(replace_assignments) =
+        transition.assignments.get_mut(&OS_REPLACE).unwrap()
+    else {
+        panic!("unexpected assignment type")
+    };
+    replace_assignments
+        .push(Assign::revealed(
+            BlindSeal::strict_dumb(),
+            VoidState::strict_dumb(),
+        ))
+        .unwrap();
+    transition.inputs = NonEmptyOrdSet::from_iter_checked(
+        transition.inputs.into_iter().filter(|i| i.ty != OS_REPLACE),
+    )
+    .into();
+    let opid = transition.id();
+    replace_transition_in_bundle(wbundle, old_opid, transition);
+    let txid = wbundle.witness_id();
+    update_transition_children(
+        &mut bundles,
+        HashMap::from([(old_opid, opid)]),
+        HashMap::from([(old_txid, txid)]),
+    );
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    assert_eq!(failures, vec![Failure::ScriptFailure(opid, Some(0), None)]);
+
+    // Error: replace rights cannot be burned via transfer operation (1 in, 0 out)
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let wbundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == old_txid)
+        .unwrap();
+    let mut transition = base_transition.clone();
+    let old_opid = transition.id();
+    transition.assignments.remove(&OS_REPLACE).unwrap();
+    let opid = transition.id();
+    assert_ne!(opid, old_opid);
+    replace_transition_in_bundle(wbundle, old_opid, transition);
+    let txid = wbundle.witness_id();
+    update_transition_children(
+        &mut bundles,
+        HashMap::from([(old_opid, opid)]),
+        HashMap::from([(old_txid, txid)]),
+    );
+    remove_transition_children(&mut bundles, bset![opid], Some(OS_REPLACE));
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    assert_eq!(failures, vec![Failure::ScriptFailure(opid, Some(0), None)]);
+
+    // Error: zero-amount allocations are not allowed for fungible assignment types
+    for assignment_type in [OS_ASSET, OS_INFLATION] {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        let old_opid = transition.id();
+        let TypedAssigns::Fungible(assign) =
+            transition.assignments.get_mut(&assignment_type).unwrap()
+        else {
+            panic!("unexpected asssignment type")
+        };
+        assign
+            .push(Assign::ConfidentialSeal {
+                seal: SecretSeal::strict_dumb(),
+                state: RevealedValue::new(Amount::ZERO),
+            })
+            .unwrap();
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        let txid = wbundle.witness_id();
+        update_transition_children(
+            &mut bundles,
+            HashMap::from([(old_opid, opid)]),
+            HashMap::from([(old_txid, txid)]),
+        );
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &IndexedConsignment::new(&consignment),
+        };
+        let res = consignment.clone().validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        );
+        let failures = res.unwrap_err().failures;
+        assert_eq!(
+            failures,
+            vec![Failure::ScriptFailure(
+                opid,
+                Some(ERRNO_NON_EQUAL_IN_OUT),
+                None
+            )]
+        );
+    }
+
+    // Error: inflation is not allowed for fungible assignment types
+    for assignment_type in [OS_ASSET, OS_INFLATION] {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        let TypedAssigns::Fungible(assign) =
+            transition.assignments.get_mut(&assignment_type).unwrap()
+        else {
+            panic!("unexpected asssignment type")
+        };
+        let value = assign.iter_mut().last().unwrap().as_revealed_state_mut();
+        *value = RevealedValue::new(value.as_u64() + 1);
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        remove_transition_children(&mut bundles, bset![old_opid], None);
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &IndexedConsignment::new(&consignment),
+        };
+        let res = consignment.clone().validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        );
+        let failures = res.unwrap_err().failures;
+        assert_eq!(
+            failures,
+            vec![Failure::ScriptFailure(
+                opid,
+                Some(ERRNO_NON_EQUAL_IN_OUT),
+                None
+            )]
+        );
+    }
+
+    // test replace transition
+    let mut witness_id = None;
+    let mut base_transition = None;
+    for wbun in base_consignment.bundled_witnesses() {
+        for KnownTransition { transition, .. } in wbun.bundle.known_transitions.iter() {
+            if transition.inputs.len() > 1 && transition.transition_type == TS_REPLACE {
+                witness_id = Some(wbun.witness_id());
+                base_transition = Some(transition.clone());
+                break;
+            }
+        }
+    }
+    let old_txid = witness_id.unwrap();
+    let base_transition = base_transition.unwrap();
+    let old_opid = base_transition.id();
+
+    // Error: replace transfers require all inputs
+    for input in base_transition.inputs.iter() {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        transition.inputs = NonEmptyOrdSet::from_iter_checked(
+            base_transition.inputs.into_iter().filter(|ti| ti != input),
+        )
+        .into();
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        remove_transition_children(&mut bundles, bset![old_opid], None);
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &IndexedConsignment::new(&consignment),
+        };
+        let res = consignment.clone().validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        );
+        let failures = res.unwrap_err().failures;
+        let mismatch = OccurrencesMismatch {
+            min: 1,
+            max: 65535,
+            found: 0,
+        };
+        let errno = match input.ty {
+            OS_REPLACE => 0,
+            _ => ERRNO_NON_EQUAL_IN_OUT,
+        };
+        assert_eq!(
+            failures,
+            vec![
+                Failure::SchemaInputOccurrences(opid, input.ty, mismatch),
+                Failure::ScriptFailure(opid, Some(errno), None)
+            ]
+        );
+    }
+
+    // Error: replace transitions can't inflate
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let wbundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == old_txid)
+        .unwrap();
+    let mut transition = base_transition.clone();
+    let TypedAssigns::Fungible(assign) = transition.assignments.get_mut(&OS_ASSET).unwrap() else {
+        panic!("unexpected asssignment type")
+    };
+    let value = assign.iter_mut().last().unwrap().as_revealed_state_mut();
+    *value = RevealedValue::new(value.as_u64() + 1);
+    let opid = transition.id();
+    assert_ne!(opid, old_opid);
+    replace_transition_in_bundle(wbundle, old_opid, transition);
+    remove_transition_children(&mut bundles, bset![old_opid], None);
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let failures = res.unwrap_err().failures;
+    assert_eq!(
+        failures,
+        vec![Failure::ScriptFailure(
+            opid,
+            Some(ERRNO_NON_EQUAL_IN_OUT),
+            None
+        )]
+    );
+
+    // Error: replace transitions can't burn allocations
+    for assignment_type in [OS_ASSET, OS_REPLACE] {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        transition.assignments.remove(&assignment_type).unwrap();
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        remove_transition_children(&mut bundles, bset![old_opid], None);
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &IndexedConsignment::new(&consignment),
+        };
+        let res = consignment.clone().validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        );
+        let failures = res.unwrap_err().failures;
+        let mismatch = OccurrencesMismatch {
+            min: 1,
+            max: 65535,
+            found: 0,
+        };
+        let errno = match assignment_type {
+            OS_ASSET => ERRNO_NON_EQUAL_IN_OUT,
+            OS_REPLACE => 0,
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            failures,
+            vec![
+                Failure::SchemaAssignmentOccurrences(opid, assignment_type, mismatch),
+                Failure::ScriptFailure(opid, Some(errno), None)
+            ]
+        );
+    }
+
+    // test inflation transition
+    let mut witness_id = None;
+    let mut base_transition = None;
+    for wbun in base_consignment.bundled_witnesses() {
+        for KnownTransition { transition, .. } in wbun.bundle.known_transitions.iter() {
+            if transition.transition_type == TS_INFLATION {
+                witness_id = Some(wbun.witness_id());
+                base_transition = Some(transition.clone());
+                break;
+            }
+        }
+    }
+    let old_txid = witness_id.unwrap();
+    let base_transition = base_transition.unwrap();
+    let old_opid = base_transition.id();
+
+    // Error: inflation transitions can't inflate more than allowed
+    for assignment_type in [OS_ASSET, OS_INFLATION] {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        let TypedAssigns::Fungible(assign) =
+            transition.assignments.get_mut(&assignment_type).unwrap()
+        else {
+            panic!("unexpected asssignment type")
+        };
+        let value = assign.iter_mut().last().unwrap().as_revealed_state_mut();
+        *value = RevealedValue::new(value.as_u64() + 1);
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        remove_transition_children(&mut bundles, bset![old_opid], None);
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &IndexedConsignment::new(&consignment),
+        };
+        let res = consignment.clone().validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        );
+        let failures = res.unwrap_err().failures;
+        let errno = match assignment_type {
+            OS_ASSET => ERRNO_ISSUED_MISMATCH,
+            OS_INFLATION => ERRNO_INFLATION_MISMATCH,
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            failures,
+            vec![Failure::ScriptFailure(opid, Some(errno), None)]
+        );
+    }
+
+    // test burn transition
+    let mut witness_id = None;
+    let mut base_transition = None;
+    for wbun in base_consignment.bundled_witnesses() {
+        for KnownTransition { transition, .. } in wbun.bundle.known_transitions.iter() {
+            if transition.transition_type == TS_BURN {
+                witness_id = Some(wbun.witness_id());
+                base_transition = Some(transition.clone());
+                break;
+            }
+        }
+    }
+    let old_txid = witness_id.unwrap();
+    let base_transition = base_transition.unwrap();
+    let old_opid = base_transition.id();
+    let input_assignment_types = base_transition
+        .inputs
+        .iter()
+        .map(|i| i.ty)
+        .collect::<HashSet<_>>();
+    assert_eq!(
+        input_assignment_types,
+        set![OS_ASSET, OS_INFLATION, OS_REPLACE]
+    );
+
+    // Error: burn transitions can't have assignments
+    for assignment_type in [OS_ASSET, OS_INFLATION, OS_REPLACE] {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        transition
+            .assignments
+            .insert(assignment_type, TypedAssigns::strict_dumb())
+            .unwrap();
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        remove_transition_children(&mut bundles, bset![old_opid], None);
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &IndexedConsignment::new(&consignment),
+        };
+        let res = consignment.clone().validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        );
+        let failures = res.unwrap_err().failures;
+        assert_eq!(
+            failures,
+            vec![Failure::SchemaUnknownAssignmentType(opid, assignment_type)]
+        );
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

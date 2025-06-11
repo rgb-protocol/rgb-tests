@@ -49,9 +49,10 @@ pub use amplify::{
         Collection, Confined, LargeVec, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallOrdMap,
         TinyOrdMap, TinyOrdSet, U16,
     },
+    hex::FromHex,
     map, none,
     num::u24,
-    s, ByteArray, Bytes64, From, Wrapper,
+    s, set, ByteArray, Bytes64, From, Wrapper,
 };
 use bitcoin_hashes::{sha256, Hash};
 pub use bp::{
@@ -94,17 +95,17 @@ pub use rgb::{
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::{ContractTerms, OpidRejectUrl},
+    stl::{rgb_contract_stl, ContractTerms, OpidRejectUrl, StandardTypes},
     validation::{
-        Failure, ResolveWitness, Scripts, Validator, Validity, Warning, WitnessOrdProvider,
-        WitnessResolverError, WitnessStatus,
+        DbcProof, Failure, ResolveWitness, Scripts, Validator, Validity, Warning,
+        WitnessOrdProvider, WitnessResolverError, WitnessStatus,
     },
     vm::{WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
     MetaValue, Occurrences, OccurrencesMismatch, OpId, Opout, OwnedStateSchema, RevealedData,
     RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey, TransferParams,
-    Transition, TransitionBundle, TransitionType, TypedAssigns, VoidState, WalletProvider,
+    Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState, WalletProvider,
 };
 #[cfg(feature = "altered")]
 pub use rgb_altered::{
@@ -114,9 +115,9 @@ pub use rgb_altered::{
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::{ContractTerms, OpidRejectUrl},
+    stl::{rgb_contract_stl, ContractTerms, OpidRejectUrl, StandardTypes},
     validation::{
-        Failure, ResolveWitness, Scripts, Validator, Validity, Warning, WitnessOrdProvider,
+        DbcProof, Failure, ResolveWitness, Scripts, Validator, Validity, Warning,
         WitnessResolverError, WitnessStatus,
     },
     vm::{WitnessOrd, WitnessPos},
@@ -150,8 +151,10 @@ pub use rgbstd::{
 pub use rstest::rstest;
 pub use schemata::{
     CollectibleFungibleAsset, InflatableFungibleAsset, NonInflatableAsset,
-    PermissionedFungibleAsset, UniqueDigitalAsset, CFA_SCHEMA_ID, IFA_SCHEMA_ID, NIA_SCHEMA_ID,
-    OS_ASSET, PFA_SCHEMA_ID, UDA_SCHEMA_ID,
+    PermissionedFungibleAsset, UniqueDigitalAsset, CFA_SCHEMA_ID, ERRNO_INFLATION_MISMATCH,
+    ERRNO_ISSUED_MISMATCH, ERRNO_NON_EQUAL_IN_OUT, GS_ISSUED_SUPPLY, IFA_SCHEMA_ID,
+    MS_ALLOWED_INFLATION, NIA_SCHEMA_ID, OS_ASSET, OS_INFLATION, OS_REPLACE, PFA_SCHEMA_ID,
+    TS_BURN, TS_INFLATION, TS_REPLACE, TS_TRANSFER, UDA_SCHEMA_ID,
 };
 pub use serde_json::Value;
 pub use serial_test::serial;

@@ -1801,7 +1801,20 @@ fn ifa_burn() {
 
     // burn assets
     wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amt], false);
-    wlt_2.burn_ifa(contract_id, utxo);
+    let (consignment, _) = wlt_2.burn_ifa(contract_id, vec![utxo]);
+    let last_transition = consignment
+        .bundles
+        .iter()
+        .last()
+        .unwrap()
+        .bundle
+        .known_transitions
+        .iter()
+        .last()
+        .unwrap()
+        .transition
+        .clone();
+    assert!(last_transition.transition_type == TS_BURN);
     wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
 }
 

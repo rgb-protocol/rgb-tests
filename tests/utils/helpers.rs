@@ -1324,11 +1324,12 @@ impl TestWallet {
         contract_id: ContractId,
         outputs: impl AsRef<[OutputSeal]>,
         secret_seals: impl AsRef<[SecretSeal]>,
+        opids: impl IntoIterator<Item = OpId>,
         witness_id: Option<Txid>,
     ) -> Transfer {
         self.wallet
             .stock()
-            .transfer(contract_id, outputs, secret_seals, witness_id)
+            .transfer(contract_id, outputs, secret_seals, opids, witness_id)
             .unwrap()
     }
 
@@ -1708,7 +1709,7 @@ impl TestWallet {
             if cid == contract_id {
                 continue;
             }
-            let mut extra_cons = self.consign_transfer(cid, vec![output_seal], vec![], Some(txid));
+            let mut extra_cons = self.consign_transfer(cid, [output_seal], [], [], Some(txid));
             let changed = extra_cons.modify_bundle(txid, transition_signer);
             assert!(changed);
             self.accept_transfer(extra_cons.clone(), None);
@@ -1753,7 +1754,7 @@ impl TestWallet {
         contract_id: ContractId,
         inflation_outpoints: Vec<Outpoint>,
         inflation_amounts: Vec<u64>,
-    ) {
+    ) -> Tx {
         let contract = self.contract_wrapper::<InflatableFungibleAsset>(contract_id);
         let inflation_allocations = contract
             .inflation_allocations(Filter::Wallet(&self.wallet))
@@ -1852,6 +1853,7 @@ impl TestWallet {
                 .unwrap();
             assert_eq!(*validated_consignment.validated_opids(), all_opids);
         }
+        tx
     }
 
     pub fn replace_ifa(
@@ -1859,7 +1861,7 @@ impl TestWallet {
         right_owner: &mut TestWallet,
         right_utxo: Outpoint,
         contract_id: ContractId,
-    ) {
+    ) -> Tx {
         let address = self.get_address();
         let allocations = self.contract_fungible_allocations(contract_id, false);
         let replaced_amount: u64 = allocations.iter().map(|a| a.state.value()).sum();
@@ -1946,11 +1948,12 @@ impl TestWallet {
                 .accept_transfer(validated_consignment.clone(), &resolver)
                 .unwrap();
         }
+        tx
     }
 
-    pub fn burn_ifa(&mut self, contract_id: ContractId, utxo: Outpoint) {
+    pub fn burn_ifa(&mut self, contract_id: ContractId, utxos: Vec<Outpoint>) -> (Transfer, Tx) {
         let address = self.get_address();
-        let (mut psbt, _) = self.construct_psbt(vec![utxo], vec![(address, None)], None);
+        let (mut psbt, _) = self.construct_psbt(utxos, vec![(address, None)], None);
         let mut asset_transition_builder = self
             .wallet
             .stock()
@@ -1972,6 +1975,7 @@ impl TestWallet {
             }
         }
         let transition = asset_transition_builder.complete_transition().unwrap();
+        let opid = transition.id();
         psbt.push_rgb_transition(transition).unwrap();
         psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO)
             .set_opret_host()
@@ -1985,6 +1989,8 @@ impl TestWallet {
         self.mine_tx(&tx.txid(), false);
         println!("burn txid: {}", tx.txid());
         self.sync();
+        let consignment = self.consign_transfer(contract_id, [], [], [opid], Some(tx.txid()));
+        (consignment, tx)
     }
 
     pub fn check_allocations(
@@ -2608,6 +2614,7 @@ impl TestWallet {
                         contract_id,
                         beneficiaries_witness,
                         beneficiaries_blinded,
+                        [],
                         Some(witness_id),
                     )
                     .unwrap(),
