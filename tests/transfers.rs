@@ -1888,6 +1888,101 @@ fn extra_known_transition() {
 }
 
 #[cfg(not(feature = "altered"))]
+#[should_panic(expected = "BundleExtraTransition")]
+#[test]
+fn uncommitted_input_opout() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+
+    let issued_amt = 900;
+    let contract_id = wlt_1.issue_nia(issued_amt, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // split issued amount into 2 opouts
+    let amt_0 = 500;
+    let invoice = wlt_1.invoice(contract_id, schema_id, amt_0, InvoiceType::Witness);
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.accept_transfer(consignment, None);
+    wlt_1.sync();
+
+    // merge the 2 allocation to send to wlt_2
+    let invoice = wlt_2.invoice(contract_id, schema_id, issued_amt, InvoiceType::Witness);
+    let (mut psbt, _, mut consignment) = wlt_1.pay(invoice, None, None);
+    let prev_txids = consignment
+        .bundles
+        .iter()
+        .map(|wb| wb.witness_id())
+        .collect::<HashSet<_>>();
+
+    // remove commitment to one of the spent opouts
+    consignment.modify_bundle(psbt.txid(), |witness_bundle| {
+        let mut input_map = witness_bundle.bundle.input_map.clone().release();
+        input_map.pop_last();
+        witness_bundle.bundle.input_map = NonEmptyOrdMap::from_checked(input_map);
+        let mut witness_psbt = Psbt::from_tx(witness_bundle.pub_witness.tx().unwrap().clone());
+        let idx = witness_psbt
+            .outputs()
+            .find(|o| o.script.is_op_return())
+            .unwrap()
+            .index();
+        let contract_id = witness_bundle
+            .bundle
+            .known_transitions
+            .values()
+            .last()
+            .unwrap()
+            .contract_id;
+        let protocol_id = mpc::ProtocolId::from(contract_id);
+        let message = mpc::Message::from(witness_bundle.bundle.bundle_id());
+        witness_psbt.output_mut(idx).unwrap().script = ScriptPubkey::op_return(&[]);
+        witness_psbt
+            .output_mut(idx)
+            .unwrap()
+            .set_opret_host()
+            .unwrap();
+        witness_psbt
+            .output_mut(idx)
+            .unwrap()
+            .set_mpc_message(protocol_id, message)
+            .unwrap();
+        let (commitment, proof) = witness_psbt.output_mut(idx).unwrap().mpc_commit().unwrap();
+        witness_psbt
+            .output_mut(idx)
+            .unwrap()
+            .opret_commit(commitment)
+            .unwrap();
+        let witness: Tx = witness_psbt.to_unsigned_tx().into();
+        witness_bundle.anchor.mpc_proof = proof.to_merkle_proof(protocol_id).unwrap();
+        witness_bundle.pub_witness = PubWitness::Tx(witness.clone());
+    });
+    let tx = consignment
+        .bundles
+        .iter()
+        .find(|wb| !prev_txids.contains(&wb.witness_id()))
+        .unwrap()
+        .pub_witness
+        .tx()
+        .unwrap();
+    let opret_script = tx
+        .outputs()
+        .find(|o| o.script_pubkey.is_op_return())
+        .unwrap()
+        .script_pubkey
+        .clone();
+    psbt.outputs_mut()
+        .find(|o| o.script.is_op_return())
+        .unwrap()
+        .script = opret_script;
+    assert_eq!(tx.txid(), psbt.txid());
+    let new_tx = wlt_1.sign_finalize_extract(&mut psbt);
+    wlt_1.broadcast_tx(&new_tx);
+    wlt_2.accept_transfer(consignment, None);
+}
+
+#[cfg(not(feature = "altered"))]
 #[rstest]
 #[case(HistoryType::Linear, ReorgType::ChangeOrder)]
 #[case(HistoryType::Linear, ReorgType::Revert)]
