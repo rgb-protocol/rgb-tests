@@ -1888,7 +1888,7 @@ fn extra_known_transition() {
 }
 
 #[cfg(not(feature = "altered"))]
-#[should_panic(expected = "BundleExtraTransition")]
+#[should_panic(expected = "MissingInputMapTransition")]
 #[test]
 fn uncommitted_input_opout() {
     initialize();
