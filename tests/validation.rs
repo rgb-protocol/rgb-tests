@@ -130,7 +130,6 @@ fn replace_transition_in_bundle(
     transition: Transition,
 ) -> WitnessBundle {
     let mut known_transitions = witness_bundle.bundle.known_transitions.release().clone();
-    let contract_id = known_transitions.values().last().unwrap().contract_id;
     known_transitions.remove(&old_opid);
     let transition_id = transition.id();
     known_transitions.insert(transition_id, transition.clone());
@@ -141,18 +140,40 @@ fn replace_transition_in_bundle(
         }
         input_map.insert(opout, opid);
     }
+    let bundle = TransitionBundle {
+        input_map: NonEmptyOrdMap::from_checked(input_map),
+        known_transitions: NonEmptyOrdMap::from_checked(known_transitions),
+    };
+    update_witness_and_anchor(
+        WitnessBundle {
+            bundle,
+            ..witness_bundle
+        },
+        None,
+    )
+}
+
+fn update_witness_and_anchor(
+    witness_bundle: WitnessBundle,
+    contract_id: Option<ContractId>,
+) -> WitnessBundle {
     let mut witness_psbt = Psbt::from_tx(witness_bundle.pub_witness.tx().unwrap().clone());
     let idx = witness_psbt
         .outputs()
         .find(|o| o.script.is_op_return())
         .unwrap()
         .index();
-    let bundle = TransitionBundle {
-        input_map: NonEmptyOrdMap::from_checked(input_map),
-        known_transitions: NonEmptyOrdMap::from_checked(known_transitions),
-    };
+    let contract_id = contract_id.unwrap_or(
+        witness_bundle
+            .bundle
+            .known_transitions
+            .values()
+            .last()
+            .unwrap()
+            .contract_id,
+    );
     let protocol_id = mpc::ProtocolId::from(contract_id);
-    let message = mpc::Message::from(bundle.bundle_id());
+    let message = mpc::Message::from(witness_bundle.bundle.bundle_id());
     witness_psbt.output_mut(idx).unwrap().script = ScriptPubkey::op_return(&[]);
     witness_psbt
         .output_mut(idx)
@@ -174,11 +195,10 @@ fn replace_transition_in_bundle(
 
     let mut anchor = witness_bundle.anchor.clone();
     anchor.mpc_proof = proof.to_merkle_proof(protocol_id).unwrap();
-    let pub_witness = PubWitness::Tx(witness.clone());
     WitnessBundle {
-        pub_witness,
+        pub_witness: PubWitness::Tx(witness.clone()),
         anchor,
-        bundle,
+        bundle: witness_bundle.bundle,
     }
 }
 
@@ -1287,9 +1307,12 @@ fn validate_consignment_logic_fail() {
         .unwrap()
         .clone();
     let old_opid = transition.id();
+    let old_contract_id = transition.contract_id;
     transition.contract_id = ContractId::strict_dumb();
     let transition_id = transition.id();
     let witness_bundle = replace_transition_in_bundle(witness_bundle, old_opid, transition);
+    // update again with the correct contract_id, otherwise we get SealsInvalid
+    let witness_bundle = update_witness_and_anchor(witness_bundle, Some(old_contract_id));
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     bundles.replace(witness_bundle);
@@ -1302,4 +1325,77 @@ fn validate_consignment_logic_fail() {
         failures[0],
         Failure::ContractMismatch(transition_id, ContractId::strict_dumb())
     );
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn validate_consignment_unmatching_transition_id() {
+    let scenario = Scenario::B;
+    let resolver = scenario.resolver();
+
+    let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let spent_transitions = bundles
+        .iter()
+        .flat_map(|b| b.bundle.known_transitions.values())
+        .flat_map(|t| t.inputs.iter())
+        .map(|ti| ti.op)
+        .collect::<HashSet<_>>();
+    let mut witness_bundle = bundles
+        .iter()
+        .find(|b| {
+            spent_transitions
+                .iter()
+                .all(|st| !b.bundle.known_transitions.contains_key(st))
+        })
+        .unwrap()
+        .clone();
+    let contract_id = witness_bundle
+        .bundle
+        .known_transitions
+        .values()
+        .last()
+        .unwrap()
+        .contract_id;
+
+    let mut other_wbundle = witness_bundle.clone();
+    let (&opid, transition) = witness_bundle
+        .bundle
+        .known_transitions
+        .last_key_value()
+        .unwrap();
+    // modified transition lies in witness_bundle, but is committed to in other_bundle
+    let mut transition = transition.clone();
+    transition.nonce -= 1;
+    witness_bundle
+        .bundle
+        .known_transitions
+        .insert(opid, transition)
+        .unwrap();
+    bundles.replace(witness_bundle);
+
+    let dumb_transition = Transition::strict_dumb();
+    let dumb_id = dumb_transition.id();
+    // known_transitions can't be empty, so we need to add something
+    // we have no free allocations for a meaningful transition so it is a dumb one
+    // which causes OperationAbsent(OpId(0000000000000000000000000000000000000000000000000000000000000000))
+    other_wbundle.bundle.known_transitions =
+        NonEmptyOrdMap::with_key_value(dumb_id, dumb_transition);
+    other_wbundle
+        .bundle
+        .input_map
+        .insert(Opout::strict_dumb(), dumb_id)
+        .unwrap();
+    let other_wbundle = update_witness_and_anchor(other_wbundle, Some(contract_id));
+
+    let alt_resolver =
+        resolver.with_new_transaction(other_wbundle.pub_witness.tx().unwrap().clone());
+    bundles.insert(other_wbundle);
+    consignment.bundles = LargeOrdSet::from_checked(bundles);
+    let res = consignment.validate(&alt_resolver, ChainNet::BitcoinRegtest, None);
+    let failures = res.unwrap_err().failures;
+    assert_eq!(failures[0], Failure::OperationAbsent(OpId::strict_dumb()));
+    assert!(failures.len() > 1);
 }
