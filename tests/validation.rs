@@ -1372,7 +1372,7 @@ fn validate_consignment_unmatching_transition_id() {
     witness_bundle
         .bundle
         .known_transitions
-        .insert(opid, transition)
+        .insert(opid, transition.clone())
         .unwrap();
     bundles.replace(witness_bundle);
 
@@ -1396,6 +1396,10 @@ fn validate_consignment_unmatching_transition_id() {
     consignment.bundles = LargeOrdSet::from_checked(bundles);
     let res = consignment.validate(&alt_resolver, ChainNet::BitcoinRegtest, None);
     let failures = res.unwrap_err().failures;
-    assert_eq!(failures[0], Failure::OperationAbsent(OpId::strict_dumb()));
-    assert!(failures.len() > 1);
+    assert_eq!(failures.len(), 2);
+    assert_eq!(
+        failures[0],
+        Failure::TransitionIdMismatch(opid, transition.id())
+    );
+    assert_eq!(failures[1], Failure::OperationAbsent(OpId::strict_dumb()));
 }
