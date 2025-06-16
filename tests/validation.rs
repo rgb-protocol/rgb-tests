@@ -321,7 +321,7 @@ fn validate_consignment_genesis_fail() {
         Err(status) => status,
     };
     dbg!(&validation_status);
-    assert_eq!(validation_status.failures.len(), 5);
+    assert_eq!(validation_status.failures.len(), 4);
     assert!(matches!(
         validation_status.failures[0],
         Failure::MpcInvalid(_, _, _)
@@ -336,10 +336,6 @@ fn validate_consignment_genesis_fail() {
     ));
     assert!(matches!(
         validation_status.failures[3],
-        Failure::MissingKnownTransition(_, _)
-    ));
-    assert!(matches!(
-        validation_status.failures[4],
         Failure::MpcInvalid(_, _, _)
     ));
     assert!(validation_status.warnings.is_empty());
@@ -851,7 +847,7 @@ fn validate_consignment_commitments_fail() {
         .iter()
         .any(|f| matches!(f, Failure::ConfidentialSeal(_))));
 
-    // MissingKnownTransition: replace known_transition referenced in input map
+    // ExtraKnownTransition: replace known_transition referenced in input map
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let spent_transitions = bundles
@@ -884,9 +880,8 @@ fn validate_consignment_commitments_fail() {
     let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
     let failures = res.unwrap_err().failures;
     dbg!(&failures);
-    assert_eq!(failures.len(), 2);
+    assert_eq!(failures.len(), 1);
     assert!(matches!(failures[0], Failure::ExtraKnownTransition(_)));
-    assert!(matches!(failures[1], Failure::MissingKnownTransition(_, _)));
 
     // BundleInvalidCommitment: change witness txid in witness_bundle
     let mut consignment = base_consignment.clone();

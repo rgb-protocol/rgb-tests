@@ -2147,7 +2147,6 @@ fn concealed_known_transition() {
         .unwrap();
     assert!(!bundle.bundle.known_transitions.contains_key(&opid_2));
 
-    // validation fails with BundleExtraTransition
     wlt_2.accept_transfer(consignment, None);
 }
 
