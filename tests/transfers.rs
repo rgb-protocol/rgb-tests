@@ -2136,14 +2136,7 @@ fn concealed_known_transition() {
     let bundle = consignment
         .bundles
         .iter()
-        .find(|wb| {
-            wb.bundle
-                .input_map
-                .values()
-                .map(|io| io.opid)
-                .collect::<BTreeSet<_>>()
-                .contains(&opid_2)
-        })
+        .find(|wb| wb.bundle.input_map_opids().contains(&opid_2))
         .unwrap();
     assert!(!bundle.bundle.known_transitions.contains_key(&opid_2));
 

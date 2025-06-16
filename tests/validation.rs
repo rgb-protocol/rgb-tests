@@ -82,11 +82,11 @@ impl Scenario {
         match self {
             Self::A => {
                 let (tx_1, witness_id_1) =
-                    get_tx("b5a9ff2062fff9e71af1c30fc77680d60b3af847b854ae870b31955bdbd4e2b9");
+                    get_tx("fcaafcb1b71fb036f71cb0de75bbcacd9393c00436b9678b21a453ef0654a26a");
                 let (tx_2, witness_id_2) =
-                    get_tx("f8cf3673813f074cd4775a4b77772a4185fa084c47949395fb0fc35c2908ad23");
+                    get_tx("03b79c21039c940ca58ef501e52030e9cc243fa34331564c250252570ec0b8af");
                 let (tx_3, witness_id_3) =
-                    get_tx("f618e7e385105ddc8bb8b013a449993ded7476ee305466dffa2aee1a11416252");
+                    get_tx("0f8f09b5898c6f0c16ffaf4f10d87d67577578d443ba1f17e73196e8d13bf16a");
                 MockResolver {
                     pub_witnesses: map![
                         witness_id_1 => MockResolvePubWitness::Success(tx_1),
@@ -102,11 +102,11 @@ impl Scenario {
             }
             Self::B => {
                 let (tx_1, witness_id_1) =
-                    get_tx("04d0bcc455d66123f31ef40be36220347df72ce654e0bae12686a236da4399ac");
+                    get_tx("abf5f7542bab59ad7cba5bf03610a55f305e8e09f8b0d0149dd47d088581289b");
                 let (tx_2, witness_id_2) =
-                    get_tx("89f7934cb06d672c769e2a723ac134e3cc5bb084451b0489af6d4925cb540f5e");
+                    get_tx("e290aa39c743abe64d767521761ce29aeec0e937b2e9d83b8a3f5d51b2fdfa3b");
                 let (tx_3, witness_id_3) =
-                    get_tx("e759afa06dbcb23015ca05447cbb232b659601dec610e2604415d50540417745");
+                    get_tx("5599bb3c61fad724e71ce1ed10d719d697d72ff18693bd8cefbb37f8a585808c");
                 MockResolver {
                     pub_witnesses: map![
                         witness_id_1 => MockResolvePubWitness::Success(tx_1),
@@ -134,12 +134,12 @@ fn replace_transition_in_bundle(
     known_transitions.remove(&old_opid);
     let transition_id = transition.id();
     known_transitions.insert(transition_id, transition.clone());
-    let mut input_map = BTreeMap::<Opout, InputOpid>::new();
-    for (opout, mut input_opid) in witness_bundle.bundle.input_map.clone().into_iter() {
-        if input_opid.opid == old_opid {
-            input_opid.opid = transition_id;
+    let mut input_map = BTreeMap::<Opout, OpId>::new();
+    for (opout, mut opid) in witness_bundle.bundle.input_map.clone().into_iter() {
+        if opid == old_opid {
+            opid = transition_id;
         }
-        input_map.insert(opout, input_opid);
+        input_map.insert(opout, opid);
     }
     let mut witness_psbt = Psbt::from_tx(witness_bundle.pub_witness.tx().unwrap().clone());
     let idx = witness_psbt
@@ -380,15 +380,15 @@ fn validate_consignment_bundles_fail() {
     assert_eq!(validation_status.failures.len(), 3);
     assert!(matches!(
         validation_status.failures[0],
-        Failure::SealsInvalid(_, _, _)
+        Failure::SealNoPubWitness(_, _, _)
     ));
     assert!(matches!(
         validation_status.failures[1],
-        Failure::BundleInvalidCommitment(_, _, _, _)
+        Failure::SealsInvalid(_, _, _)
     ));
     assert!(matches!(
         validation_status.failures[2],
-        Failure::SealNoPubWitness(_, _, _)
+        Failure::WitnessMissingInput(_, _, _)
     ));
     assert!(validation_status.warnings.is_empty());
     assert!(validation_status.info.is_empty());
@@ -403,7 +403,7 @@ fn validate_consignment_resolver_error() {
     let base_resolver = scenario.resolver();
     let consignment = get_consignment_from_json("attack_resolver_error");
     let txid =
-        Txid::from_str("f8cf3673813f074cd4775a4b77772a4185fa084c47949395fb0fc35c2908ad23").unwrap();
+        Txid::from_str("03b79c21039c940ca58ef501e52030e9cc243fa34331564c250252570ec0b8af").unwrap();
     let wbundle = consignment
         .bundles
         .iter()
@@ -642,13 +642,7 @@ fn validate_consignment_commitments_fail() {
     new_bundle
         .bundle
         .input_map
-        .insert(
-            Opout::strict_dumb(),
-            InputOpid {
-                opid: OpId::strict_dumb(),
-                vin: Vout::from_u32(2),
-            },
-        )
+        .insert(Opout::strict_dumb(), OpId::strict_dumb())
         .unwrap();
 
     consignment.bundles = LargeOrdSet::from_checked(bset![bundle.clone(), new_bundle]);
@@ -882,45 +876,6 @@ fn validate_consignment_commitments_fail() {
     dbg!(&failures);
     assert_eq!(failures.len(), 1);
     assert!(matches!(failures[0], Failure::ExtraKnownTransition(_)));
-
-    // BundleInvalidCommitment: change witness txid in witness_bundle
-    let mut consignment = base_consignment.clone();
-    let mut bundles = consignment.bundles.release();
-    let spent_transitions = bundles
-        .iter()
-        .flat_map(|b| b.bundle.known_transitions.values())
-        .flat_map(|t| t.inputs.iter())
-        .map(|ti| ti.op)
-        .collect::<HashSet<_>>();
-    let mut new_bundle = bundles
-        .iter()
-        .find(|b| {
-            spent_transitions
-                .iter()
-                .all(|st| !b.bundle.known_transitions.contains_key(st))
-        })
-        .unwrap()
-        .clone();
-    let mut witness = new_bundle.pub_witness.tx().unwrap().clone();
-    let fst_input = witness.inputs[0].clone();
-    witness.inputs[0].prev_output = Outpoint::strict_dumb();
-    witness.inputs.push(fst_input).unwrap();
-    let witness_id = witness.txid();
-    new_bundle.pub_witness = PubWitness::Txid(witness_id);
-    bundles.insert(new_bundle);
-    consignment.bundles = LargeOrdSet::from_checked(bundles);
-    let mut alt_resolver = resolver.clone();
-    alt_resolver
-        .pub_witnesses
-        .insert(witness_id, MockResolvePubWitness::Success(witness));
-    let res = consignment.validate(&alt_resolver, ChainNet::BitcoinRegtest, None);
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(
-        failures[0],
-        Failure::BundleInvalidCommitment(_, _, _, _)
-    ));
 }
 
 #[cfg(not(feature = "altered"))]
