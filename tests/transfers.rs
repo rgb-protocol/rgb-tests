@@ -1594,6 +1594,110 @@ fn ifa_inflation() {
 
 #[cfg(not(feature = "altered"))]
 #[test]
+fn ifa_move_inflation_right() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+
+    let issued_supply = 999;
+    let inflation_supply = 555;
+    let inflation_outpoint = wlt_1.get_utxo(None);
+    let contract_id = wlt_1.issue_ifa(
+        issued_supply,
+        None,
+        vec![],
+        vec![(inflation_outpoint, inflation_supply)],
+    );
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // partially move inflation right from wlt_1 to wlt_2
+    let inflation_moved = 55;
+    let inflation_moved_utxo = wlt_2.get_utxo(None);
+    let mut invoice = wlt_2.invoice(
+        contract_id,
+        schema_id,
+        inflation_moved,
+        InvoiceType::Blinded(Some(inflation_moved_utxo)),
+    );
+    invoice.assignment_name = Some(FieldName::from_str("inflationAllowance").unwrap());
+    wlt_1.send_ifa_to_invoice(&mut wlt_2, invoice);
+    let contract = wlt_2.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let inflation_allocations = contract
+        .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_2))
+        .collect::<Vec<_>>();
+    let inflation_outpoints = inflation_allocations
+        .iter()
+        .map(|oa| oa.seal.outpoint().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(inflation_outpoints.len(), 1);
+    assert_eq!(inflation_outpoints[0], inflation_moved_utxo);
+    assert_eq!(
+        inflation_allocations
+            .iter()
+            .map(|oa| oa.state.value())
+            .sum::<u64>(),
+        inflation_moved
+    );
+
+    // inflate asset with wlt_2
+    wlt_2.inflate_ifa(
+        contract_id,
+        vec![inflation_moved_utxo],
+        vec![inflation_moved],
+    );
+    let contract = wlt_2.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    assert_eq!(
+        contract.total_issued_supply().value(),
+        issued_supply + inflation_moved
+    );
+
+    // inflate asset with wlt_1
+    let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let inflation_change_utxo = contract
+        .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+        .map(|oa| oa.seal.outpoint().unwrap())
+        .collect::<Vec<_>>()[0];
+    let inflation_change = inflation_supply - inflation_moved;
+    wlt_1.inflate_ifa(
+        contract_id,
+        vec![inflation_change_utxo],
+        vec![inflation_change],
+    );
+    let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let wlt_1_amt = issued_supply + inflation_change;
+    assert_eq!(contract.total_issued_supply().value(), wlt_1_amt);
+
+    // wlt_1 sends all to wlt_2
+    wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, wlt_1_amt);
+    wlt_1.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
+    wlt_2.check_allocations(
+        contract_id,
+        AssetSchema::Ifa,
+        vec![wlt_1_amt, inflation_moved],
+        false,
+    );
+
+    // check max supply has been reached, no more inflation allowed
+    let contract = wlt_2.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    let max_supply = contract.max_supply().value();
+    let total_issued_supply = contract.total_issued_supply().value();
+    assert_eq!(max_supply, total_issued_supply);
+    assert_eq!(max_supply, wlt_1_amt + inflation_moved);
+    let inflation_allocations = contract
+        .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_2))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        inflation_allocations
+            .iter()
+            .map(|oa| oa.state.value())
+            .sum::<u64>(),
+        0
+    );
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
 fn ifa_burn() {
     initialize();
 
