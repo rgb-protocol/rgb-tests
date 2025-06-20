@@ -1707,11 +1707,6 @@ impl TestWallet {
             .add_metadata("allowedInflation", Amount::from(inflation_change))
             .unwrap();
         let transition = asset_transition_builder.complete_transition().unwrap();
-        for input in psbt.inputs_mut() {
-            input
-                .set_rgb_consumer(contract_id, transition.id())
-                .unwrap();
-        }
         psbt.push_rgb_transition(transition).unwrap();
         psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO)
             .set_opret_host()
@@ -1791,11 +1786,6 @@ impl TestWallet {
             .add_rights("replaceRight", seal)
             .unwrap(); // add replace right
         let transition = asset_transition_builder.complete_transition().unwrap();
-        for input in psbt.inputs_mut() {
-            input
-                .set_rgb_consumer(contract_id, transition.id())
-                .unwrap();
-        }
         psbt.push_rgb_transition(transition).unwrap();
         psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO)
             .set_opret_host()
@@ -1858,11 +1848,6 @@ impl TestWallet {
             }
         }
         let transition = asset_transition_builder.complete_transition().unwrap();
-        for input in psbt.inputs_mut() {
-            input
-                .set_rgb_consumer(contract_id, transition.id())
-                .unwrap();
-        }
         psbt.push_rgb_transition(transition).unwrap();
         psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO)
             .set_opret_host()
@@ -2093,7 +2078,7 @@ impl TestWallet {
             .map(|txin| txin.prev_output)
             .collect::<HashSet<Outpoint>>();
 
-        let mut all_transitions: HashMap<ContractId, Transition> = HashMap::new();
+        let mut all_transitions: HashSet<Transition> = HashSet::new();
         let mut asset_beneficiaries: AssetBeneficiariesMap = bmap![];
 
         for (contract_id, asset_coloring_info) in coloring_info.asset_info_map.clone() {
@@ -2174,7 +2159,7 @@ impl TestWallet {
             }
 
             let transition = asset_transition_builder.complete_transition().unwrap();
-            all_transitions.insert(contract_id, transition);
+            all_transitions.insert(transition);
             asset_beneficiaries.insert(contract_id, beneficiaries);
         }
 
@@ -2195,24 +2180,7 @@ impl TestWallet {
             opreturn_output.set_mpc_entropy(blinding).unwrap();
         }
 
-        let tx_inputs = psbt.clone().to_unsigned_tx().inputs;
-        for (contract_id, transition) in all_transitions {
-            for (input, txin) in psbt.inputs_mut().zip(&tx_inputs) {
-                let prevout = txin.prev_output;
-                let outpoint = Outpoint::new(prevout.txid.to_byte_array().into(), prevout.vout);
-                if coloring_info
-                    .asset_info_map
-                    .clone()
-                    .get(&contract_id)
-                    .unwrap()
-                    .input_outpoints
-                    .contains(&outpoint)
-                {
-                    input
-                        .set_rgb_consumer(contract_id, transition.id())
-                        .unwrap();
-                }
-            }
+        for transition in all_transitions {
             psbt.push_rgb_transition(transition).unwrap();
         }
 

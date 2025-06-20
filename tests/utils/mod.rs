@@ -79,7 +79,7 @@ pub use psbt::{
     Utxo,
 };
 #[cfg(not(feature = "altered"))]
-pub use psrgbt::{RgbExt, RgbInExt, RgbPsbt, TxParams};
+pub use psrgbt::{RgbExt, RgbPsbt, TxParams};
 #[cfg(feature = "altered")]
 pub use psrgbt_altered::{RgbExt, RgbInExt, RgbPsbt, TxParams};
 pub use rand::RngCore;

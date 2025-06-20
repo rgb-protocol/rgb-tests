@@ -2175,11 +2175,12 @@ fn concealed_known_transition() {
         .add_owned_state_raw(*assignment_type, seal_1, state)
         .unwrap();
     let transition = transition_builder.complete_transition().unwrap();
-    let opid_1 = transition.id();
-    psbt.input_mut(0)
-        .unwrap()
-        .set_rgb_consumer(contract_id, opid_1)
-        .unwrap();
+    for opout in transition.inputs() {
+        // this is not necessary since it's done by push_rgb_transition,
+        // but it shows that it's idempotent
+        psbt.set_rgb_contract_consumer(contract_id, opout, transition.id())
+            .unwrap();
+    }
     psbt.push_rgb_transition(transition).unwrap();
 
     // 2nd transition
@@ -2198,11 +2199,11 @@ fn concealed_known_transition() {
         .unwrap();
     let transition = transition_builder.complete_transition().unwrap();
     let opid_2 = transition.id();
-    psbt.input_mut(0)
-        .unwrap()
-        .set_rgb_consumer(contract_id, opid_2)
-        .unwrap();
-    psbt.push_rgb_transition(transition).unwrap();
+    for opout in transition.inputs() {
+        psbt.set_rgb_contract_consumer(contract_id, opout, opid_2)
+            .unwrap();
+    }
+    // we don't push this transition to keep it concealed
 
     psbt.complete_construction();
     let fascia = psbt.rgb_commit().unwrap();
@@ -2213,28 +2214,8 @@ fn concealed_known_transition() {
     wlt_2.sync();
 
     let mut beneficiaries = AssetBeneficiariesMap::new();
-    beneficiaries.insert(contract_id, vec![seal_1, seal_2]);
-    let mut consignment = wlt_1.create_consignments(beneficiaries, witness_id)[0].clone();
-
-    // we finally have a consignment with 2 transitions in a bundle
-    // now we remove one of them to show that validation fails
-    let mut new_bundle = consignment
-        .bundles
-        .iter()
-        .find(|b| b.bundle.known_transitions.len() == 2)
-        .unwrap()
-        .clone();
-    let bundle_id = new_bundle.bundle.bundle_id();
-    new_bundle.bundle.known_transitions.remove(&opid_2).unwrap();
-    let mut bundles = consignment.bundles.release();
-    bundles.replace(new_bundle);
-    consignment.bundles = LargeOrdSet::from_checked(bundles);
-    // remove corresponding terminal
-    consignment.terminals.remove(&bundle_id).unwrap();
-    consignment
-        .terminals
-        .insert(bundle_id, NonEmptyOrdSet::with(secret_seal_1).into())
-        .unwrap();
+    beneficiaries.insert(contract_id, vec![seal_1]);
+    let consignment = wlt_1.create_consignments(beneficiaries, witness_id)[0].clone();
 
     // ensure the consignment contains the bundle with missing transition
     let bundle = consignment
