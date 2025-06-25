@@ -2143,6 +2143,229 @@ fn concealed_known_transition() {
 
 #[cfg(not(feature = "altered"))]
 #[test]
+fn accept_bundle_missing_transitions() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+
+    let issued_amt = 700;
+    let contract_id = wlt_1.issue_nia(issued_amt, None);
+    let asset_schema = wlt_1.asset_schema(contract_id);
+    let schema_id = wlt_1.schema_id(contract_id);
+    let contract = wlt_1.stock().contract_data(contract_id).unwrap();
+    let assignment_type = contract
+        .schema
+        .assignment_types_for_state(asset_schema.default_state_type())[0];
+    let transition_type = contract
+        .schema
+        .default_transition_for_assignment(assignment_type);
+
+    // split into 2 allocations
+    let utxo_1 = wlt_1.get_utxo(None);
+    let invoice = wlt_1.invoice(
+        contract_id,
+        schema_id,
+        300,
+        InvoiceType::Blinded(Some(utxo_1)),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.accept_transfer(consignment.clone(), None);
+    wlt_1.sync();
+
+    // construct bundle that will be omitted in first validation
+    let utxo_2 = wlt_1.get_utxo(None);
+    let invoice = wlt_1.invoice(
+        contract_id,
+        schema_id,
+        400,
+        InvoiceType::Blinded(Some(utxo_2)),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.accept_transfer(consignment.clone(), None);
+    wlt_1.sync();
+    let omit_wid = tx.txid();
+    let omit_bid = consignment
+        .bundles
+        .iter()
+        .find(|wb| wb.witness_id() == omit_wid)
+        .unwrap()
+        .bundle
+        .bundle_id();
+
+    // retrieve the two opouts on utxo
+    let allocations = wlt_1
+        .stock()
+        .contract_assignments_for(contract_id, vec![utxo_1])
+        .unwrap()
+        .into_values()
+        .flat_map(|v| v.into_iter())
+        .collect::<Vec<_>>();
+    assert_eq!(allocations.len(), 1);
+    let (opout_1, amt_1) = if let (opout, AllocatedState::Amount(state)) = allocations[0] {
+        (opout, state.as_u64())
+    } else {
+        panic!("unexpected state type");
+    };
+    let allocations = wlt_1
+        .stock()
+        .contract_assignments_for(contract_id, vec![utxo_2])
+        .unwrap()
+        .into_values()
+        .flat_map(|v| v.into_iter())
+        .collect::<Vec<_>>();
+    assert_eq!(allocations.len(), 1);
+    let (opout_2, amt_2) = if let (opout, AllocatedState::Amount(state)) = allocations[0] {
+        (opout, state.as_u64())
+    } else {
+        panic!("unexpected state type");
+    };
+
+    // construct bundle that will be accepted twice, first with missing transition
+    let btc_change = wlt_1.get_address();
+    let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo_1, utxo_2], vec![(btc_change, None)], None);
+    psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
+    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+
+    // 1st transition (revealed)
+    let mut transition_builder = wlt_1
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let state = asset_schema.allocated_state(amt_1);
+    transition_builder = transition_builder
+        .add_input(opout_1, state.clone())
+        .unwrap();
+    let secret_seal_1 = wlt_2.get_secret_seal(None, None);
+    let seal_1 = BuilderSeal::Concealed(secret_seal_1);
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, seal_1, state)
+        .unwrap();
+    let transition = transition_builder.complete_transition().unwrap();
+    let opid_1 = transition.id();
+    psbt.push_rgb_transition(transition).unwrap();
+
+    // 2nd transition (concealed at first, revealed later)
+    let mut transition_builder = wlt_1
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let state = asset_schema.allocated_state(amt_2);
+    transition_builder = transition_builder
+        .add_input(opout_2, state.clone())
+        .unwrap();
+    let secret_seal_2 = wlt_3.get_secret_seal(None, None);
+    let seal_2 = BuilderSeal::Concealed(secret_seal_2);
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, seal_2, state)
+        .unwrap();
+    let transition = transition_builder.complete_transition().unwrap();
+    let opid_2 = transition.id();
+    psbt.push_rgb_transition(transition).unwrap();
+
+    psbt.complete_construction();
+    let fascia = psbt.rgb_commit().unwrap();
+    let witness_id = psbt.txid();
+    wlt_1.consume_fascia(fascia, witness_id);
+    let tx = wlt_1.sign_finalize_extract(&mut psbt);
+    wlt_1.broadcast_tx(&tx);
+    wlt_2.sync();
+
+    let mut beneficiaries = AssetBeneficiariesMap::new();
+    beneficiaries.insert(contract_id, vec![seal_1, seal_2]);
+    let consignment = wlt_1.create_consignments(beneficiaries, witness_id)[0].clone();
+
+    // wlt_2 accepts consignment with transition to wlt_3 concealed
+    let mut consignment_1 = consignment.clone();
+    let mut new_bundle = consignment_1
+        .bundles
+        .iter()
+        .find(|b| b.bundle.known_transitions.len() == 2)
+        .unwrap()
+        .clone();
+    let bundle_id = new_bundle.bundle.bundle_id();
+    new_bundle.bundle.known_transitions.remove(&opid_2).unwrap();
+    consignment_1.bundles = LargeVec::from_iter_checked(
+        consignment
+            .bundled_witnesses()
+            .filter(|wb| wb.witness_id() != omit_wid)
+            .cloned()
+            .map(|wb| {
+                if wb.witness_id() == witness_id {
+                    new_bundle.clone()
+                } else {
+                    wb
+                }
+            }),
+    );
+    consignment_1.terminals.remove(&bundle_id).unwrap();
+    consignment_1.terminals.remove(&omit_bid).unwrap();
+    consignment_1
+        .terminals
+        .insert(bundle_id, NonEmptyOrdSet::with(secret_seal_1).into())
+        .unwrap();
+    // wlt_2 accepts bundle with opid_1 revealed and opid_2 concealed
+    wlt_2.accept_transfer(consignment_1, None);
+
+    let mut consignment_2 = consignment.clone();
+    let mut new_bundle = consignment_2
+        .bundles
+        .iter()
+        .find(|b| b.bundle.known_transitions.len() == 2)
+        .unwrap()
+        .clone();
+    let bundle_id = new_bundle.bundle.bundle_id();
+    new_bundle.bundle.known_transitions.remove(&opid_1).unwrap();
+    consignment_2.bundles = LargeVec::from_iter_checked(
+        consignment
+            .bundled_witnesses()
+            .filter(|wb| wb.witness_id() != omit_wid)
+            .cloned()
+            .map(|wb| {
+                if wb.witness_id() == witness_id {
+                    new_bundle.clone()
+                } else {
+                    wb
+                }
+            }),
+    );
+    consignment_2.terminals.remove(&bundle_id).unwrap();
+    consignment_2.terminals.remove(&omit_bid).unwrap();
+    consignment_2
+        .terminals
+        .insert(bundle_id, NonEmptyOrdSet::with(secret_seal_2).into())
+        .unwrap();
+    wlt_3.accept_transfer(consignment, None);
+
+    // wlt_2 accepts the same bundle with opid_1 concealed and opid_2 revealed
+    let (consignment, _) = wlt_3.send(
+        &mut wlt_2,
+        InvoiceType::Blinded(None),
+        contract_id,
+        amt_2,
+        0,
+        None,
+    );
+    println!("{consignment:?}");
+
+    // wlt_2 can spend allocation from both opid_1 and opid_2
+    wlt_2.check_allocations(contract_id, asset_schema, vec![amt_1, amt_2], false);
+    wlt_2.send(
+        &mut wlt_1,
+        InvoiceType::Blinded(None),
+        contract_id,
+        amt_1 + amt_2,
+        0,
+        None,
+    );
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
 fn unordered_transitions_within_bundle() {
     initialize();
 
