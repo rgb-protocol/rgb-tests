@@ -1852,8 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-psbt"
-version = "0.11.1-alpha.2+unreviewed"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#bd3f36f8d144047385f2e809e3b93a61b29b118f"
+version = "0.11.1-alpha.3+unreviewed"
 dependencies = [
  "amplify",
  "baid64",
@@ -1869,6 +1868,7 @@ dependencies = [
 [[package]]
 name = "rgb-psbt"
 version = "0.11.1-alpha.3+unreviewed"
+source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#8ab53d712e018a5681c189b1e2196efb0cca988b"
 dependencies = [
  "amplify",
  "baid64",
@@ -1878,28 +1878,6 @@ dependencies = [
  "getrandom 0.3.2",
  "rgb-std",
  "strict_encoding",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "rgb-runtime"
-version = "0.11.1-alpha.2+unreviewed"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#bd3f36f8d144047385f2e809e3b93a61b29b118f"
-dependencies = [
- "amplify",
- "baid64",
- "bp-core",
- "bp-std",
- "bp-wallet",
- "chrono",
- "commit_verify",
- "getrandom 0.3.2",
- "indexmap 2.9.0",
- "nonasync",
- "rgb-psbt 0.11.1-alpha.2+unreviewed",
- "rgb-std",
- "serde",
- "strict_types",
  "wasm-bindgen",
 ]
 
@@ -1918,6 +1896,28 @@ dependencies = [
  "indexmap 2.9.0",
  "nonasync",
  "rgb-psbt 0.11.1-alpha.3+unreviewed",
+ "rgb-std",
+ "serde",
+ "strict_types",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "rgb-runtime"
+version = "0.11.1-alpha.3+unreviewed"
+source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#8ab53d712e018a5681c189b1e2196efb0cca988b"
+dependencies = [
+ "amplify",
+ "baid64",
+ "bp-core",
+ "bp-std",
+ "bp-wallet",
+ "chrono",
+ "commit_verify",
+ "getrandom 0.3.2",
+ "indexmap 2.9.0",
+ "nonasync",
+ "rgb-psbt 0.11.1-alpha.3+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
  "rgb-std",
  "serde",
  "strict_types",
@@ -1980,10 +1980,10 @@ dependencies = [
  "once_cell",
  "psbt",
  "rand 0.8.5",
- "rgb-psbt 0.11.1-alpha.2+unreviewed",
  "rgb-psbt 0.11.1-alpha.3+unreviewed",
- "rgb-runtime 0.11.1-alpha.2+unreviewed",
+ "rgb-psbt 0.11.1-alpha.3+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
  "rgb-runtime 0.11.1-alpha.3+unreviewed",
+ "rgb-runtime 0.11.1-alpha.3+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
  "rgb-schemata",
  "rgb-std",
  "rstest",

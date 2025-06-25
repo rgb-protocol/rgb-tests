@@ -1895,10 +1895,10 @@ fn extra_known_transition() {
     new_bundle
         .bundle
         .known_transitions
-        .insert(new_opid, new_transition)
+        .push(KnownTransition::new(new_opid, new_transition))
         .unwrap();
     assert_eq!(bundle_id, new_bundle.bundle.bundle_id());
-    assert!(new_bundle.bundle.known_transitions.contains_key(&new_opid));
+    assert!(new_bundle.bundle.known_transitions_contain_opid(&new_opid));
     new_consignment.bundles = LargeVec::from_checked(bundles);
 
     wlt_2.accept_transfer(new_consignment, None);
@@ -1948,9 +1948,9 @@ fn uncommitted_input_opout() {
         let contract_id = witness_bundle
             .bundle
             .known_transitions
-            .values()
             .last()
             .unwrap()
+            .transition
             .contract_id;
         let protocol_id = mpc::ProtocolId::from(contract_id);
         let message = mpc::Message::from(witness_bundle.bundle.bundle_id());
@@ -2136,7 +2136,7 @@ fn concealed_known_transition() {
         .iter()
         .find(|wb| wb.bundle.input_map_opids().contains(&opid_2))
         .unwrap();
-    assert!(!bundle.bundle.known_transitions.contains_key(&opid_2));
+    assert!(!bundle.bundle.known_transitions_contain_opid(&opid_2));
 
     wlt_2.accept_transfer(consignment, None);
 }
@@ -2288,7 +2288,15 @@ fn accept_bundle_missing_transitions() {
         .unwrap()
         .clone();
     let bundle_id = new_bundle.bundle.bundle_id();
-    new_bundle.bundle.known_transitions.remove(&opid_2).unwrap();
+    new_bundle.bundle.known_transitions = Confined::from_checked(
+        new_bundle
+            .bundle
+            .known_transitions
+            .to_unconfined()
+            .into_iter()
+            .filter(|kt| kt.opid != opid_2)
+            .collect(),
+    );
     consignment_1.bundles = LargeVec::from_iter_checked(
         consignment
             .bundled_witnesses()
@@ -2319,7 +2327,15 @@ fn accept_bundle_missing_transitions() {
         .unwrap()
         .clone();
     let bundle_id = new_bundle.bundle.bundle_id();
-    new_bundle.bundle.known_transitions.remove(&opid_1).unwrap();
+    new_bundle.bundle.known_transitions = Confined::from_checked(
+        new_bundle
+            .bundle
+            .known_transitions
+            .to_unconfined()
+            .into_iter()
+            .filter(|kt| kt.opid != opid_1)
+            .collect(),
+    );
     consignment_2.bundles = LargeVec::from_iter_checked(
         consignment
             .bundled_witnesses()

@@ -81,7 +81,7 @@ pub use psbt::{
 #[cfg(not(feature = "altered"))]
 pub use psrgbt::{RgbExt, RgbPsbt, TxParams};
 #[cfg(feature = "altered")]
-pub use psrgbt_altered::{RgbExt, RgbInExt, RgbPsbt, TxParams};
+pub use psrgbt_altered::{RgbExt, RgbPsbt, TxParams};
 pub use rand::RngCore;
 #[cfg(not(feature = "altered"))]
 pub use rgb::{
@@ -96,10 +96,10 @@ pub use rgb::{
     validation::{Failure, ResolveWitness, Scripts, Validity, Warning, WitnessResolverError},
     vm::{WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
-    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, MetaDetails, MetaType, MetaValue,
-    Occurrences, OccurrencesMismatch, OpId, Opout, OwnedStateSchema, RevealedData, RevealedValue,
-    RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey, TransferParams, Transition,
-    TransitionBundle, TransitionType, TypedAssigns, VoidState, WalletProvider,
+    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
+    MetaValue, Occurrences, OccurrencesMismatch, OpId, Opout, OwnedStateSchema, RevealedData,
+    RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey, TransferParams,
+    Transition, TransitionBundle, TransitionType, TypedAssigns, VoidState, WalletProvider,
 };
 #[cfg(feature = "altered")]
 pub use rgb_altered::{
@@ -114,10 +114,10 @@ pub use rgb_altered::{
     validation::{Failure, ResolveWitness, Scripts, Validity, Warning, WitnessResolverError},
     vm::{WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
-    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, MetaDetails, MetaType, MetaValue,
-    Occurrences, OccurrencesMismatch, OpId, Opout, OwnedStateSchema, RevealedData, RevealedValue,
-    RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey, TransferParams, Transition,
-    TransitionBundle, TransitionType, TypedAssigns, VoidState, WalletProvider,
+    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
+    MetaValue, Occurrences, OccurrencesMismatch, OpId, Opout, OwnedStateSchema, RevealedData,
+    RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey, TransferParams,
+    Transition, TransitionBundle, TransitionType, TypedAssigns, VoidState, WalletProvider,
 };
 pub use rgbstd::{
     containers::{

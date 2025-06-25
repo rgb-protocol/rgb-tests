@@ -1574,8 +1574,10 @@ impl TestWallet {
         secret_key: SecretKey,
     ) {
         let transition_signer = |witness_bundle: &mut WitnessBundle| {
-            for transition in witness_bundle.bundle_mut().known_transitions.values_mut() {
-                let transition_id: [u8; 32] = transition.id().as_ref().into_inner();
+            for KnownTransition { opid, transition } in
+                witness_bundle.bundle_mut().known_transitions.iter_mut()
+            {
+                let transition_id: [u8; 32] = opid.as_ref().into_inner();
                 let msg = Message::from_digest(transition_id);
                 let signature = secret_key.sign_ecdsa(msg);
                 transition.signature =
@@ -1725,7 +1727,7 @@ impl TestWallet {
             let all_opids = consignment
                 .bundles
                 .iter()
-                .flat_map(|b| b.bundle().known_transitions.keys().copied())
+                .flat_map(|b| b.bundle().known_transitions_opids())
                 .collect::<BTreeSet<_>>();
             let validated_consignment = consignment
                 .clone()
