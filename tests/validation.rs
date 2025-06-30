@@ -73,7 +73,7 @@ enum Scenario {
 
 impl fmt::Display for Scenario {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -1183,7 +1183,7 @@ fn validate_consignment_logic_fail() {
     // Error: zero-amount allocations are not allowed
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let mut witness_bundle = bundles.last_mut().unwrap();
+    let witness_bundle = bundles.last_mut().unwrap();
     let mut transition = witness_bundle
         .bundle
         .known_transitions
@@ -1204,12 +1204,11 @@ fn validate_consignment_logic_fail() {
     };
     let opid = transition.id();
     assert_ne!(opid, old_opid);
-    replace_transition_in_bundle(&mut witness_bundle, old_opid, transition);
+    replace_transition_in_bundle(witness_bundle, old_opid, transition);
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment
-        .validate(&alt_resolver, ChainNet::BitcoinRegtest, None);
+    let res = consignment.validate(&alt_resolver, ChainNet::BitcoinRegtest, None);
     let failures = res.unwrap_err().failures;
     assert_eq!(failures.len(), 1);
     assert_eq!(failures[0], Failure::ScriptFailure(opid, Some(0), None));

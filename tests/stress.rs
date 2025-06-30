@@ -91,5 +91,5 @@ fn back_and_forth(
         report.end_line();
     }
     let elapsed = now.elapsed();
-    println!("elapsed: {:.2?}", elapsed);
+    println!("elapsed: {elapsed:.2?}");
 }
