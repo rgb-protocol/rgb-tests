@@ -1179,6 +1179,40 @@ fn validate_consignment_logic_fail() {
         failures[0],
         Failure::ContractMismatch(transition_id, ContractId::strict_dumb())
     );
+
+    // Error: zero-amount allocations are not allowed
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let mut witness_bundle = bundles.last_mut().unwrap();
+    let mut transition = witness_bundle
+        .bundle
+        .known_transitions
+        .last()
+        .unwrap()
+        .transition
+        .clone();
+    let old_opid = transition.id();
+    if let TypedAssigns::Fungible(assign) = transition.assignments.get_mut(&OS_ASSET).unwrap() {
+        assign
+            .push(Assign::ConfidentialSeal {
+                seal: SecretSeal::strict_dumb(),
+                state: RevealedValue::new(Amount::ZERO),
+            })
+            .unwrap();
+    } else {
+        panic!("unexpected asssignment type")
+    };
+    let opid = transition.id();
+    assert_ne!(opid, old_opid);
+    replace_transition_in_bundle(&mut witness_bundle, old_opid, transition);
+    let alt_resolver =
+        resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let res = consignment
+        .validate(&alt_resolver, ChainNet::BitcoinRegtest, None);
+    let failures = res.unwrap_err().failures;
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0], Failure::ScriptFailure(opid, Some(0), None));
 }
 
 #[cfg(not(feature = "altered"))]

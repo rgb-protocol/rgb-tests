@@ -144,7 +144,7 @@ pub use rstest::rstest;
 pub use schemata::{
     CollectibleFungibleAsset, InflatableFungibleAsset, NonInflatableAsset,
     PermissionedFungibleAsset, UniqueDigitalAsset, CFA_SCHEMA_ID, IFA_SCHEMA_ID, NIA_SCHEMA_ID,
-    PFA_SCHEMA_ID, UDA_SCHEMA_ID,
+    OS_ASSET, PFA_SCHEMA_ID, UDA_SCHEMA_ID,
 };
 pub use serial_test::serial;
 pub use strict_encoding::{fname, tn, FieldName, StrictSerialize, TypeName};
