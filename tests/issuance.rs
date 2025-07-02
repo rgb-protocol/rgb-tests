@@ -539,10 +539,32 @@ fn contract_globals_order() {
         .global_types
         .get(&GS_ISSUED_SUPPLY)
         .unwrap();
+    // nth consumes the iterator
     let mut issuance_global_iter = contract_data.state.global(GS_ISSUED_SUPPLY).unwrap();
+    let mut idx = 0;
+    for depth in [0, 3, 2, 0] {
+        let entry = issuance_global_iter.nth(depth).unwrap().borrow().clone();
+        let strict_val = contract_data
+            .types
+            .strict_deserialize_type(
+                global_details.global_state_schema.sem_id,
+                entry.data().as_slice(),
+            )
+            .unwrap()
+            .unbox();
+        idx += depth;
+        assert_eq!(
+            Amount::from_strict_val_unchecked(&strict_val).value(),
+            issue_amounts[amounts_len - 1 - idx]
+        );
+        idx += 1;
+    }
+    assert!(issuance_global_iter.next().is_none());
+    // at_depth doesn't consume the iterator
+    let issuance_global_iter = contract_data.state.global(GS_ISSUED_SUPPLY).unwrap();
     for depth in [0, 0, 1, 2, 4, 3, 1, amounts_len - 1, 5] {
-        let raw_data = issuance_global_iter
-            .nth(u24::with(depth as u32))
+        let entry = issuance_global_iter
+            .at_depth(depth)
             .unwrap()
             .borrow()
             .clone();
@@ -550,7 +572,7 @@ fn contract_globals_order() {
             .types
             .strict_deserialize_type(
                 global_details.global_state_schema.sem_id,
-                raw_data.as_slice(),
+                entry.data().as_slice(),
             )
             .unwrap()
             .unbox();
@@ -559,7 +581,5 @@ fn contract_globals_order() {
             issue_amounts[amounts_len - 1 - depth]
         );
     }
-    assert!(issuance_global_iter
-        .nth(u24::with(amounts_len as u32))
-        .is_none());
+    assert!(issuance_global_iter.at_depth(amounts_len).is_none());
 }
