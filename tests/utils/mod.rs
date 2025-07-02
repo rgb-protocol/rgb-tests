@@ -28,6 +28,7 @@ pub type DT = DescriptorType;
 pub type AS = AssetSchema;
 
 pub use std::{
+    borrow::Borrow,
     cell::OnceCell,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     env::VarError,
@@ -91,7 +92,9 @@ pub use rand::RngCore;
 pub use rgb::{
     assignments::AssignVec,
     containers::{PubWitness, ValidContract, WitnessBundle},
-    contract::{AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection},
+    contract::{
+        AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection, SchemaWrapper,
+    },
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
@@ -100,7 +103,7 @@ pub use rgb::{
         DbcProof, Failure, ResolveWitness, Scripts, ValidationError, Validator, Validity, Warning,
         WitnessOrdProvider, WitnessResolverError, WitnessStatus,
     },
-    vm::{WitnessOrd, WitnessPos},
+    vm::{ContractStateAccess, WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
     MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
@@ -112,7 +115,9 @@ pub use rgb::{
 pub use rgb_altered::{
     assignments::AssignVec,
     containers::{PubWitness, ValidContract, WitnessBundle},
-    contract::{AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection},
+    contract::{
+        AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection, SchemaWrapper,
+    },
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
@@ -121,7 +126,7 @@ pub use rgb_altered::{
         DbcProof, Failure, ResolveWitness, Scripts, Validator, Validity, Warning,
         WitnessOrdProvider, WitnessResolverError, WitnessStatus,
     },
-    vm::{WitnessOrd, WitnessPos},
+    vm::{ContractStateAccess, WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
     MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
@@ -152,7 +157,7 @@ pub use rgbstd::{
 };
 pub use rstest::rstest;
 pub use schemata::{
-    CollectibleFungibleAsset, InflatableFungibleAsset, NonInflatableAsset,
+    CollectibleFungibleAsset, IfaWrapper, InflatableFungibleAsset, NonInflatableAsset,
     PermissionedFungibleAsset, UniqueDigitalAsset, CFA_SCHEMA_ID, ERRNO_INFLATION_MISMATCH,
     ERRNO_ISSUED_MISMATCH, ERRNO_NON_EQUAL_IN_OUT, ERRNO_REPLACE_HIDDEN_BURN,
     ERRNO_REPLACE_NO_INPUT, GS_ISSUED_SUPPLY, IFA_SCHEMA_ID, MS_ALLOWED_INFLATION, NIA_SCHEMA_ID,

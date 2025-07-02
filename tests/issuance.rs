@@ -489,3 +489,77 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
 
     assert_eq!(contract_id.to_string(), expected_cid.to_string());
 }
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn contract_globals_order() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+
+    let issue_amounts = vec![999, 888, 777, 666, 555, 444, 333, 222, 111];
+    let tot_inflation = issue_amounts[1..].iter().sum();
+    dbg!(tot_inflation);
+    let issuance_utxo = wlt_1.get_utxo(None);
+    let contract_id = wlt_1.issue_ifa(
+        issue_amounts[0],
+        None,
+        vec![],
+        vec![(issuance_utxo, tot_inflation)],
+    );
+
+    for (i, inflation_amt) in issue_amounts[1..].iter().enumerate() {
+        let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+        let inflation_allocations = contract
+            .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+            .collect::<Vec<_>>();
+        let inflation_outpoints = inflation_allocations
+            .iter()
+            .map(|oa| oa.seal.outpoint().unwrap())
+            .collect::<Vec<_>>();
+        wlt_1.inflate_ifa(contract_id, inflation_outpoints, vec![*inflation_amt]);
+        wlt_1.update_witnesses(0, vec![]);
+        let amts = IfaWrapper::with(wlt_1.contract_data(contract_id))
+            .issuance_amounts()
+            .iter()
+            .map(|a| a.value())
+            .collect::<Vec<_>>();
+        let expected_amts = issue_amounts
+            .clone()
+            .into_iter()
+            .take(i + 2)
+            .rev()
+            .collect::<Vec<_>>();
+        assert_eq!(amts, expected_amts);
+    }
+    let amounts_len = issue_amounts.len();
+    let contract_data = wlt_1.contract_data(contract_id);
+    let global_details = contract_data
+        .schema
+        .global_types
+        .get(&GS_ISSUED_SUPPLY)
+        .unwrap();
+    let mut issuance_global_iter = contract_data.state.global(GS_ISSUED_SUPPLY).unwrap();
+    for depth in [0, 0, 1, 2, 4, 3, 1, amounts_len - 1, 5] {
+        let raw_data = issuance_global_iter
+            .nth(u24::with(depth as u32))
+            .unwrap()
+            .borrow()
+            .clone();
+        let strict_val = contract_data
+            .types
+            .strict_deserialize_type(
+                global_details.global_state_schema.sem_id,
+                raw_data.as_slice(),
+            )
+            .unwrap()
+            .unbox();
+        assert_eq!(
+            Amount::from_strict_val_unchecked(&strict_val).value(),
+            issue_amounts[amounts_len - 1 - depth]
+        );
+    }
+    assert!(issuance_global_iter
+        .nth(u24::with(amounts_len as u32))
+        .is_none());
+}
