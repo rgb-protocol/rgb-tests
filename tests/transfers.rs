@@ -2475,6 +2475,7 @@ fn unordered_transitions_within_bundle() {
 }
 
 #[cfg(not(feature = "altered"))]
+#[should_panic(expected = "MissingInputMapTransition")]
 #[test]
 fn transition_spending_uncommitted_opout() {
     initialize();
@@ -2614,15 +2615,6 @@ fn transition_spending_uncommitted_opout() {
     for consignment in consignments {
         wlt_3.accept_transfer(consignment, None);
     }
-
-    wlt_3.send(
-        &mut wlt_2,
-        InvoiceType::Blinded(None),
-        contract_id,
-        amt_1 + amt_2,
-        100,
-        None,
-    );
 }
 
 #[cfg(not(feature = "altered"))]

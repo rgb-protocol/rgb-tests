@@ -696,9 +696,13 @@ fn validate_consignment_commitments_fail() {
     let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
     let failures = res.unwrap_err().failures;
     dbg!(&failures);
-    assert_eq!(failures.len(), 2);
+    assert_eq!(failures.len(), 3);
     assert!(matches!(failures[0], Failure::ExtraKnownTransition(_)));
     assert!(matches!(failures[1], Failure::DoubleSpend(_)));
+    assert!(matches!(
+        failures[2],
+        Failure::MissingInputMapTransition(_, _)
+    ));
 
     // OperationAbsent: remove a bundle that contains spent assignments
     let mut consignment = base_consignment.clone();
@@ -876,8 +880,12 @@ fn validate_consignment_commitments_fail() {
     let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
     let failures = res.unwrap_err().failures;
     dbg!(&failures);
-    assert_eq!(failures.len(), 1);
+    assert_eq!(failures.len(), 2);
     assert!(matches!(failures[0], Failure::ExtraKnownTransition(_)));
+    assert!(matches!(
+        failures[1],
+        Failure::MissingInputMapTransition(_, _)
+    ));
 }
 
 #[cfg(not(feature = "altered"))]
