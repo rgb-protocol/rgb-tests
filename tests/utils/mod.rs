@@ -75,13 +75,13 @@ pub use electrum::{Client as ElectrumClient, ElectrumApi, Param};
 pub use file_format::FileFormat;
 pub use once_cell::sync::Lazy;
 pub use psbt::{
-    Beneficiary as PsbtBeneficiary, Payment, Prevout, Psbt, PsbtConstructor, PsbtMeta, PsbtVer,
-    Utxo,
+    Beneficiary as PsbtBeneficiary, KeyMap, Payment, Prevout, PropKey, Psbt, PsbtConstructor,
+    PsbtMeta, PsbtVer, Utxo,
 };
 #[cfg(not(feature = "altered"))]
-pub use psrgbt::{RgbExt, RgbPsbt, TxParams};
+pub use psrgbt::{OpoutAndOpids, ProprietaryKeyRgb, RgbExt, RgbPsbt, TxParams};
 #[cfg(feature = "altered")]
-pub use psrgbt_altered::{RgbExt, RgbPsbt, TxParams};
+pub use psrgbt::{OpoutAndOpids, ProprietaryKeyRgb, RgbExt, RgbPsbt, TxParams};
 pub use rand::RngCore;
 #[cfg(not(feature = "altered"))]
 pub use rgb::{
