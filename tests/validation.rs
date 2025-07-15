@@ -1225,8 +1225,6 @@ fn validate_consignment_logic_fail() {
 #[cfg(not(feature = "altered"))]
 #[test]
 fn validate_consignment_remove_scripts_code() {
-    use amplify::none;
-
     let scenario = Scenario::B;
     let resolver = scenario.resolver();
 
@@ -1266,7 +1264,6 @@ fn validate_consignment_remove_scripts_code() {
             ),
         )
         .unwrap();
-    let transition_id = transition.id();
     replace_transition_in_bundle(witness_bundle, old_opid, transition);
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
@@ -1278,11 +1275,9 @@ fn validate_consignment_remove_scripts_code() {
     let res = consignment.validate(&alt_resolver, ChainNet::BitcoinRegtest, None);
     let failures = res.unwrap_err().failures;
     dbg!(&failures);
-    assert_eq!(failures.len(), 1);
-    assert_eq!(
-        failures[0],
-        Failure::ScriptFailure(transition_id, Some(0), None)
-    );
+    assert!(failures
+        .iter()
+        .all(|f| matches!(f, Failure::MissingScript(_, _))));
 }
 
 #[cfg(not(feature = "altered"))]

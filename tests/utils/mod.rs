@@ -49,7 +49,7 @@ pub use amplify::{
         Collection, Confined, LargeVec, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallOrdMap,
         TinyOrdMap, TinyOrdSet, U16,
     },
-    map,
+    map, none,
     num::u24,
     s, ByteArray, Bytes64, Wrapper,
 };

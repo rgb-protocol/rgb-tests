@@ -2143,6 +2143,90 @@ fn concealed_known_transition() {
 
 #[cfg(not(feature = "altered"))]
 #[test]
+fn remove_scripts_code() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+
+    let issued_amt = 700;
+    let utxo = wlt_1.get_utxo(None);
+    let contract_id = wlt_1.issue_nia(issued_amt, Some(&utxo));
+    let asset_schema = wlt_1.asset_schema(contract_id);
+    let contract = wlt_1.stock().contract_data(contract_id).unwrap();
+    let assignment_type = contract
+        .schema
+        .assignment_types_for_state(asset_schema.default_state_type())[0];
+    let transition_type = contract
+        .schema
+        .default_transition_for_assignment(assignment_type);
+
+    // construct transaction committing to bundle with missing transition
+    let btc_change = wlt_1.get_address();
+    let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo], vec![(btc_change, None)], None);
+    psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
+    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+
+    // 1st transition
+    let opout = Opout {
+        op: OpId::copy_from_slice(contract_id.as_slice()).unwrap(),
+        ty: OS_ASSET,
+        no: 0,
+    };
+    let mut transition_builder = wlt_1
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let state = asset_schema.allocated_state(issued_amt);
+    transition_builder = transition_builder.add_input(opout, state.clone()).unwrap();
+    let secret_seal_1 = wlt_2.get_secret_seal(None, None);
+    let seal_1 = BuilderSeal::Concealed(secret_seal_1);
+    let state = asset_schema.allocated_state(issued_amt + 1);
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, seal_1, state)
+        .unwrap();
+    let transition = transition_builder.complete_transition().unwrap();
+    for opout in transition.inputs() {
+        // this is not necessary since it's done by push_rgb_transition,
+        // but it shows that it's idempotent
+        psbt.set_rgb_contract_consumer(contract_id, opout, transition.id())
+            .unwrap();
+    }
+    psbt.push_rgb_transition(transition).unwrap();
+
+    psbt.complete_construction();
+    let fascia = psbt.rgb_commit().unwrap();
+    let witness_id = psbt.txid();
+    wlt_1.consume_fascia(fascia, witness_id);
+    let tx = wlt_1.sign_finalize_extract(&mut psbt);
+    wlt_1.broadcast_tx(&tx);
+    wlt_2.sync();
+
+    let mut beneficiaries = AssetBeneficiariesMap::new();
+    beneficiaries.insert(contract_id, vec![seal_1]);
+    let mut consignment = wlt_1.create_consignments(beneficiaries, witness_id)[0].clone();
+    let mut scripts = consignment.scripts.clone().release();
+    let mut lib = scripts.pop_last().unwrap().clone();
+    lib.code = none!();
+    consignment.scripts = Confined::<BTreeSet<_>, 0, 1024>::from_checked(bset![lib]);
+
+    // should fail here
+    wlt_2.accept_transfer(consignment, None);
+
+    // only fails here
+    wlt_2.send(
+        &mut wlt_1,
+        InvoiceType::Witness,
+        contract_id,
+        issued_amt,
+        1000,
+        None,
+    );
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
 fn accept_bundle_missing_transitions() {
     initialize();
 
