@@ -1224,6 +1224,69 @@ fn validate_consignment_logic_fail() {
 
 #[cfg(not(feature = "altered"))]
 #[test]
+fn validate_consignment_remove_scripts_code() {
+    use amplify::none;
+
+    let scenario = Scenario::B;
+    let resolver = scenario.resolver();
+
+    let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+
+    // ScriptFailure: e.g. one can't do simple inflation
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let witness_bundle = bundles.last_mut().unwrap();
+    let mut transition = witness_bundle
+        .bundle
+        .known_transitions
+        .last()
+        .unwrap()
+        .transition
+        .clone();
+    let old_opid = transition.id();
+    let assignment_type = AssignmentType::with(4000);
+    let output_sum = transition
+        .assignments
+        .get(&assignment_type)
+        .unwrap()
+        .as_fungible()
+        .iter()
+        .map(|a| a.as_revealed_state().as_u64())
+        .sum::<u64>();
+    transition
+        .assignments
+        .insert(
+            assignment_type,
+            TypedAssigns::Fungible(
+                NonEmptyVec::with(Assign::ConfidentialSeal {
+                    seal: SecretSeal::strict_dumb(),
+                    state: RevealedValue::new(output_sum + 1),
+                })
+                .into(),
+            ),
+        )
+        .unwrap();
+    let transition_id = transition.id();
+    replace_transition_in_bundle(witness_bundle, old_opid, transition);
+    let alt_resolver =
+        resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let mut scripts = base_consignment.scripts.clone().release();
+    let mut lib = scripts.pop_last().unwrap().clone();
+    lib.code = none!();
+    consignment.scripts = Confined::<BTreeSet<_>, 0, 1024>::from_checked(bset![lib]);
+    let res = consignment.validate(&alt_resolver, ChainNet::BitcoinRegtest, None);
+    let failures = res.unwrap_err().failures;
+    dbg!(&failures);
+    assert_eq!(failures.len(), 1);
+    assert_eq!(
+        failures[0],
+        Failure::ScriptFailure(transition_id, Some(0), None)
+    );
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
 fn validate_consignment_unmatching_transition_id() {
     let scenario = Scenario::B;
     let resolver = scenario.resolver();
