@@ -2142,6 +2142,7 @@ fn concealed_known_transition() {
 }
 
 #[cfg(not(feature = "altered"))]
+#[should_panic(expected = "MissingScript")]
 #[test]
 fn remove_scripts_code() {
     initialize();
