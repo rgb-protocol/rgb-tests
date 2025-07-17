@@ -1838,7 +1838,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-api"
-version = "0.11.1-rc.2"
+version = "0.11.1-rc.3"
 dependencies = [
  "amplify",
  "baid64",
@@ -1851,7 +1851,7 @@ dependencies = [
  "indexmap 2.10.0",
  "nonasync",
  "rgb-ops",
- "rgb-psbt-utils 0.11.1-rc.2",
+ "rgb-psbt-utils 0.11.1-rc.3",
  "serde",
  "strict_types",
  "wasm-bindgen",
@@ -1859,7 +1859,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-consensus"
-version = "0.11.1-rc.2"
+version = "0.11.1-rc.3"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1879,7 +1879,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-invoicing"
-version = "0.11.1-rc.2"
+version = "0.11.1-rc.3"
 dependencies = [
  "amplify",
  "baid64",
@@ -1898,7 +1898,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-ops"
-version = "0.11.1-rc.2"
+version = "0.11.1-rc.3"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1940,7 +1940,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-psbt-utils"
-version = "0.11.1-rc.2"
+version = "0.11.1-rc.3"
 dependencies = [
  "amplify",
  "baid64",
@@ -1955,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-schemas"
-version = "0.11.1-rc.2"
+version = "0.11.1-rc.3"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1984,10 +1984,10 @@ dependencies = [
  "psbt",
  "rand 0.8.5",
  "rgb-api 0.11.1-rc.1",
- "rgb-api 0.11.1-rc.2",
+ "rgb-api 0.11.1-rc.3",
  "rgb-ops",
  "rgb-psbt-utils 0.11.1-rc.1",
- "rgb-psbt-utils 0.11.1-rc.2",
+ "rgb-psbt-utils 0.11.1-rc.3",
  "rgb-schemas",
  "rstest",
  "rstest_reuse",
