@@ -8,8 +8,8 @@ authors = [
 ]
 edition = "2021"
 rust-version = "1.81.0"
-repository = "https://github.com/RGB-WG/rgb-tests"
-homepage = "https://github.com/RGB-WG/rgb-tests"
+repository = "https://github.com/rgb-protocol/rgb-tests"
+homepage = "https://github.com/rgb-protocol/rgb-tests"
 license = "Apache-2.0"
 description = "RGB tests"
 
@@ -49,24 +49,24 @@ bp-wallet = { path = "./bp-wallet", features = [
 ] }
 ## client_side_validation
 commit_verify = { path = "./client_side_validation/commit_verify" }
-## rgb
-rgb-runtime = { path = "./rgb", features = [
+## rgb-api
+rgb-api = { path = "./rgb-api", features = [
     "electrum_blocking",
     "esplora_blocking",
     "fs",
 ] }
-rgb-psbt = { path = "./rgb/psbt" }
+rgb-psbt-utils = { path = "./rgb-api/psbt" }
 ## altered_submodules/rgb (cannot use path, see https://github.com/rust-lang/cargo/issues/10353)
-rgb_altered = { git = "https://github.com/RGB-WG/rgb", branch = "revert_fix_same_blinded_transfer", package = "rgb-runtime", features = [
+rgb_altered = { git = "https://github.com/rgb-protocol/rgb-api", branch = "revert_fix_same_blinded_transfer", package = "rgb-api", features = [
     "electrum_blocking",
     "esplora_blocking",
     "fs",
 ], optional = true }
-psrgbt_altered = { git = "https://github.com/RGB-WG/rgb", branch = "revert_fix_same_blinded_transfer", package = "rgb-psbt", optional = true }
-## rgb-schemata
-rgb-schemata = { path = "./rgb-schemata" }
-## rgb-std
-rgb-std = { path = "./rgb-std", features = ["fs"] }
+psrgbt_altered = { git = "https://github.com/rgb-protocol/rgb-api", branch = "revert_fix_same_blinded_transfer", package = "rgb-psbt-utils", optional = true }
+## rgb-ops
+rgb-ops = { path = "./rgb-ops", features = ["fs"] }
+## rgb-schemas
+rgb-schemas = { path = "./rgb-schemas" }
 ## rust-amplify
 amplify = { path = "./rust-amplify" }
 ## strict-encoding
@@ -111,16 +111,16 @@ bp-wallet = { path = "./bp-wallet" }
 commit_verify = { path = "./client_side_validation/commit_verify" }
 commit_encoding_derive = { path = "./client_side_validation/commit_verify/derive" }
 single_use_seals = { path = "./client_side_validation/single_use_seals" }
-## rgb
-rgb-runtime = { path = "./rgb" }
-rgb-psbt = { path = "./rgb/psbt" }
-## rgb-core
-rgb-core = { path = "./rgb-core" }
-## rgb-schemata
-rgb-schemata = { path = "./rgb-schemata" }
-## rgb-std
-rgb-std = { path = "./rgb-std" }
-rgb-invoice = { path = "./rgb-std/invoice" }
+## rgb-api
+rgb-api = { path = "./rgb-api" }
+rgb-psbt-utils = { path = "./rgb-api/psbt" }
+## rgb-consensus
+rgb-consensus = { path = "./rgb-consensus" }
+## rgb-ops
+rgb-ops = { path = "./rgb-ops" }
+rgb-invoicing = { path = "./rgb-ops/invoice" }
+## rgb-schemas
+rgb-schemas = { path = "./rgb-schemas" }
 ## rust-amplify
 amplify = { path = "./rust-amplify" }
 ## strict-encoding

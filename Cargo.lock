@@ -1812,8 +1812,51 @@ dependencies = [
 ]
 
 [[package]]
-name = "rgb-core"
-version = "0.11.1-alpha.3+unreviewed"
+name = "rgb-api"
+version = "0.11.1-rc.1"
+dependencies = [
+ "amplify",
+ "baid64",
+ "bp-core",
+ "bp-std",
+ "bp-wallet",
+ "chrono",
+ "commit_verify",
+ "getrandom 0.3.2",
+ "indexmap 2.9.0",
+ "nonasync",
+ "rgb-ops",
+ "rgb-psbt-utils 0.11.1-rc.1",
+ "serde",
+ "strict_types",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "rgb-api"
+version = "0.11.1-rc.1"
+source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#b79f32af68b012e63396f0b35ceb33ea54d0b7e1"
+dependencies = [
+ "amplify",
+ "baid64",
+ "bp-core",
+ "bp-std",
+ "bp-wallet",
+ "chrono",
+ "commit_verify",
+ "getrandom 0.3.2",
+ "indexmap 2.9.0",
+ "nonasync",
+ "rgb-ops",
+ "rgb-psbt-utils 0.11.1-rc.1 (git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer)",
+ "serde",
+ "strict_types",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "rgb-consensus"
+version = "0.11.1-rc.1"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1832,8 +1875,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "rgb-invoice"
-version = "0.11.1-alpha.3+unreviewed"
+name = "rgb-invoicing"
+version = "0.11.1-rc.1"
 dependencies = [
  "amplify",
  "baid64",
@@ -1844,100 +1887,15 @@ dependencies = [
  "indexmap 2.9.0",
  "percent-encoding",
  "rand 0.9.1",
- "rgb-core",
+ "rgb-consensus",
  "serde",
  "strict_encoding",
  "strict_types",
 ]
 
 [[package]]
-name = "rgb-psbt"
-version = "0.11.1-alpha.3+unreviewed"
-dependencies = [
- "amplify",
- "baid64",
- "bp-core",
- "bp-std",
- "commit_verify",
- "getrandom 0.3.2",
- "rgb-std",
- "strict_encoding",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "rgb-psbt"
-version = "0.11.1-alpha.3+unreviewed"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#8ab53d712e018a5681c189b1e2196efb0cca988b"
-dependencies = [
- "amplify",
- "baid64",
- "bp-core",
- "bp-std",
- "commit_verify",
- "getrandom 0.3.2",
- "rgb-std",
- "strict_encoding",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "rgb-runtime"
-version = "0.11.1-alpha.3+unreviewed"
-dependencies = [
- "amplify",
- "baid64",
- "bp-core",
- "bp-std",
- "bp-wallet",
- "chrono",
- "commit_verify",
- "getrandom 0.3.2",
- "indexmap 2.9.0",
- "nonasync",
- "rgb-psbt 0.11.1-alpha.3+unreviewed",
- "rgb-std",
- "serde",
- "strict_types",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "rgb-runtime"
-version = "0.11.1-alpha.3+unreviewed"
-source = "git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer#8ab53d712e018a5681c189b1e2196efb0cca988b"
-dependencies = [
- "amplify",
- "baid64",
- "bp-core",
- "bp-std",
- "bp-wallet",
- "chrono",
- "commit_verify",
- "getrandom 0.3.2",
- "indexmap 2.9.0",
- "nonasync",
- "rgb-psbt 0.11.1-alpha.3+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
- "rgb-std",
- "serde",
- "strict_types",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "rgb-schemata"
-version = "0.11.1-alpha.2+unreviewed"
-dependencies = [
- "aluvm",
- "amplify",
- "bp-core",
- "rgb-std",
- "strict_types",
-]
-
-[[package]]
-name = "rgb-std"
-version = "0.11.1-alpha.3+unreviewed"
+name = "rgb-ops"
+version = "0.11.1-rc.1"
 dependencies = [
  "aluvm",
  "amplify",
@@ -1953,12 +1911,54 @@ dependencies = [
  "indexmap 2.9.0",
  "nonasync",
  "rand 0.9.1",
- "rgb-core",
- "rgb-invoice",
+ "rgb-consensus",
+ "rgb-invoicing",
  "serde",
  "strict_encoding",
  "strict_types",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "rgb-psbt-utils"
+version = "0.11.1-rc.1"
+dependencies = [
+ "amplify",
+ "baid64",
+ "bp-core",
+ "bp-std",
+ "commit_verify",
+ "getrandom 0.3.2",
+ "rgb-ops",
+ "strict_encoding",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "rgb-psbt-utils"
+version = "0.11.1-rc.1"
+source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#b79f32af68b012e63396f0b35ceb33ea54d0b7e1"
+dependencies = [
+ "amplify",
+ "baid64",
+ "bp-core",
+ "bp-std",
+ "commit_verify",
+ "getrandom 0.3.2",
+ "rgb-ops",
+ "strict_encoding",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "rgb-schemas"
+version = "0.11.1-rc.1"
+dependencies = [
+ "aluvm",
+ "amplify",
+ "bp-core",
+ "rgb-ops",
+ "strict_types",
 ]
 
 [[package]]
@@ -1980,12 +1980,12 @@ dependencies = [
  "once_cell",
  "psbt",
  "rand 0.8.5",
- "rgb-psbt 0.11.1-alpha.3+unreviewed",
- "rgb-psbt 0.11.1-alpha.3+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
- "rgb-runtime 0.11.1-alpha.3+unreviewed",
- "rgb-runtime 0.11.1-alpha.3+unreviewed (git+https://github.com/RGB-WG/rgb?branch=revert_fix_same_blinded_transfer)",
- "rgb-schemata",
- "rgb-std",
+ "rgb-api 0.11.1-rc.1",
+ "rgb-api 0.11.1-rc.1 (git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer)",
+ "rgb-ops",
+ "rgb-psbt-utils 0.11.1-rc.1",
+ "rgb-psbt-utils 0.11.1-rc.1 (git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer)",
+ "rgb-schemas",
  "rstest",
  "rstest_reuse",
  "serde_json",

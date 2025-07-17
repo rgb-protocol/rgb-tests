@@ -1,21 +1,12 @@
-[submodule "rgb-std"]
-	path = rgb-std
-	url = https://github.com/RGB-WG/rgb-std.git
 [submodule "client_side_validation"]
 	path = client_side_validation
 	url = https://github.com/LNP-BP/client_side_validation/
 [submodule "bp-core"]
 	path = bp-core
 	url = https://github.com/BP-WG/bp-core
-[submodule "rgb-core"]
-	path = rgb-core
-	url = https://github.com/RGB-WG/rgb-core
 [submodule "bp-std"]
 	path = bp-std
 	url = https://github.com/BP-WG/bp-std
-[submodule "rgb-schemata"]
-	path = rgb-schemata
-	url = https://github.com/RGB-WG/rgb-schemata
 [submodule "strict-types"]
 	path = strict-types
 	url = https://github.com/strict-types/strict-types
@@ -28,9 +19,6 @@
 [submodule "rust-amplify"]
 	path = rust-amplify
 	url = https://github.com/rust-amplify/rust-amplify
-[submodule "rgb"]
-	path = rgb
-	url = https://github.com/RGB-WG/rgb
 [submodule "bp-wallet"]
 	path = bp-wallet
 	url = https://github.com/BP-WG/bp-wallet
@@ -55,9 +43,21 @@
 [submodule "amplify-nonasync"]
 	path = amplify-nonasync
 	url = https://github.com/rust-amplify/amplify-nonasync.git
-[submodule "altered_submodules/rgb"]
-	path = altered_submodules/rgb
-	url = https://github.com/RGB-WG/rgb
 [submodule "aluvm"]
 	path = aluvm
 	url = https://github.com/aluvm/aluvm
+[submodule "rgb-consensus"]
+	path = rgb-consensus
+	url = https://github.com/rgb-protocol/rgb-consensus
+[submodule "rgb-ops"]
+	path = rgb-ops
+	url = https://github.com/rgb-protocol/rgb-ops
+[submodule "rgb-api"]
+	path = rgb-api
+	url = https://github.com/rgb-protocol/rgb-api
+[submodule "rgb-schemas"]
+	path = rgb-schemas
+	url = https://github.com/rgb-protocol/rgb-schemas
+[submodule "altered_submodules/rgb-api"]
+	path = altered_submodules/rgb-api
+	url = https://github.com/rgb-protocol/rgb-api

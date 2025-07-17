@@ -11,7 +11,7 @@ This repository contains tests for RGB.
 Clone the project, including submodules:
 
 ```sh
-git clone https://github.com/RGB-WG/rgb-tests --recurse-submodules
+git clone https://github.com/rgb-protocol/rgb-tests --recurse-submodules
 ```
 
 Note: after checking out to another commit, remember to run:
@@ -100,7 +100,7 @@ visualize on a browser (e.g. `firefox target/llvm-cov/html/index.html`).
 Coverage will be measured for all patched crates.
 
 The GitHub organizations of submodule repositories are:
-- https://github.com/RGB-WG
+- https://github.com/rgb-protocol
 - https://github.com/LNP-BP
 - https://github.com/BP-WG
 - https://github.com/aluvm
