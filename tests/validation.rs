@@ -1340,3 +1340,60 @@ fn validate_consignment_unmatching_transition_id() {
     );
     assert_eq!(failures[1], Failure::OperationAbsent(OpId::strict_dumb()));
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum Step {
+    Key(String),
+    Idx(usize),
+}
+
+type Path = Vec<Step>;
+
+fn get_entry_at_path_mut<'a>(root: &'a mut Value, path: &Path) -> &'a mut Value {
+    let mut curr = root;
+    for p in path {
+        match (curr, p) {
+            (Value::Object(map), Step::Key(k)) => {
+                curr = map.get_mut(k).unwrap();
+            }
+            (Value::Object(map), Step::Idx(i)) => {
+                curr = map.values_mut().nth(*i).unwrap();
+            }
+            (Value::Array(arr), Step::Idx(i)) => {
+                curr = arr.get_mut(*i).unwrap();
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+    curr
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn validate_consignment_typesystem_fail() {
+    let scenario = Scenario::B;
+    let resolver = scenario.resolver();
+    let cons_path = format!("tests/fixtures/consignment_{scenario}.json");
+    let file = std::fs::File::open(cons_path).unwrap();
+    let base_consignment: Value = serde_json::from_reader(file).unwrap();
+
+    // modified type system will be detected
+    let mut json_consignment = base_consignment.clone();
+    let path = vec![
+        Step::Key(s!("types")),
+        Step::Idx(0),
+        Step::Key(s!("List")),
+        Step::Idx(1),
+        Step::Key(s!("max")),
+    ];
+    let value_mut = get_entry_at_path_mut(&mut json_consignment, &path);
+    *value_mut = Value::Number(u32::MAX.into());
+
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+    let res = consignment.validate(&resolver, ChainNet::BitcoinRegtest, None);
+    assert!(res.is_err());
+}

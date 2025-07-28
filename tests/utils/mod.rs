@@ -150,6 +150,7 @@ pub use schemata::{
     PermissionedFungibleAsset, UniqueDigitalAsset, CFA_SCHEMA_ID, IFA_SCHEMA_ID, NIA_SCHEMA_ID,
     OS_ASSET, PFA_SCHEMA_ID, UDA_SCHEMA_ID,
 };
+pub use serde_json::Value;
 pub use serial_test::serial;
 pub use strict_encoding::{fname, tn, FieldName, StrictSerialize, TypeName};
 pub use strict_types::{SemId, StrictDumb, StrictVal, TypeSystem};
