@@ -21,29 +21,24 @@ struct MockResolver {
 }
 
 impl ResolveWitness for MockResolver {
-    fn resolve_pub_witness(&self, witness_id: Txid) -> Result<Tx, WitnessResolverError> {
-        if let Some(res) = self.pub_witnesses.get(&witness_id) {
+    fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
+        let tx = if let Some(res) = self.pub_witnesses.get(&witness_id) {
             match res {
-                MockResolvePubWitness::Success(tx) => Ok(tx.clone()),
-                MockResolvePubWitness::Error(err) => Err(err.clone()),
+                MockResolvePubWitness::Success(tx) => tx.clone(),
+                MockResolvePubWitness::Error(err) => return Err(err.clone()),
             }
         } else {
-            Err(WitnessResolverError::Unknown(witness_id))
-        }
-    }
-
-    fn resolve_pub_witness_ord(
-        &self,
-        witness_id: Txid,
-    ) -> Result<WitnessOrd, WitnessResolverError> {
-        if let Some(res) = self.pub_witness_ords.get(&witness_id) {
+            return Err(WitnessResolverError::Unknown(witness_id));
+        };
+        let ord = if let Some(res) = self.pub_witness_ords.get(&witness_id) {
             match res {
-                MockResolvePubWitnessOrd::Success(witness_ord) => Ok(*witness_ord),
-                MockResolvePubWitnessOrd::Error(err) => Err(err.clone()),
+                MockResolvePubWitnessOrd::Success(witness_ord) => *witness_ord,
+                MockResolvePubWitnessOrd::Error(err) => return Err(err.clone()),
             }
         } else {
-            Err(WitnessResolverError::Unknown(witness_id))
-        }
+            return Err(WitnessResolverError::Unknown(witness_id));
+        };
+        Ok(WitnessStatus::Resolved(tx, ord))
     }
 
     fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
@@ -437,15 +432,14 @@ fn validate_consignment_resolver_error() {
         fallback: &'a MockResolver,
     }
     impl<const TRANSFER: bool> ResolveWitness for ConsignmentResolver<'_, '_, TRANSFER> {
-        fn resolve_pub_witness(&self, witness_id: Txid) -> Result<Tx, WitnessResolverError> {
+        fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
             self.consignment
                 .pub_witness(witness_id)
                 .and_then(|p| p.tx().cloned())
-                .ok_or(WitnessResolverError::Unknown(witness_id))
-                .or_else(|_| self.fallback.resolve_pub_witness(witness_id))
-        }
-        fn resolve_pub_witness_ord(&self, _: Txid) -> Result<WitnessOrd, WitnessResolverError> {
-            Ok(WitnessOrd::Tentative)
+                .map_or_else(
+                    || self.fallback.resolve_witness(witness_id),
+                    |tx| Ok(WitnessStatus::Resolved(tx, WitnessOrd::Tentative)),
+                )
         }
         fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
             Ok(())
@@ -454,7 +448,7 @@ fn validate_consignment_resolver_error() {
 
     // resolve_pub_witness error
     let mut resolver = base_resolver.clone();
-    let resolver_error = WitnessResolverError::Other(txid, s!("unexpected error"));
+    let resolver_error = WitnessResolverError::ResolverIssue(Some(txid), s!("unexpected error"));
     *resolver.pub_witnesses.get_mut(&txid).unwrap() =
         MockResolvePubWitness::Error(resolver_error.clone());
     let consignment_resolver = ConsignmentResolver {
@@ -488,7 +482,8 @@ fn validate_consignment_resolver_error() {
 
     // resolve_pub_witness_ord error
     let mut resolver = base_resolver.clone();
-    let resolver_error = WitnessResolverError::Other(txid, s!("another unexpected error"));
+    let resolver_error =
+        WitnessResolverError::ResolverIssue(Some(txid), s!("another unexpected error"));
     *resolver.pub_witness_ords.get_mut(&txid).unwrap() =
         MockResolvePubWitnessOrd::Error(resolver_error.clone());
     let res = consignment
@@ -503,7 +498,7 @@ fn validate_consignment_resolver_error() {
     assert_eq!(validation_status.failures.len(), 1);
     assert_eq!(
         validation_status.failures[0],
-        Failure::WitnessUnresolved(bundle_id, txid, resolver_error)
+        Failure::SealNoPubWitness(bundle_id, txid, resolver_error)
     );
     assert!(validation_status.warnings.is_empty());
     assert!(validation_status.info.is_empty());

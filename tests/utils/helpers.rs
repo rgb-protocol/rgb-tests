@@ -1003,7 +1003,10 @@ impl TestWallet {
     }
 
     pub fn get_witness_ord(&self, txid: &Txid) -> WitnessOrd {
-        self.get_resolver().resolve_pub_witness_ord(*txid).unwrap()
+        self.get_resolver()
+            .resolve_witness(*txid)
+            .unwrap()
+            .witness_ord()
     }
 
     pub fn get_tx_height(&self, txid: &Txid) -> Option<u32> {
@@ -2193,19 +2196,10 @@ impl TestWallet {
         struct FasciaResolver {
             witness_id: Txid,
         }
-        impl ResolveWitness for FasciaResolver {
-            fn resolve_pub_witness(&self, _: Txid) -> Result<Tx, WitnessResolverError> {
-                unreachable!()
-            }
-            fn resolve_pub_witness_ord(
-                &self,
-                witness_id: Txid,
-            ) -> Result<WitnessOrd, WitnessResolverError> {
+        impl WitnessOrdProvider for FasciaResolver {
+            fn witness_ord(&self, witness_id: Txid) -> Result<WitnessOrd, WitnessResolverError> {
                 assert_eq!(witness_id, self.witness_id);
                 Ok(WitnessOrd::Tentative)
-            }
-            fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
-                unreachable!()
             }
         }
 
@@ -2214,14 +2208,15 @@ impl TestWallet {
         self.consume_fascia_custom_resolver(fascia, resolver);
     }
 
+    // TODO: consider renaming
     pub fn consume_fascia_custom_resolver(
         &mut self,
         fascia: Fascia,
-        resolver: impl ResolveWitness,
+        witness_provider: impl WitnessOrdProvider,
     ) {
         self.wallet
             .stock_mut()
-            .consume_fascia(fascia, resolver)
+            .consume_fascia(fascia, witness_provider)
             .unwrap();
     }
 

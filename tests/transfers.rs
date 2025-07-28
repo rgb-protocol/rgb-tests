@@ -653,15 +653,9 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     let contract_id = wlt_1.issue_with_info(asset_info, outpoints, None, None);
 
     struct LNFasciaResolver {}
-    impl ResolveWitness for LNFasciaResolver {
-        fn resolve_pub_witness(&self, _: Txid) -> Result<Tx, WitnessResolverError> {
-            unreachable!()
-        }
-        fn resolve_pub_witness_ord(&self, _: Txid) -> Result<WitnessOrd, WitnessResolverError> {
+    impl WitnessOrdProvider for LNFasciaResolver {
+        fn witness_ord(&self, _: Txid) -> Result<WitnessOrd, WitnessResolverError> {
             Ok(WitnessOrd::Ignored)
-        }
-        fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
-            unreachable!()
         }
     }
 
@@ -1074,21 +1068,17 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
         fallback: &'a AnyResolver,
     }
     impl<const TRANSFER: bool> ResolveWitness for OffchainResolver<'_, '_, TRANSFER> {
-        fn resolve_pub_witness(&self, witness_id: Txid) -> Result<Tx, WitnessResolverError> {
+        fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
+            if witness_id != self.witness_id {
+                return self.fallback.resolve_witness(witness_id);
+            }
             self.consignment
                 .pub_witness(witness_id)
                 .and_then(|p| p.tx().cloned())
-                .ok_or(WitnessResolverError::Unknown(witness_id))
-                .or_else(|_| self.fallback.resolve_pub_witness(witness_id))
-        }
-        fn resolve_pub_witness_ord(
-            &self,
-            witness_id: Txid,
-        ) -> Result<WitnessOrd, WitnessResolverError> {
-            if witness_id != self.witness_id {
-                return self.fallback.resolve_pub_witness_ord(witness_id);
-            }
-            Ok(WitnessOrd::Tentative)
+                .map_or_else(
+                    || self.fallback.resolve_witness(witness_id),
+                    |tx| Ok(WitnessStatus::Resolved(tx, WitnessOrd::Tentative)),
+                )
         }
         fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
             Ok(())
