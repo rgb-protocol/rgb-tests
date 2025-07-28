@@ -184,7 +184,7 @@ impl AssetSchema {
         }
     }
 
-    fn types(&self) -> TypeSystem {
+    pub fn types(&self) -> TypeSystem {
         match self {
             Self::Nia => NonInflatableAsset::types(),
             Self::Uda => UniqueDigitalAsset::types(),
@@ -1326,7 +1326,13 @@ impl TestWallet {
         let validate_start = Instant::now();
         let validated_consignment = consignment
             .clone()
-            .validate_with_opids(&resolver, self.chain_net(), None, trusted_op_seals)
+            .validate_with_opids(
+                &resolver,
+                self.chain_net(),
+                None,
+                AssetSchema::from(consignment.schema_id()).types(),
+                trusted_op_seals,
+            )
             .unwrap();
         let validate_duration = validate_start.elapsed();
         if let Some(report) = report {
@@ -1734,7 +1740,13 @@ impl TestWallet {
                 .collect::<BTreeSet<_>>();
             let validated_consignment = consignment
                 .clone()
-                .validate_with_opids(&self.get_resolver(), self.chain_net(), None, bset![])
+                .validate_with_opids(
+                    &self.get_resolver(),
+                    self.chain_net(),
+                    None,
+                    AssetSchema::from(consignment.schema_id()).types(),
+                    bset![],
+                )
                 .unwrap();
             assert_eq!(*validated_consignment.validated_opids(), all_opids);
         }
@@ -1817,6 +1829,7 @@ impl TestWallet {
                     &self.get_resolver(),
                     self.chain_net(),
                     None,
+                    AssetSchema::from(consignment.schema_id()).types(),
                     trusted_op_seals,
                 )
                 .unwrap();

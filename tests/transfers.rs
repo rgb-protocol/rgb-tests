@@ -1100,7 +1100,8 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
     wlt_2.mine_tx(&tx.txid(), false);
 
     // consignment validation fails because it notices an unbroadcasted TX in the history
-    let res = consignment.validate(&wlt_3.get_resolver(), wlt_3.chain_net(), None);
+    let type_system = AssetSchema::from(consignment.schema_id()).types();
+    let res = consignment.validate(&wlt_3.get_resolver(), wlt_3.chain_net(), None, type_system);
     assert!(res.is_err());
     let validation_status = match res {
         Ok(validated_consignment) => validated_consignment.validation_status().clone(),
@@ -3145,12 +3146,14 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
             wlt_2.mine_tx(&tx_2.txid(), false);
             // receiver checks if it's safe to receive allocations
             let safe_height = height_pre_transfer; // min 1 confirmation
+            let type_system = AssetSchema::from(consignment.schema_id()).types();
             let validated_consignment = consignment
                 .clone()
                 .validate(
                     &wlt_1.get_resolver(),
                     wlt_1.chain_net(),
                     Some(NonZeroU32::new(safe_height).unwrap()),
+                    type_system,
                 )
                 .unwrap();
             let validation_status = validated_consignment.clone().into_validation_status();
