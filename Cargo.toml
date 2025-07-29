@@ -26,6 +26,7 @@ serial_test = "3.2.0"
 strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 time = "0.3.34"
+url = "=2.5.2" # temporary pin for rustc 1.81.0
 
 # RGB-related deps
 ## bp-core
