@@ -2145,7 +2145,11 @@ fn validate_consignment_ifa() {
     let failures = res.unwrap_err().failures;
     assert_eq!(
         failures,
-        vec![Failure::ScriptFailure(child_opid, Some(0), None)]
+        vec![Failure::ScriptFailure(
+            child_opid,
+            Some(ERRNO_REPLACE_HIDDEN_BURN),
+            None
+        )]
     );
 
     // Error: replace rights cannot be created from thin air
@@ -2191,7 +2195,14 @@ fn validate_consignment_ifa() {
         trusted_typesystem.clone(),
     );
     let failures = res.unwrap_err().failures;
-    assert_eq!(failures, vec![Failure::ScriptFailure(opid, Some(0), None)]);
+    assert_eq!(
+        failures,
+        vec![Failure::ScriptFailure(
+            opid,
+            Some(ERRNO_REPLACE_NO_INPUT),
+            None
+        )]
+    );
 
     // Error: replace rights cannot be burned via transfer operation (1 in, 0 out)
     let mut consignment = base_consignment.clone();
@@ -2224,7 +2235,14 @@ fn validate_consignment_ifa() {
         trusted_typesystem.clone(),
     );
     let failures = res.unwrap_err().failures;
-    assert_eq!(failures, vec![Failure::ScriptFailure(opid, Some(0), None)]);
+    assert_eq!(
+        failures,
+        vec![Failure::ScriptFailure(
+            opid,
+            Some(ERRNO_REPLACE_HIDDEN_BURN),
+            None
+        )]
+    );
 
     // Error: zero-amount allocations are not allowed for fungible assignment types
     for assignment_type in [OS_ASSET, OS_INFLATION] {
@@ -2368,7 +2386,7 @@ fn validate_consignment_ifa() {
             found: 0,
         };
         let errno = match input.ty {
-            OS_REPLACE => 0,
+            OS_REPLACE => ERRNO_REPLACE_NO_INPUT,
             _ => ERRNO_NON_EQUAL_IN_OUT,
         };
         assert_eq!(
@@ -2449,7 +2467,7 @@ fn validate_consignment_ifa() {
         };
         let errno = match assignment_type {
             OS_ASSET => ERRNO_NON_EQUAL_IN_OUT,
-            OS_REPLACE => 0,
+            OS_REPLACE => ERRNO_REPLACE_HIDDEN_BURN,
             _ => unreachable!(),
         };
         assert_eq!(
