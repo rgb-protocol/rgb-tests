@@ -205,7 +205,7 @@ fn issue_ifa(wallet_desc: DescriptorType) {
     let details = Some("some details");
     let terms_text = "Ricardian contract";
     let terms_media_fpath = Some(MEDIA_FPATH);
-    let opid_reject_url = Some(OPID_REJECT_URL);
+    let reject_list_url = Some(REJECT_LIST_URL);
     let replace_outpoints = vec![wallet.get_utxo(None), wallet.get_utxo(None)];
     let inflation_info = vec![(wallet.get_utxo(None), 7), (wallet.get_utxo(None), 9)];
     let inflation_supply: u64 = inflation_info.iter().map(|(_, amt)| amt).sum();
@@ -216,7 +216,7 @@ fn issue_ifa(wallet_desc: DescriptorType) {
         details,
         terms_text,
         terms_media_fpath,
-        opid_reject_url,
+        reject_list_url,
         vec![issued_supply],
         replace_outpoints.clone(),
         inflation_info.clone(),
@@ -237,8 +237,8 @@ fn issue_ifa(wallet_desc: DescriptorType) {
         "02d2cc5d7883885bb7472e4fe96a07344b1d7cf794cb06943e1cdb5c57754d8a"
     );
     assert_eq!(
-        contract.opid_reject_url().map(|d| d.to_string()),
-        opid_reject_url.map(|d| d.to_string())
+        contract.reject_list_url().map(|d| d.to_string()),
+        reject_list_url.map(|d| d.to_string())
     );
     assert_eq!(contract.total_issued_supply().value(), issued_supply);
     assert_eq!(
@@ -480,7 +480,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
         }
         AssetSchema::Ifa => (
             AssetInfo::default_ifa(vec![999], vec![], vec![]),
-            "rgb:~YEAwTub-vAppDOs-K2EvGv_-aAQOiiU-KrJboWJ-YJguMvs",
+            "rgb:wMfBpCp7-KkSr4lx-qXqtAcO-vb7hwzU-LIP8yts-15AiqDE",
         ),
     };
 

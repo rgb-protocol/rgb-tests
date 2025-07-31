@@ -17,7 +17,7 @@ pub const FAKE_TXID: &str = "e5a3e577309df31bd606f48049049d2e1e02b048206ba232944
 pub const UDA_FIXED_INDEX: u32 = 0;
 pub const DEFAULT_FEE_ABS: u64 = 400;
 pub const MEDIA_FPATH: &str = "tests/fixtures/rgb_logo.jpeg";
-pub const OPID_REJECT_URL: &str = "example.xyz/opidReject";
+pub const REJECT_LIST_URL: &str = "example.xyz/rejectList";
 
 pub const INSTANCE_1: u8 = 1;
 pub const INSTANCE_2: u8 = 2;
@@ -95,7 +95,7 @@ pub use rgb::{
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::{rgb_contract_stl, ContractTerms, OpidRejectUrl, StandardTypes},
+    stl::{rgb_contract_stl, ContractTerms, RejectListUrl, StandardTypes},
     validation::{
         DbcProof, Failure, ResolveWitness, Scripts, Validator, Validity, Warning,
         WitnessOrdProvider, WitnessResolverError, WitnessStatus,
@@ -115,7 +115,7 @@ pub use rgb_altered::{
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::{rgb_contract_stl, ContractTerms, OpidRejectUrl, StandardTypes},
+    stl::{rgb_contract_stl, ContractTerms, RejectListUrl, StandardTypes},
     validation::{
         DbcProof, Failure, ResolveWitness, Scripts, Validator, Validity, Warning,
         WitnessResolverError, WitnessStatus,

@@ -345,7 +345,7 @@ pub enum AssetInfo {
     Ifa {
         spec: AssetSpec,
         terms: ContractTerms,
-        opid_reject_url: Option<OpidRejectUrl>,
+        reject_list_url: Option<RejectListUrl>,
         issue_amounts: Vec<u64>,
         replace_outpoints: Vec<Outpoint>,
         inflation_info: Vec<(Outpoint, u64)>,
@@ -416,7 +416,7 @@ impl AssetInfo {
             None,
             "IFA terms",
             None,
-            Some(OPID_REJECT_URL),
+            Some(REJECT_LIST_URL),
             issue_amounts,
             replace_outpoints,
             inflation_info,
@@ -548,7 +548,7 @@ impl AssetInfo {
         details: Option<&str>,
         terms_text: &str,
         terms_media_fpath: Option<&str>,
-        opid_reject_url: Option<&str>,
+        reject_list_url: Option<&str>,
         issue_amounts: Vec<u64>,
         replace_outpoints: Vec<Outpoint>,
         inflation_info: Vec<(Outpoint, u64)>,
@@ -569,8 +569,8 @@ impl AssetInfo {
         Self::Ifa {
             spec,
             terms,
-            opid_reject_url: opid_reject_url
-                .map(|u| OpidRejectUrl::try_from(u.to_owned()).unwrap()),
+            reject_list_url: reject_list_url
+                .map(|u| RejectListUrl::try_from(u.to_owned()).unwrap()),
             issue_amounts,
             replace_outpoints,
             inflation_info,
@@ -651,7 +651,7 @@ impl AssetInfo {
                 spec,
                 terms,
                 issue_amounts,
-                opid_reject_url,
+                reject_list_url,
                 inflation_info,
                 ..
             } => {
@@ -667,9 +667,9 @@ impl AssetInfo {
                     .unwrap()
                     .add_global_state("maxSupply", issue_amount + inflation_amount)
                     .unwrap();
-                if let Some(opid_reject_url) = opid_reject_url {
+                if let Some(reject_list_url) = reject_list_url {
                     builder = builder
-                        .add_global_state("opidRejectUrl", opid_reject_url.clone())
+                        .add_global_state("rejectListUrl", reject_list_url.clone())
                         .unwrap()
                 }
                 builder

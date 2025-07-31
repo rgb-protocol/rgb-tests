@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "inputs": [
+    {
+      "prevOutput": "1bb2136f4026d695c61a01a74153a7feb9f1d90800107ac6a6c8cae4f5a58799:1",
+      "sigScript": "",
+      "sequence": 0,
+      "witness": [
+        "3045022100cedb1feca992bece7dcfadd41a7884489b84f460ae677e2aaac27231e5d8387702203be658b21d08fefe0426b2f76a6f9759c76d3095b6e2b028bb8e2cac866712db01",
+        "024f0d9d542231a14405f3ecf9b7244bd9596e491f63202c6579edc8209c2fe50c"
+      ]
+    },
+    {
+      "prevOutput": "1bb2136f4026d695c61a01a74153a7feb9f1d90800107ac6a6c8cae4f5a58799:2",
+      "sigScript": "",
+      "sequence": 0,
+      "witness": [
+        "304402203f96faa8adfbf35bc3dbe72a35d70d7ffe50be42706935b1da00638c989c923002205638b4930404bd48eb41634d1adc7b69b7ebb0cbc6a3c42a1269f22a80fa752601",
+        "039442c0b4a4ad51202788110a42a254907a3b9612c736344894ccad9fc86fd1cc"
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "value": 7600,
+      "scriptPubkey": "001488e1fa5391d0c8f69188718bed2eedc60a340cbf"
+    },
+    {
+      "value": 99981800,
+      "scriptPubkey": "001464f2981ce9c16cf2bb5414090869143d053b5b00"
+    },
+    {
+      "value": 0,
+      "scriptPubkey": "6a205a035736370ee0c887ffd79957ff22ccfb2a1774e45fa2cae707456056b0cc48"
+    }
+  ],
+  "lockTime": 0
+}
