@@ -61,7 +61,7 @@ pub use bp::{
     seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
     secp256k1::{Message, Secp256k1, SecretKey},
     CompressedPk, ConsensusDecode, InternalPk, LockTime, Outpoint, Sats, ScriptPubkey, SeqNo, Tx,
-    Txid, Vout,
+    TxVer, Txid, Vout,
 };
 pub use bpstd::{
     h, signers::TestnetSigner, Address, DerivationPath, DerivationSeg, Derive, DerivedAddr,
