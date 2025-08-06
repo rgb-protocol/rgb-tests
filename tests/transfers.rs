@@ -2800,6 +2800,95 @@ fn transition_spending_uncommitted_opout() {
 
 #[cfg(not(feature = "altered"))]
 #[rstest]
+fn multiasset_transfer() {
+    initialize();
+
+    let wlt_desc = DescriptorType::Tr;
+    let mut wlt_1 = get_wallet(&wlt_desc);
+    let mut wlt_2 = get_wallet(&wlt_desc);
+
+    let utxo = wlt_1.get_utxo(None);
+
+    let amt_1 = 200;
+    let contract_id_1 = wlt_1.issue_nia(amt_1, Some(&utxo));
+
+    let amt_2 = 100;
+    let contract_id_2 = wlt_1.issue_nia(amt_2, Some(&utxo));
+
+    let amt_chg = 50;
+    let coloring_info = ColoringInfo {
+        asset_info_map: HashMap::from([
+            (
+                contract_id_1,
+                AssetColoringInfo {
+                    input_outpoints: vec![utxo],
+                    assignments: vec![AssetAssignment {
+                        destination: wlt_2.get_secret_seal(None, None).into(),
+                        amount: amt_1 - amt_chg,
+                    }],
+                },
+            ),
+            (
+                contract_id_2,
+                AssetColoringInfo {
+                    input_outpoints: vec![utxo],
+                    assignments: vec![AssetAssignment {
+                        destination: wlt_2.get_secret_seal(None, None).into(),
+                        amount: amt_2 - amt_chg,
+                    }],
+                },
+            ),
+        ]),
+        static_blinding: None,
+        nonce: None,
+        close_method: wlt_1.close_method(),
+    };
+    let (consignments, tx, _, tweak_info) = wlt_1.pay_full_flexible(coloring_info, None, None);
+    wlt_1.mine_tx(&tx.txid(), false);
+    for consignment in consignments.into_values() {
+        wlt_2.accept_transfer(consignment.clone(), None);
+    }
+    if let Some((witness_info, tapret_commitment)) = tweak_info {
+        wlt_2.add_tapret_tweak(witness_info.terminal(), tapret_commitment);
+    }
+    wlt_2.sync();
+    wlt_1.sync();
+
+    wlt_1.check_allocations(contract_id_1, AssetSchema::Nia, vec![amt_chg], false);
+    wlt_1.check_allocations(contract_id_2, AssetSchema::Nia, vec![amt_chg], false);
+
+    wlt_2.check_allocations(
+        contract_id_1,
+        AssetSchema::Nia,
+        vec![amt_1 - amt_chg],
+        false,
+    );
+    wlt_2.check_allocations(
+        contract_id_2,
+        AssetSchema::Nia,
+        vec![amt_2 - amt_chg],
+        false,
+    );
+    wlt_2.send(
+        &mut wlt_1,
+        TransferType::Blinded,
+        contract_id_1,
+        amt_1 - amt_chg - 1,
+        0,
+        None,
+    );
+    wlt_2.send(
+        &mut wlt_1,
+        TransferType::Blinded,
+        contract_id_2,
+        amt_2 - amt_chg - 1,
+        0,
+        None,
+    );
+}
+
+#[cfg(not(feature = "altered"))]
+#[rstest]
 #[case(HistoryType::Linear, ReorgType::ChangeOrder)]
 #[case(HistoryType::Linear, ReorgType::Revert)]
 #[case(HistoryType::Branching, ReorgType::ChangeOrder)]
