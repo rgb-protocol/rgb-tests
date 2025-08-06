@@ -51,13 +51,16 @@ pub use amplify::{
     },
     map, none,
     num::u24,
-    s, ByteArray, Bytes64, Wrapper,
+    s, ByteArray, Bytes64, From, Wrapper,
 };
 use bitcoin_hashes::{sha256, Hash};
 pub use bp::{
+    dbc::tapret::{TapretCommitment, TapretProof},
+    seals::txout::TxPtr,
     seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
     secp256k1::{Message, Secp256k1, SecretKey},
-    CompressedPk, ConsensusDecode, LockTime, Outpoint, Sats, ScriptPubkey, SeqNo, Tx, Txid, Vout,
+    CompressedPk, ConsensusDecode, InternalPk, LockTime, Outpoint, Sats, ScriptPubkey, SeqNo, Tx,
+    Txid, Vout,
 };
 pub use bpstd::{
     h, signers::TestnetSigner, Address, DerivationPath, DerivationSeg, Derive, DerivedAddr,

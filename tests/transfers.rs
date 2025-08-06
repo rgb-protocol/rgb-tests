@@ -660,57 +660,87 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     }
 
     println!("\n1. fake commitment TX (no HTLCs)");
+    let witness_info_0 = wlt_2.get_witness_info(Some(2000), None);
+    let witness_info_1 = wlt_1.get_witness_info(None, None);
     let beneficiaries = vec![
-        (wlt_2.get_address(), Some(2000)),
-        (wlt_1.get_address(), None),
+        (witness_info_0.address(), witness_info_0.amount_sats),
+        (witness_info_1.address(), witness_info_1.amount_sats),
     ];
-    let (mut psbt, _meta) = wlt_1.construct_psbt(vec![utxo_1], beneficiaries, None);
+    let (mut psbt, mut meta) = wlt_1.construct_psbt(vec![utxo_1], beneficiaries, None);
     let coloring_info = ColoringInfo {
         asset_info_map: HashMap::from([(
             contract_id,
             AssetColoringInfo {
                 input_outpoints: vec![utxo_1],
-                output_map: HashMap::from([(0, 100), (1, 500)]),
-                static_blinding: Some(666),
+                assignments: vec![
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_0.clone()),
+                        amount: 100,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_1.clone()),
+                        amount: 500,
+                    },
+                ],
             },
         )]),
         static_blinding: Some(666),
         nonce: Some(u64::MAX - 1),
+        close_method: CloseMethod::OpretFirst,
     };
-    let (fascia, _asset_beneficiaries) = wlt_1.color_psbt(&mut psbt, coloring_info.clone());
+    let (fascia, _asset_beneficiaries, _, _) =
+        wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info.clone(), None);
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
     let txid_same_bundle_1 = psbt.txid();
+    let witness_info_0_same_bundle = witness_info_0;
+    let witness_info_1_same_bundle = witness_info_1;
     let coloring_info_same_bundle = coloring_info;
 
     let htlc_vout = 2;
     let htlc_rgb_amt = 200;
     let htlc_btc_amt = 4000;
-    let htlc_derived_addr = wlt_1.get_derived_address(true);
+    let htlc_witness_info = wlt_1.get_witness_info(Some(htlc_btc_amt), None);
 
     // no problem: since there's no htlc for this commitment
     wlt_1.sync_and_update_witnesses(Some(pre_funding_height));
 
     println!("\n2. fake commitment TX (1 HTLC)");
+    let witness_info_0 = wlt_2.get_witness_info(Some(2000), None);
+    let witness_info_1 = wlt_1.get_witness_info(None, None);
     let beneficiaries = vec![
-        (wlt_2.get_address(), Some(2000)),
-        (wlt_1.get_address(), None),
-        (htlc_derived_addr.addr, Some(htlc_btc_amt)),
+        (witness_info_0.address(), witness_info_0.amount_sats),
+        (witness_info_1.address(), witness_info_1.amount_sats),
+        (htlc_witness_info.address(), htlc_witness_info.amount_sats),
     ];
-    let (mut psbt, _meta) = wlt_1.construct_psbt(vec![utxo_1], beneficiaries, None);
+    let (mut psbt, mut meta) = wlt_1.construct_psbt(vec![utxo_1], beneficiaries, None);
     let coloring_info = ColoringInfo {
         asset_info_map: HashMap::from([(
             contract_id,
             AssetColoringInfo {
                 input_outpoints: vec![utxo_1],
-                output_map: HashMap::from([(0, 100), (1, 300), (htlc_vout, htlc_rgb_amt)]),
-                static_blinding: Some(666),
+                assignments: vec![
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_0),
+                        amount: 100,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_1),
+                        amount: 300,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(htlc_witness_info.clone()),
+                        amount: htlc_rgb_amt,
+                    },
+                ],
             },
         )]),
         static_blinding: Some(666),
         nonce: Some(u64::MAX - 1),
+        close_method: CloseMethod::OpretFirst,
     };
-    let (fascia, _asset_beneficiaries) = wlt_1.color_psbt(&mut psbt, coloring_info);
+    let (fascia, _asset_beneficiaries, _, _) =
+        wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info, None);
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
 
@@ -721,13 +751,14 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     println!("\n3. fake HTLC TX");
     let txid = fascia.witness_id();
     let input_outpoint = Outpoint::new(txid, htlc_vout);
-    let beneficiaries = vec![(wlt_1.get_address(), None)];
-    let (mut psbt, _meta) = wlt_1.construct_psbt_offchain(
+    let witness_info_0 = wlt_1.get_witness_info(None, None);
+    let beneficiaries = vec![(witness_info_0.address(), witness_info_0.amount_sats)];
+    let (mut psbt, mut meta) = wlt_1.construct_psbt_offchain(
         vec![(
             input_outpoint,
             htlc_btc_amt,
-            htlc_derived_addr.terminal,
-            htlc_derived_addr.addr.script_pubkey(),
+            htlc_witness_info.terminal(),
+            htlc_witness_info.script_pubkey(),
         )],
         beneficiaries,
         None,
@@ -737,25 +768,30 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
             contract_id,
             AssetColoringInfo {
                 input_outpoints: vec![input_outpoint],
-                output_map: HashMap::from([(0, htlc_rgb_amt)]),
-                static_blinding: Some(666),
+                assignments: vec![AssetAssignment {
+                    destination: AssetDestination::Witness(witness_info_0),
+                    amount: htlc_rgb_amt,
+                }],
             },
         )]),
         static_blinding: Some(666),
         nonce: Some(u64::MAX),
+        close_method: CloseMethod::OpretFirst,
     };
-    let (fascia, _asset_beneficiaries) = wlt_1.color_psbt(&mut psbt, coloring_info);
+    let (fascia, _asset_beneficiaries, _, _) =
+        wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info, None);
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
 
     println!("\n4. fake commitment TX (no HTLCs)");
     let beneficiaries = vec![
-        (wlt_2.get_address(), Some(3000)),
-        (wlt_1.get_address(), None),
+        (witness_info_0_same_bundle.address(), Some(3001)),
+        (witness_info_1_same_bundle.address(), None),
     ];
-    let (mut psbt, _meta) = wlt_1.construct_psbt(vec![utxo_1], beneficiaries, None);
+    let (mut psbt, mut meta) = wlt_1.construct_psbt(vec![utxo_1], beneficiaries, None);
     let coloring_info = coloring_info_same_bundle;
-    let (mut fascia, _asset_beneficiaries) = wlt_1.color_psbt(&mut psbt, coloring_info);
+    let (mut fascia, _asset_beneficiaries, _, _) =
+        wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info, None);
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
     let mut txid_same_bundle_2 = psbt.txid();
     let mut offset = 0;
@@ -772,25 +808,41 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
 
     println!("\n5. fake commitment TX (1 HTLC)");
     let htlc_rgb_amt = 180;
+    let witness_info_0 = wlt_2.get_witness_info(Some(2000), None);
+    let witness_info_1 = wlt_1.get_witness_info(None, None);
     let beneficiaries = vec![
-        (wlt_2.get_address(), Some(2000)),
-        (wlt_1.get_address(), None),
-        (htlc_derived_addr.addr, Some(htlc_btc_amt)),
+        (witness_info_0.address(), witness_info_0.amount_sats),
+        (witness_info_1.address(), witness_info_1.amount_sats),
+        (htlc_witness_info.address(), htlc_witness_info.amount_sats),
     ];
-    let (mut psbt, _meta) = wlt_1.construct_psbt(vec![utxo_1], beneficiaries, None);
+    let (mut psbt, mut meta) = wlt_1.construct_psbt(vec![utxo_1], beneficiaries, None);
     let coloring_info = ColoringInfo {
         asset_info_map: HashMap::from([(
             contract_id,
             AssetColoringInfo {
                 input_outpoints: vec![utxo_1],
-                output_map: HashMap::from([(0, 122), (1, 298), (htlc_vout, htlc_rgb_amt)]),
-                static_blinding: Some(666),
+                assignments: vec![
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_0),
+                        amount: 122,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_1),
+                        amount: 298,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(htlc_witness_info.clone()),
+                        amount: htlc_rgb_amt,
+                    },
+                ],
             },
         )]),
         static_blinding: Some(666),
         nonce: Some(u64::MAX - 1),
+        close_method: CloseMethod::OpretFirst,
     };
-    let (fascia, _asset_beneficiaries) = wlt_1.color_psbt(&mut psbt, coloring_info.clone());
+    let (fascia, _asset_beneficiaries, _, _) =
+        wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info.clone(), None);
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
 
@@ -801,13 +853,14 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     println!("\n6. fake HTLC TX");
     let txid = fascia.witness_id();
     let input_outpoint = Outpoint::new(txid, htlc_vout);
-    let beneficiaries = vec![(wlt_1.get_address(), None)];
-    let (mut psbt, _meta) = wlt_1.construct_psbt_offchain(
+    let witness_info_0 = wlt_1.get_witness_info(None, None);
+    let beneficiaries = vec![(witness_info_0.address(), witness_info_0.amount_sats)];
+    let (mut psbt, mut meta) = wlt_1.construct_psbt_offchain(
         vec![(
             input_outpoint,
             htlc_btc_amt,
-            htlc_derived_addr.terminal,
-            htlc_derived_addr.addr.script_pubkey(),
+            htlc_witness_info.terminal(),
+            htlc_witness_info.script_pubkey(),
         )],
         beneficiaries,
         None,
@@ -817,14 +870,18 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
             contract_id,
             AssetColoringInfo {
                 input_outpoints: vec![input_outpoint],
-                output_map: HashMap::from([(0, htlc_rgb_amt)]),
-                static_blinding: Some(666),
+                assignments: vec![AssetAssignment {
+                    destination: AssetDestination::Witness(witness_info_0),
+                    amount: htlc_rgb_amt,
+                }],
             },
         )]),
         static_blinding: Some(666),
         nonce: Some(u64::MAX),
+        close_method: CloseMethod::OpretFirst,
     };
-    let (fascia, _asset_beneficiaries) = wlt_1.color_psbt(&mut psbt, coloring_info);
+    let (fascia, _asset_beneficiaries, _, _) =
+        wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info, None);
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
 
@@ -833,25 +890,41 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
 
     println!("\n7. fake commitment TX (1 HTLC) on 2nd channel");
     let htlc_rgb_amt_2nd_chan = 10;
+    let witness_info_0 = wlt_2.get_witness_info(Some(2000), None);
+    let witness_info_1 = wlt_1.get_witness_info(None, None);
     let beneficiaries = vec![
-        (wlt_2.get_address(), Some(2000)),
-        (wlt_1.get_address(), None),
-        (htlc_derived_addr.addr, Some(htlc_btc_amt)),
+        (witness_info_0.address(), witness_info_0.amount_sats),
+        (witness_info_1.address(), witness_info_1.amount_sats),
+        (htlc_witness_info.address(), htlc_witness_info.amount_sats),
     ];
-    let (mut psbt, _meta) = wlt_1.construct_psbt(vec![utxo_2], beneficiaries, None);
+    let (mut psbt, mut meta) = wlt_1.construct_psbt(vec![utxo_2], beneficiaries, None);
     let coloring_info = ColoringInfo {
         asset_info_map: HashMap::from([(
             contract_id,
             AssetColoringInfo {
                 input_outpoints: vec![utxo_2],
-                output_map: HashMap::from([(0, 20), (1, 270), (htlc_vout, htlc_rgb_amt_2nd_chan)]),
-                static_blinding: Some(666),
+                assignments: vec![
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_0),
+                        amount: 20,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_1),
+                        amount: 270,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(htlc_witness_info.clone()),
+                        amount: htlc_rgb_amt_2nd_chan,
+                    },
+                ],
             },
         )]),
         static_blinding: Some(666),
         nonce: Some(u64::MAX - 1),
+        close_method: CloseMethod::OpretFirst,
     };
-    let (fascia, _asset_beneficiaries) = wlt_1.color_psbt(&mut psbt, coloring_info);
+    let (fascia, _asset_beneficiaries, _, _) =
+        wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info, None);
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
 
@@ -875,13 +948,14 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     println!("\n9. fake HTLC TX on 2nd channel");
     let txid = fascia.witness_id();
     let input_outpoint = Outpoint::new(txid, htlc_vout);
-    let beneficiaries = vec![(wlt_1.get_address(), None)];
-    let (mut psbt, _meta) = wlt_1.construct_psbt_offchain(
+    let witness_info_0 = wlt_1.get_witness_info(None, None);
+    let beneficiaries = vec![(witness_info_0.address(), witness_info_0.amount_sats)];
+    let (mut psbt, mut meta) = wlt_1.construct_psbt_offchain(
         vec![(
             input_outpoint,
             htlc_btc_amt,
-            htlc_derived_addr.terminal,
-            htlc_derived_addr.addr.script_pubkey(),
+            htlc_witness_info.terminal(),
+            htlc_witness_info.script_pubkey(),
         )],
         beneficiaries,
         None,
@@ -891,14 +965,18 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
             contract_id,
             AssetColoringInfo {
                 input_outpoints: vec![input_outpoint],
-                output_map: HashMap::from([(0, htlc_rgb_amt_2nd_chan)]),
-                static_blinding: Some(666),
+                assignments: vec![AssetAssignment {
+                    destination: AssetDestination::Witness(witness_info_0),
+                    amount: htlc_rgb_amt_2nd_chan,
+                }],
             },
         )]),
         static_blinding: Some(666),
         nonce: Some(u64::MAX),
+        close_method: CloseMethod::OpretFirst,
     };
-    let (fascia, _asset_beneficiaries) = wlt_1.color_psbt(&mut psbt, coloring_info);
+    let (fascia, _asset_beneficiaries, _, _) =
+        wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info, None);
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
 }
@@ -973,9 +1051,10 @@ fn collaborative_transfer() {
     wlt_1.psbt_add_input(&mut psbt, utxo_1);
     wlt_2.psbt_add_input(&mut psbt, utxo_2);
 
+    let witness_info = wlt_3.get_witness_info(Some(sats - 2 * DEFAULT_FEE_ABS), None);
     psbt.construct_output_expect(
-        wlt_3.get_address().script_pubkey(),
-        Sats::from_sats(sats - 2 * DEFAULT_FEE_ABS),
+        witness_info.script_pubkey(),
+        Sats::from_sats(witness_info.amount_sats.unwrap()),
     );
 
     let coloring_info_1 = ColoringInfo {
@@ -983,28 +1062,40 @@ fn collaborative_transfer() {
             contract_id,
             AssetColoringInfo {
                 input_outpoints: vec![utxo_1],
-                output_map: HashMap::from([(0, 400)]),
-                static_blinding: None,
+                assignments: vec![AssetAssignment {
+                    destination: AssetDestination::Witness(witness_info.clone()),
+                    amount: 400,
+                }],
             },
         )]),
         static_blinding: None,
         nonce: None,
+        close_method: CloseMethod::OpretFirst,
     };
     let coloring_info_2 = ColoringInfo {
         asset_info_map: HashMap::from([(
             contract_id,
             AssetColoringInfo {
                 input_outpoints: vec![utxo_2],
-                output_map: HashMap::from([(0, 200)]),
-                static_blinding: None,
+                assignments: vec![AssetAssignment {
+                    destination: AssetDestination::Witness(witness_info),
+                    amount: 200,
+                }],
             },
         )]),
         static_blinding: None,
         nonce: None,
+        close_method: CloseMethod::OpretFirst,
     };
-    let beneficiaries_1 = wlt_1.color_psbt_init(&mut psbt, coloring_info_1);
+    let mut meta = PsbtMeta {
+        change_vout: None,
+        change_terminal: None,
+    };
+    let (beneficiaries_1, _, _) =
+        wlt_1.color_psbt_init(&mut psbt, &mut meta, coloring_info_1, None);
 
-    let (fascia, beneficiaries_2) = wlt_2.color_psbt(&mut psbt, coloring_info_2);
+    let (fascia, beneficiaries_2, _, _) =
+        wlt_2.color_psbt(&mut psbt, &mut meta, coloring_info_2, None);
 
     wlt_1.sign_finalize(&mut psbt);
     let tx = wlt_2.sign_finalize_extract(&mut psbt);
@@ -1017,8 +1108,10 @@ fn collaborative_transfer() {
     let consignments_2 = wlt_2.create_consignments(beneficiaries_2, tx.txid());
 
     println!("Send the whole asset amount back to wlt_1 to check new allocations are spendable");
-    for consignment in vec![consignments_1, consignments_2].into_iter().flatten() {
-        wlt_3.accept_transfer(consignment, None);
+    for consignments in [consignments_1, consignments_2] {
+        for consignment in consignments.into_values() {
+            wlt_3.accept_transfer(consignment, None);
+        }
     }
     wlt_3.send(
         &mut wlt_1,
@@ -2119,7 +2212,11 @@ fn concealed_known_transition() {
 
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
-    let consignment = wlt_1.create_consignments(beneficiaries, witness_id)[0].clone();
+    let consignment = wlt_1
+        .create_consignments(beneficiaries, witness_id)
+        .into_values()
+        .next()
+        .unwrap();
 
     // ensure the consignment contains the bundle with missing transition
     let bundle = consignment
@@ -2197,7 +2294,11 @@ fn remove_scripts_code() {
 
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
-    let mut consignment = wlt_1.create_consignments(beneficiaries, witness_id)[0].clone();
+    let mut consignment = wlt_1
+        .create_consignments(beneficiaries, witness_id)
+        .into_values()
+        .next()
+        .unwrap();
     let mut scripts = consignment.scripts.clone().release();
     let mut lib = scripts.pop_last().unwrap().clone();
     lib.code = none!();
@@ -2353,7 +2454,11 @@ fn accept_bundle_missing_transitions() {
 
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1, seal_2]);
-    let consignment = wlt_1.create_consignments(beneficiaries, witness_id)[0].clone();
+    let consignment = wlt_1
+        .create_consignments(beneficiaries, witness_id)
+        .into_values()
+        .next()
+        .unwrap();
 
     // wlt_2 accepts consignment with transition to wlt_3 concealed
     let mut consignment_1 = consignment.clone();
@@ -2536,7 +2641,7 @@ fn unordered_transitions_within_bundle() {
     wlt_2.sync();
 
     let consignments = wlt_1.create_consignments(beneficiaries, witness_id);
-    for consignment in consignments {
+    for (_, consignment) in consignments {
         wlt_2.accept_transfer(consignment, None);
     }
 
@@ -2688,7 +2793,7 @@ fn transition_spending_uncommitted_opout() {
     wlt_2.sync();
 
     let consignments = wlt_1.create_consignments(beneficiaries, witness_id);
-    for consignment in consignments {
+    for (_, consignment) in consignments {
         wlt_3.accept_transfer(consignment, None);
     }
 }

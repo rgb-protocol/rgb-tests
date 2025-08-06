@@ -123,15 +123,73 @@ impl From<TransferType> for InvoiceType {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct WitnessInfo {
+    pub derived_address: DerivedAddr,
+    pub tap_internal_key: Option<InternalPk>,
+    pub amount_sats: Option<u64>,
+}
+
+impl WitnessInfo {
+    pub fn btc_beneficiary(&self) -> (Address, Option<u64>) {
+        (self.address(), self.amount_sats)
+    }
+
+    pub fn address(&self) -> Address {
+        self.derived_address.addr
+    }
+
+    pub fn script_pubkey(&self) -> ScriptPubkey {
+        self.address().script_pubkey()
+    }
+
+    pub fn terminal(&self) -> Terminal {
+        self.derived_address.terminal
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, From)]
+pub enum AssetDestination {
+    #[from]
+    Blinded(SecretSeal),
+    #[from]
+    Witness(WitnessInfo),
+}
+
+impl AssetDestination {
+    fn define_seal(
+        &self,
+        vout: Option<u32>,
+        static_blinding: Option<u64>,
+    ) -> BuilderSeal<BlindSeal<TxPtr>> {
+        match self {
+            AssetDestination::Blinded(secret_seal) => BuilderSeal::Concealed(*secret_seal),
+            AssetDestination::Witness(_witness_info) => {
+                let vout = vout.expect("must be provided in this case");
+                let graph_seal = if let Some(blinding) = static_blinding {
+                    GraphSeal::with_blinded_vout(vout, blinding)
+                } else {
+                    GraphSeal::new_random_vout(vout)
+                };
+                BuilderSeal::Revealed(graph_seal)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AssetAssignment {
+    pub destination: AssetDestination,
+    pub amount: u64,
+}
+
 /// RGB asset-specific information to color a transaction
 #[derive(Clone, Debug)]
 pub struct AssetColoringInfo {
     /// Input outpoints of the assets being spent
     pub input_outpoints: Vec<Outpoint>,
-    /// Map of vouts and asset amounts to color the transaction outputs
-    pub output_map: HashMap<u32, u64>,
-    /// Static blinding to keep the transaction construction deterministic
-    pub static_blinding: Option<u64>,
+    /// Information to construct RGB assignments
+    pub assignments: Vec<AssetAssignment>,
 }
 
 /// RGB information to color a transaction
@@ -143,10 +201,36 @@ pub struct ColoringInfo {
     pub static_blinding: Option<u64>,
     /// Nonce for offchain TXs ordering
     pub nonce: Option<u64>,
+    /// Close method to use for the transaction
+    pub close_method: CloseMethod,
+}
+
+impl ColoringInfo {
+    pub fn first_tweakable_beneficiary(&self) -> Option<WitnessInfo> {
+        // this assumes PSBT outputs have been added with the same order of the ColoringInfo one
+        for asset_coloring_info in self.asset_info_map.values() {
+            for asset_assignment in &asset_coloring_info.assignments {
+                if let AssetDestination::Witness(ref witness_info) = asset_assignment.destination {
+                    if witness_info.tap_internal_key.is_some()
+                        && witness_info.script_pubkey().is_p2tr()
+                    {
+                        return Some(witness_info.clone());
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 /// Map of contract ID and list of its beneficiaries
 pub type AssetBeneficiariesMap = BTreeMap<ContractId, Vec<BuilderSeal<GraphSeal>>>;
+
+/// Map of contract IDs and their consignments
+type ConsignmentsMap = HashMap<ContractId, Transfer>;
+
+/// Info needed to add a tapret tweak to a terminal
+type TweakInfo = (WitnessInfo, TapretCommitment);
 
 #[derive(Debug, EnumIter, Copy, Clone, PartialEq)]
 pub enum AssetSchema {
@@ -1162,6 +1246,29 @@ impl TestWallet {
         seal.to_secret_seal()
     }
 
+    fn get_next_internal_pk(&mut self) -> (InternalPk, NormalIndex) {
+        let keychain = self.keychain();
+        let index = self.get_next_index(keychain, true);
+        let descr = self.descriptor();
+        let internal_pk = descr
+            .derive(keychain, index)
+            .next()
+            .unwrap()
+            .to_internal_pk()
+            .expect("not a taproot wallet");
+        (internal_pk, index)
+    }
+
+    fn tap_address(&mut self) -> (Address, InternalPk, NormalIndex) {
+        let (tap_internal_key, index) = self.get_next_internal_pk();
+        let address = Address::with(
+            &ScriptPubkey::p2tr_key_only(tap_internal_key),
+            self.network(),
+        )
+        .unwrap();
+        (address, tap_internal_key, index)
+    }
+
     pub fn invoice(
         &mut self,
         contract_id: ContractId,
@@ -1179,20 +1286,7 @@ impl TestWallet {
                 Beneficiary::WitnessVout(Pay2Vout::new(address.payload), None)
             }
             InvoiceType::WitnessTapret => {
-                let keychain = self.keychain();
-                let index = self.get_next_index(keychain, true);
-                let descr = self.descriptor();
-                let tap_internal_key = descr
-                    .derive(keychain, index)
-                    .next()
-                    .unwrap()
-                    .to_internal_pk()
-                    .expect("not a taproot wallet");
-                let address = Address::with(
-                    &ScriptPubkey::p2tr_key_only(tap_internal_key),
-                    self.network(),
-                )
-                .unwrap();
+                let (address, tap_internal_key, _) = self.tap_address();
                 Beneficiary::WitnessVout(Pay2Vout::new(address.payload), Some(tap_internal_key))
             }
         };
@@ -1352,6 +1446,13 @@ impl TestWallet {
             report.write_duration(accept_duration);
         }
         validated_consignment.validated_opids().clone()
+    }
+
+    pub fn add_tapret_tweak(&mut self, terminal: Terminal, tapret_commitment: TapretCommitment) {
+        self.wallet
+            .wallet_mut()
+            .add_tapret_tweak(terminal, tapret_commitment)
+            .unwrap();
     }
 
     pub fn try_add_tapret_tweak(&mut self, consignment: Transfer, txid: &Txid) {
@@ -1731,8 +1832,9 @@ impl TestWallet {
         self.mine_tx(&tx.txid(), false);
         println!("inflation txid: {}", tx.txid());
         self.sync();
-        let consignments = self.create_consignments(bmap![contract_id => beneficiaries], tx.txid());
-        for consignment in consignments {
+        let consignment_map =
+            self.create_consignments(bmap![contract_id => beneficiaries], tx.txid());
+        for consignment in consignment_map.values() {
             let all_opids = consignment
                 .bundles
                 .iter()
@@ -1761,7 +1863,10 @@ impl TestWallet {
         let address = self.get_address();
         let allocations = self.contract_fungible_allocations(contract_id, false);
         let replaced_amount: u64 = allocations.iter().map(|a| a.state.value()).sum();
-        let utxos = allocations.iter().map(|a| a.seal.into()).collect();
+        let utxos = allocations
+            .iter()
+            .map(|a| a.seal.to_outpoint())
+            .collect::<Vec<_>>();
         let (mut psbt, _) = self.construct_psbt(utxos, vec![(address, None)], None);
         let (input, _) = right_owner.utxo(&right_utxo);
         right_owner.psbt_add_input(&mut psbt, right_utxo); // include replace right
@@ -1820,8 +1925,9 @@ impl TestWallet {
         self.sync();
         right_owner.sync();
 
-        let consignments = self.create_consignments(bmap![contract_id => beneficiaries], tx.txid());
-        for consignment in consignments {
+        let consignment_map =
+            self.create_consignments(bmap![contract_id => beneficiaries], tx.txid());
+        for consignment in consignment_map.values() {
             let trusted_op_seals = consignment.replace_transitions_input_ops();
             let validated_consignment = consignment
                 .clone()
@@ -2040,7 +2146,7 @@ impl TestWallet {
 
     pub fn construct_psbt(
         &mut self,
-        input_outpoints: Vec<Outpoint>,
+        input_outpoints: impl IntoIterator<Item = Outpoint>,
         beneficiaries: Vec<(Address, Option<u64>)>,
         fee: Option<u64>,
     ) -> (Psbt, PsbtMeta) {
@@ -2068,36 +2174,167 @@ impl TestWallet {
         );
     }
 
+    pub fn get_witness_info(
+        &mut self,
+        amount_sats: Option<u64>,
+        close_method: Option<CloseMethod>,
+    ) -> WitnessInfo {
+        match close_method.unwrap_or_else(|| self.close_method()) {
+            CloseMethod::OpretFirst => WitnessInfo {
+                derived_address: self.get_derived_address(true),
+                tap_internal_key: None,
+                amount_sats,
+            },
+            CloseMethod::TapretFirst => {
+                let (address, tap_internal_key, index) = self.tap_address();
+                let derived_address = DerivedAddr::new(address, self.keychain().into(), index);
+                WitnessInfo {
+                    derived_address,
+                    tap_internal_key: Some(tap_internal_key),
+                    amount_sats,
+                }
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn get_change_seal(
+        &mut self,
+        psbt: &Psbt,
+        psbt_meta: &PsbtMeta,
+        change_utxo_option: &mut Option<Outpoint>,
+        blinding_factor: Option<u64>,
+        contract_id: ContractId,
+        blinded_to_self: &mut Vec<ContractId>,
+    ) -> BuilderSeal<GraphSeal> {
+        let destination = match (*change_utxo_option, psbt_meta.change_vout) {
+            (Some(change_utxo), _) => self
+                .get_secret_seal(Some(change_utxo), blinding_factor)
+                .into(),
+            (None, Some(change_vout)) => {
+                let output = psbt.outputs().find(|o| o.vout() == change_vout).unwrap();
+                let addr = Address::with(&output.script, self.network()).unwrap();
+                AssetDestination::Witness(WitnessInfo {
+                    derived_address: DerivedAddr {
+                        addr,
+                        terminal: psbt_meta.change_terminal.unwrap(),
+                    },
+                    tap_internal_key: None,
+                    amount_sats: Some(output.amount.sats()),
+                })
+            }
+            (None, None) => {
+                let change_utxo = self.get_utxo(None);
+                *change_utxo_option = Some(change_utxo);
+                self.get_secret_seal(Some(change_utxo), blinding_factor)
+                    .into()
+            }
+        };
+        let seal = destination.define_seal(psbt_meta.change_vout.map(|v| v.into_u32()), None);
+        if matches!(destination, AssetDestination::Blinded(_)) {
+            blinded_to_self.push(contract_id);
+        }
+        seal
+    }
+
     pub fn color_psbt(
-        &self,
+        &mut self,
         psbt: &mut Psbt,
+        psbt_meta: &mut PsbtMeta,
         coloring_info: ColoringInfo,
-    ) -> (Fascia, AssetBeneficiariesMap) {
-        let asset_beneficiaries = self.color_psbt_init(psbt, coloring_info);
-        psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+        rgb_change: Option<Outpoint>,
+    ) -> (
+        Fascia,
+        AssetBeneficiariesMap,
+        Vec<ContractId>,
+        Option<WitnessInfo>,
+    ) {
+        let (asset_beneficiaries, blinded_to_self, tweaked_witness_info) =
+            self.color_psbt_init(psbt, psbt_meta, coloring_info, rgb_change);
         psbt.complete_construction();
         let fascia = psbt.rgb_commit().unwrap();
-        (fascia, asset_beneficiaries)
+        (
+            fascia,
+            asset_beneficiaries,
+            blinded_to_self,
+            tweaked_witness_info,
+        )
     }
 
     pub fn color_psbt_init(
-        &self,
+        &mut self,
         psbt: &mut Psbt,
+        psbt_meta: &mut PsbtMeta,
         coloring_info: ColoringInfo,
-    ) -> AssetBeneficiariesMap {
-        if !psbt.outputs().any(|o| o.script.is_op_return()) {
-            let _output = psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
+        mut rgb_change: Option<Outpoint>,
+    ) -> (AssetBeneficiariesMap, Vec<ContractId>, Option<WitnessInfo>) {
+        let change_script = psbt_meta
+            .change_vout
+            .and_then(|vout| psbt.output(vout.to_usize()))
+            .map(|output| output.script.clone());
+        let mut tweaked_witness_info = None;
+        let mut close_method = coloring_info.close_method;
+        let mut scripts_map: HashMap<ScriptPubkey, usize> = HashMap::new();
+        if close_method == CloseMethod::TapretFirst {
+            let tap_out_script = if let Some(change_script) = change_script.clone() {
+                psbt.set_rgb_tapret_host_on_change();
+                Some(change_script)
+            } else if let Some(witness_info) = coloring_info.first_tweakable_beneficiary() {
+                tweaked_witness_info = Some(witness_info.clone());
+                Some(witness_info.script_pubkey())
+            } else {
+                None
+            };
+            if let Some(tap_out_script) = tap_out_script {
+                let output = psbt
+                    .outputs_mut()
+                    .find(|o| o.script == tap_out_script)
+                    .unwrap();
+                output.set_tapret_host().unwrap();
+                psbt.sort_outputs_by(|output| !output.is_tapret_host())
+                    .unwrap();
+            } else {
+                close_method = CloseMethod::OpretFirst;
+            }
+        }
+        if close_method == CloseMethod::OpretFirst {
+            let output = {
+                let output_opt = psbt.outputs_mut().find(|o| o.script.is_op_return());
+                match output_opt {
+                    Some(o) => o,
+                    None => psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO),
+                }
+            };
+            output.set_opret_host().unwrap();
+            psbt.sort_outputs_by(|output| !output.is_opret_host())
+                .unwrap();
+        }
+        if let Some(ref change_script) = change_script {
+            for output in psbt.outputs() {
+                if output.script == *change_script {
+                    psbt_meta.change_vout = Some(output.vout());
+                    break;
+                }
+            }
+        }
+
+        // set MPC entropy on commitment output
+        let commitment_output = psbt
+            .outputs_mut()
+            .find(|o| o.script.is_p2tr() || o.script.is_op_return())
+            .expect("just created");
+        if let Some(blinding) = coloring_info.static_blinding {
+            commitment_output.set_mpc_entropy(blinding).unwrap();
         }
 
         let prev_outputs = psbt
-            .to_unsigned_tx()
-            .inputs
-            .iter()
-            .map(|txin| txin.prev_output)
+            .inputs()
+            .map(|txin| txin.previous_outpoint)
             .collect::<HashSet<Outpoint>>();
 
-        let mut all_transitions: HashSet<Transition> = HashSet::new();
+        let mut all_transitions: HashMap<ContractId, Vec<Transition>> = HashMap::new();
         let mut asset_beneficiaries: AssetBeneficiariesMap = bmap![];
+        let mut blinded_to_self: Vec<ContractId> = vec![];
 
         for (contract_id, asset_coloring_info) in coloring_info.asset_info_map.clone() {
             let asset_schema = self.asset_schema(contract_id);
@@ -2115,8 +2352,9 @@ impl TestWallet {
                 .transition_builder_raw(contract_id, transition_type)
                 .unwrap();
 
+            let mut outpoints = vec![];
             let mut asset_available_amt = 0;
-            for (_, opout_state_map) in self
+            for (explicit_seal, opout_state_map) in self
                 .wallet
                 .stock()
                 .contract_assignments_for(
@@ -2137,6 +2375,7 @@ impl TestWallet {
                     if let AllocatedState::Amount(amt) = &state {
                         asset_available_amt += amt.as_u64();
                     }
+                    outpoints.push(explicit_seal.to_outpoint());
                     asset_transition_builder =
                         asset_transition_builder.add_input(opout, state).unwrap();
                 }
@@ -2144,29 +2383,44 @@ impl TestWallet {
 
             let mut beneficiaries = vec![];
             let mut sending_amt = 0;
-            for (vout, amount) in asset_coloring_info.output_map {
-                if amount == 0 {
+            for assignment in asset_coloring_info.assignments {
+                if assignment.amount == 0 {
                     continue;
                 }
-                sending_amt += amount;
-                if vout as usize > psbt.outputs().count() {
-                    panic!("invalid vout in output_map, does not exist in the given PSBT");
-                }
-                let graph_seal = if let Some(blinding) = asset_coloring_info.static_blinding {
-                    GraphSeal::with_blinded_vout(vout, blinding)
+
+                sending_amt += assignment.amount;
+
+                let destination = assignment.destination.clone();
+                let vout = if let AssetDestination::Witness(ref witness_info) = destination {
+                    let script = witness_info.script_pubkey();
+                    // support address reuse by selecting the appropriate vouts
+                    let vouts: Vec<u32> = psbt
+                        .outputs()
+                        .filter(|o| o.script == script)
+                        .map(|o| o.vout().to_u32())
+                        .collect();
+                    let n = *scripts_map.entry(script.clone()).or_insert(0) + 1;
+                    let vout = vouts[n - 1];
+                    Some(vout)
                 } else {
-                    GraphSeal::new_random_vout(vout)
+                    None
                 };
-                let seal = BuilderSeal::Revealed(graph_seal);
+                let seal = destination.define_seal(vout, coloring_info.static_blinding);
                 beneficiaries.push(seal);
 
                 asset_transition_builder = asset_transition_builder
                     .add_owned_state_raw(
                         *assignment_type,
                         seal,
-                        asset_schema.allocated_state(amount),
+                        asset_schema.allocated_state(assignment.amount),
                     )
                     .unwrap();
+
+                if let AssetDestination::Witness(witness_info) = assignment.destination {
+                    psbt.output_mut(vout.unwrap() as usize)
+                        .unwrap()
+                        .tap_internal_key = witness_info.tap_internal_key;
+                }
             }
             if sending_amt > asset_available_amt {
                 panic!("total amount in output_map greater than available ({asset_available_amt})");
@@ -2176,33 +2430,107 @@ impl TestWallet {
                 asset_transition_builder = asset_transition_builder.set_nonce(nonce);
             }
 
+            let change_amt = asset_available_amt - sending_amt;
+            if change_amt > 0 {
+                let seal = self.get_change_seal(
+                    psbt,
+                    psbt_meta,
+                    &mut rgb_change,
+                    coloring_info.static_blinding,
+                    contract_id,
+                    &mut blinded_to_self,
+                );
+                asset_transition_builder = asset_transition_builder
+                    .add_owned_state_raw(
+                        *assignment_type,
+                        seal,
+                        asset_schema.allocated_state(change_amt),
+                    )
+                    .unwrap();
+            }
+
             let transition = asset_transition_builder.complete_transition().unwrap();
-            all_transitions.insert(transition);
+            all_transitions
+                .entry(contract_id)
+                .or_default()
+                .push(transition.clone());
+            psbt.push_rgb_transition(transition).unwrap();
             asset_beneficiaries.insert(contract_id, beneficiaries);
         }
 
-        let (opreturn_index, _) = psbt
-            .to_unsigned_tx()
-            .outputs
-            .iter()
-            .enumerate()
-            .find(|(_, o)| o.script_pubkey.is_op_return())
-            .expect("psbt should have an op_return output");
-        let (_, opreturn_output) = psbt
-            .outputs_mut()
-            .enumerate()
-            .find(|(i, _)| i == &opreturn_index)
-            .unwrap();
-        opreturn_output.set_opret_host().unwrap();
-        if let Some(blinding) = coloring_info.static_blinding {
-            opreturn_output.set_mpc_entropy(blinding).unwrap();
+        let mut extra_state =
+            HashMap::<ContractId, HashMap<OutputSeal, HashMap<Opout, AllocatedState>>>::new();
+        for id in self
+            .wallet
+            .stock()
+            .contracts_assigning(prev_outputs.iter().copied())
+            .unwrap()
+        {
+            if coloring_info.asset_info_map.contains_key(&id) {
+                continue;
+            }
+            let state = self
+                .wallet
+                .stock()
+                .contract_assignments_for(id, prev_outputs.iter().copied())
+                .unwrap();
+            let entry = extra_state.entry(id).or_default();
+            for (seal, assigns) in state {
+                entry.entry(seal).or_default().extend(assigns);
+            }
         }
 
-        for transition in all_transitions {
-            psbt.push_rgb_transition(transition).unwrap();
+        // construct transitions for extra state
+        for (cid, seal_map) in extra_state {
+            let contract = self.wallet.stock().contract_data(cid).unwrap();
+            let schema = contract.schema;
+
+            for (_explicit_seal, assigns) in seal_map {
+                for (opout, state) in assigns {
+                    let transition_type = schema.default_transition_for_assignment(&opout.ty);
+                    let mut extra_builder = self
+                        .wallet
+                        .stock()
+                        .transition_builder_raw(cid, transition_type)
+                        .unwrap();
+                    let seal = self.get_change_seal(
+                        psbt,
+                        psbt_meta,
+                        &mut rgb_change,
+                        coloring_info.static_blinding,
+                        cid,
+                        &mut blinded_to_self,
+                    );
+                    extra_builder = extra_builder
+                        .add_input(opout, state.clone())
+                        .unwrap()
+                        .add_owned_state_raw(opout.ty, seal, state)
+                        .unwrap();
+                    if !extra_builder.has_inputs() {
+                        continue;
+                    }
+                    let extra_transition = extra_builder.complete_transition().unwrap();
+                    all_transitions
+                        .entry(cid)
+                        .or_default()
+                        .push(extra_transition.clone());
+                    psbt.push_rgb_transition(extra_transition).unwrap();
+                }
+            }
         }
 
-        asset_beneficiaries
+        for (cid, transitions) in &all_transitions {
+            for transition in transitions {
+                for opout in transition.inputs() {
+                    psbt.set_rgb_contract_consumer(*cid, opout, transition.id())
+                        .unwrap();
+                }
+            }
+        }
+
+        psbt.set_rgb_close_method(close_method);
+
+        (asset_beneficiaries, blinded_to_self, tweaked_witness_info)
     }
 
     pub fn consume_fascia(&mut self, fascia: Fascia, witness_id: Txid) {
@@ -2221,7 +2549,6 @@ impl TestWallet {
         self.consume_fascia_custom_resolver(fascia, resolver);
     }
 
-    // TODO: consider renaming
     pub fn consume_fascia_custom_resolver(
         &mut self,
         fascia: Fascia,
@@ -2256,8 +2583,8 @@ impl TestWallet {
         &self,
         asset_beneficiaries: AssetBeneficiariesMap,
         witness_id: Txid,
-    ) -> Vec<Transfer> {
-        let mut transfers = vec![];
+    ) -> ConsignmentsMap {
+        let mut consignments_map = ConsignmentsMap::new();
         let stock = self.wallet.stock();
 
         for (contract_id, beneficiaries) in asset_beneficiaries {
@@ -2266,7 +2593,7 @@ impl TestWallet {
             for beneficiary in beneficiaries {
                 match beneficiary {
                     BuilderSeal::Revealed(seal) => {
-                        let explicit_seal = ExplicitSeal::new(Outpoint::new(witness_id, seal.vout));
+                        let explicit_seal = ExplicitSeal::with(witness_id, seal.vout);
                         beneficiaries_witness.push(explicit_seal);
                     }
                     BuilderSeal::Concealed(secret_seal) => {
@@ -2274,7 +2601,8 @@ impl TestWallet {
                     }
                 }
             }
-            transfers.push(
+            consignments_map.insert(
+                contract_id,
                 stock
                     .transfer(
                         contract_id,
@@ -2283,8 +2611,103 @@ impl TestWallet {
                         Some(witness_id),
                     )
                     .unwrap(),
-            )
+            );
         }
-        transfers
+        consignments_map
+    }
+
+    fn reveal_fascia(&mut self, fascia: Fascia, contract_filter: &[ContractId]) -> Option<Fascia> {
+        let seal_witness = fascia.seal_witness.clone();
+        let mut revealed_bundles = BTreeMap::new();
+        for (cid, bundle) in fascia.into_bundles() {
+            if !contract_filter.contains(&cid) {
+                continue;
+            }
+            let mut revealed_bundle = bundle.clone();
+            revealed_bundle
+                .known_transitions
+                .iter_mut()
+                .flat_map(|t| t.transition.assignments.values_mut())
+                .for_each(|a| {
+                    if let TypedAssigns::Fungible(assignments) = a.clone() {
+                        for assignment in assignments {
+                            if let Some(seal) = self
+                                .wallet
+                                .stock()
+                                .as_stash_provider()
+                                .seal_secret(assignment.to_confidential_seal())
+                                .unwrap()
+                            {
+                                a.reveal_seal(seal)
+                            }
+                        }
+                    }
+                });
+            if revealed_bundle != bundle {
+                revealed_bundles.insert(cid, revealed_bundle);
+            }
+        }
+        if !revealed_bundles.is_empty() {
+            let revealed_fascia = Fascia {
+                seal_witness,
+                bundles: NonEmptyOrdMap::from_checked(revealed_bundles),
+            };
+            return Some(revealed_fascia);
+        }
+        None
+    }
+
+    pub fn pay_full_flexible(
+        &mut self,
+        coloring_info: ColoringInfo,
+        fee: Option<u64>,
+        rgb_change: Option<Outpoint>,
+    ) -> (ConsignmentsMap, Tx, PsbtMeta, Option<TweakInfo>) {
+        let beneficiaries = coloring_info
+            .asset_info_map
+            .values()
+            .flat_map(|c| c.assignments.clone())
+            .filter_map(|a| match a.destination {
+                AssetDestination::Witness(witness_info) => Some(witness_info.btc_beneficiary()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let input_outpoints = coloring_info
+            .asset_info_map
+            .values()
+            .flat_map(|c| c.input_outpoints.clone())
+            .collect::<HashSet<_>>(); // remove duplicates
+        let (mut psbt, mut psbt_meta) = self.construct_psbt(input_outpoints, beneficiaries, fee);
+
+        let (fascia, rgb_beneficiaries, blinded_to_self, tweaked_witness_info) =
+            self.color_psbt(&mut psbt, &mut psbt_meta, coloring_info, rgb_change);
+
+        let mut tweak_info = None;
+        if psbt.rgb_close_method().unwrap().unwrap() == CloseMethod::TapretFirst {
+            let tweak_on_change = psbt.rgb_tapret_host_on_change();
+            let tapret_op = psbt.dbc_output::<TapretProof>().unwrap();
+            let tapret_commitment = tapret_op.tapret_commitment().unwrap();
+            if tweak_on_change {
+                assert_eq!(Some(tapret_op.vout()), psbt_meta.change_vout);
+                let terminal = tapret_op.terminal_derivation().unwrap();
+                self.add_tapret_tweak(terminal, tapret_commitment);
+            } else {
+                tweak_info = Some((tweaked_witness_info.unwrap(), tapret_commitment))
+            }
+        }
+
+        let tx = self.sign_finalize_extract(&mut psbt);
+
+        self.broadcast_tx(&tx);
+        let txid = tx.txid();
+        self.consume_fascia(fascia.clone(), txid);
+        let consignment_map = self.create_consignments(rgb_beneficiaries, txid);
+        if !blinded_to_self.is_empty() {
+            if let Some(revealed_fascia) = self.reveal_fascia(fascia.clone(), &blinded_to_self) {
+                self.consume_fascia(revealed_fascia, txid);
+            }
+        }
+
+        (consignment_map, tx, psbt_meta, tweak_info)
     }
 }
