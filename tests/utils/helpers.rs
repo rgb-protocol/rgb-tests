@@ -1405,7 +1405,7 @@ impl TestWallet {
         &mut self,
         consignment: Transfer,
         report: Option<&Report>,
-    ) -> BTreeSet<OpId> {
+    ) -> BTreeSet<Opout> {
         let resolver = self.get_resolver();
         self.accept_transfer_custom(consignment, report, &resolver, bset![])
     }
@@ -1416,7 +1416,7 @@ impl TestWallet {
         report: Option<&Report>,
         resolver: &impl ResolveWitness,
         trusted_op_seals: BTreeSet<OpId>,
-    ) -> BTreeSet<OpId> {
+    ) -> BTreeSet<Opout> {
         self.sync();
         let validate_start = Instant::now();
         let validated_consignment = consignment
@@ -1446,7 +1446,7 @@ impl TestWallet {
         if let Some(report) = report {
             report.write_duration(accept_duration);
         }
-        validated_consignment.validated_opids().clone()
+        validated_consignment.input_opouts().clone()
     }
 
     pub fn add_tapret_tweak(&mut self, terminal: Terminal, tapret_commitment: TapretCommitment) {
@@ -1725,7 +1725,7 @@ impl TestWallet {
         invoice_type: impl Into<InvoiceType>,
         contract_id: ContractId,
         amount: u64,
-    ) -> (Transfer, Tx, BTreeSet<OpId>) {
+    ) -> (Transfer, Tx, BTreeSet<Opout>) {
         let schema_id = self.schema_id(contract_id);
         let invoice = recv_wlt.invoice(contract_id, schema_id, amount, invoice_type.into());
         self.send_ifa_to_invoice(recv_wlt, invoice)
@@ -1735,18 +1735,18 @@ impl TestWallet {
         &mut self,
         recv_wlt: &mut TestWallet,
         invoice: RgbInvoice,
-    ) -> (Transfer, Tx, BTreeSet<OpId>) {
+    ) -> (Transfer, Tx, BTreeSet<Opout>) {
         let (consignment, tx, _, _) = self.pay_full(invoice, None, None, true, None);
         self.mine_tx(&tx.txid(), false);
         let trusted_op_seals = consignment.replace_transitions_input_ops();
-        let validated_opids = recv_wlt.accept_transfer_custom(
+        let input_opouts = recv_wlt.accept_transfer_custom(
             consignment.clone(),
             None,
             &recv_wlt.get_resolver(),
             trusted_op_seals,
         );
         self.sync();
-        (consignment, tx, validated_opids)
+        (consignment, tx, input_opouts)
     }
 
     pub fn inflate_ifa(
@@ -1836,12 +1836,7 @@ impl TestWallet {
         let consignment_map =
             self.create_consignments(bmap![contract_id => beneficiaries], tx.txid());
         for consignment in consignment_map.values() {
-            let all_opids = consignment
-                .bundles
-                .iter()
-                .flat_map(|b| b.bundle().known_transitions_opids())
-                .collect::<BTreeSet<_>>();
-            let validated_consignment = consignment
+            consignment
                 .clone()
                 .validate_with_opids(
                     &self.get_resolver(),
@@ -1851,7 +1846,6 @@ impl TestWallet {
                     bset![],
                 )
                 .unwrap();
-            assert_eq!(*validated_consignment.validated_opids(), all_opids);
         }
         tx
     }
