@@ -20,7 +20,7 @@ pub enum AllocationFilter {
 }
 
 impl AllocationFilter {
-    pub fn filter_for(self, wlt: &TestWallet) -> Filter {
+    pub fn filter_for(self, wlt: &TestWallet) -> Filter<'_> {
         match self {
             Self::WalletAll => Filter::WalletAll(&wlt.wallet),
             Self::WalletTentative => Filter::WalletTentative(&wlt.wallet),
