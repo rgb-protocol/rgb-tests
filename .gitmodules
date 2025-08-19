@@ -33,7 +33,7 @@
 	url = https://github.com/UBIDECO/ascii-armor.git
 [submodule "bp-esplora-client"]
 	path = bp-esplora-client
-	url = https://github.com/BP-WG/bp-esplora-client.git
+	url = https://github.com/zoedberg/bp-esplora-client.git
 [submodule "vesper"]
 	path = vesper
 	url = https://github.com/UBIDECO/vesper.git
