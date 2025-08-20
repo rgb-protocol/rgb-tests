@@ -97,15 +97,16 @@ pub use rgb::{
     persistence::{MemContract, MemContractState, Stock},
     stl::{rgb_contract_stl, ContractTerms, RejectListUrl, StandardTypes},
     validation::{
-        DbcProof, Failure, ResolveWitness, Scripts, Validator, Validity, Warning,
+        DbcProof, Failure, ResolveWitness, Scripts, ValidationError, Validator, Validity, Warning,
         WitnessOrdProvider, WitnessResolverError, WitnessStatus,
     },
     vm::{WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
-    MetaValue, Occurrences, OccurrencesMismatch, OpId, Opout, OwnedStateSchema, RevealedData,
-    RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey, TransferParams,
-    Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState, WalletProvider,
+    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
+    RevealedData, RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey,
+    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
+    WalletProvider,
 };
 #[cfg(feature = "altered")]
 pub use rgb_altered::{
@@ -123,9 +124,10 @@ pub use rgb_altered::{
     vm::{WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
-    MetaValue, Occurrences, OccurrencesMismatch, OpId, Opout, OwnedStateSchema, RevealedData,
-    RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey, TransferParams,
-    Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState, WalletProvider,
+    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
+    RevealedData, RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey,
+    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
+    WalletProvider,
 };
 pub use rgbstd::{
     containers::{

@@ -1194,16 +1194,12 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
 
     // consignment validation fails because it notices an unbroadcasted TX in the history
     let type_system = AssetSchema::from(consignment.schema_id()).types();
-    let res = consignment.validate(&wlt_3.get_resolver(), wlt_3.chain_net(), None, type_system);
-    assert!(res.is_err());
-    let validation_status = match res {
-        Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err(status) => status,
-    };
-    assert_eq!(validation_status.failures.len(), 1);
+    let res = consignment
+        .validate(&wlt_3.get_resolver(), wlt_3.chain_net(), None, type_system)
+        .unwrap_err();
     assert!(matches!(
-        validation_status.failures[0],
-        Failure::SealNoPubWitness(_, _, _)
+        res,
+        ValidationError::InvalidConsignment(Failure::SealNoPubWitness(_, _))
     ));
 }
 

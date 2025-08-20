@@ -4,41 +4,25 @@ use utils::*;
 
 #[derive(Clone)]
 enum MockResolvePubWitness {
-    Success(Tx),
-    Error(WitnessResolverError),
-}
-
-#[derive(Clone)]
-enum MockResolvePubWitnessOrd {
-    Success(WitnessOrd),
+    Success(WitnessStatus),
     Error(WitnessResolverError),
 }
 
 #[derive(Clone)]
 struct MockResolver {
     pub_witnesses: HashMap<Txid, MockResolvePubWitness>,
-    pub_witness_ords: HashMap<Txid, MockResolvePubWitnessOrd>,
 }
 
 impl ResolveWitness for MockResolver {
     fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
-        let tx = if let Some(res) = self.pub_witnesses.get(&witness_id) {
+        if let Some(res) = self.pub_witnesses.get(&witness_id) {
             match res {
-                MockResolvePubWitness::Success(tx) => tx.clone(),
-                MockResolvePubWitness::Error(err) => return Err(err.clone()),
+                MockResolvePubWitness::Success(witness_status) => Ok(witness_status.clone()),
+                MockResolvePubWitness::Error(err) => Err(err.clone()),
             }
         } else {
-            return Err(WitnessResolverError::Unknown(witness_id));
-        };
-        let ord = if let Some(res) = self.pub_witness_ords.get(&witness_id) {
-            match res {
-                MockResolvePubWitnessOrd::Success(witness_ord) => *witness_ord,
-                MockResolvePubWitnessOrd::Error(err) => return Err(err.clone()),
-            }
-        } else {
-            return Err(WitnessResolverError::Unknown(witness_id));
-        };
-        Ok(WitnessStatus::Resolved(tx, ord))
+            Ok(WitnessStatus::Unresolved)
+        }
     }
 
     fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
@@ -49,12 +33,9 @@ impl MockResolver {
     pub fn with_new_transaction(&self, witness: Tx) -> Self {
         let mut resolver = self.clone();
         let witness_id = witness.txid();
-        resolver
-            .pub_witnesses
-            .insert(witness_id, MockResolvePubWitness::Success(witness));
-        resolver.pub_witness_ords.insert(
+        resolver.pub_witnesses.insert(
             witness_id,
-            MockResolvePubWitnessOrd::Success(WitnessOrd::Tentative),
+            MockResolvePubWitness::Success(WitnessStatus::Resolved(witness, WitnessOrd::Tentative)),
         );
         resolver
     }
@@ -87,17 +68,17 @@ impl Scenario {
         }
         MockResolver {
             pub_witnesses: txs
-                .iter()
-                .map(|(txid, tx)| (*txid, MockResolvePubWitness::Success(tx.clone())))
-                .collect(),
-            pub_witness_ords: txs
-                .keys()
-                .map(|txid| {
+                .into_iter()
+                .map(|(txid, tx)| {
                     (
-                        *txid,
-                        MockResolvePubWitnessOrd::Success(WitnessOrd::Mined(
-                            // FIXME: store actual values instead of this hardcoded stuff
-                            WitnessPos::bitcoin(NonZeroU32::new(106).unwrap(), 1726062111).unwrap(),
+                        txid,
+                        MockResolvePubWitness::Success(WitnessStatus::Resolved(
+                            tx,
+                            WitnessOrd::Mined(
+                                // TODO: store actual values instead of the hardcoded WitnessPos
+                                WitnessPos::bitcoin(NonZeroU32::new(106).unwrap(), 1726062111)
+                                    .unwrap(),
+                            ),
                         )),
                     )
                 })
@@ -419,7 +400,7 @@ impl<const TRANSFER: bool> ResolveWitness for OfflineResolver<'_, TRANSFER> {
             .pub_witness(witness_id)
             .and_then(|p| p.tx().cloned())
             .map_or_else(
-                || Err(WitnessResolverError::Unknown(witness_id)),
+                || Ok(WitnessStatus::Unresolved),
                 |tx| Ok(WitnessStatus::Resolved(tx, WitnessOrd::Tentative)),
             )
     }
@@ -477,19 +458,16 @@ fn validate_consignment_success() {
         let resolver = scenario.resolver();
         let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
         let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
-        let res = consignment.validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        );
-        assert!(res.is_ok());
-        let validation_status = match res {
-            Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-            Err(status) => status,
-        };
+        let res = consignment
+            .validate(
+                &resolver,
+                ChainNet::BitcoinRegtest,
+                None,
+                trusted_typesystem,
+            )
+            .unwrap();
+        let validation_status = res.validation_status();
         dbg!(&validation_status);
-        assert!(validation_status.failures.is_empty());
         assert!(validation_status.warnings.is_empty());
         assert!(validation_status.info.is_empty());
         let validity = validation_status.validity();
@@ -505,26 +483,21 @@ fn validate_consignment_chain_fail() {
     // genesis chainNet: change from bitcoinRegtest to liquidTestnet
     let consignment = get_consignment_from_json("attack_chain");
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem,
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::ContractChainNetMismatch(
+            ChainNet::BitcoinRegtest
+        ))
     );
-    assert!(res.is_err());
-    let validation_status = match res {
-        Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err(status) => status,
-    };
-    dbg!(&validation_status);
-    assert!(validation_status.warnings.is_empty());
-    assert!(validation_status.info.is_empty());
-    assert_eq!(validation_status.failures.len(), 1);
-    assert!(matches!(
-        validation_status.failures[0],
-        Failure::ContractChainNetMismatch(ChainNet::BitcoinRegtest)
-    ));
-    assert_eq!(validation_status.validity(), Validity::Invalid);
 }
 
 #[cfg(not(feature = "altered"))]
@@ -535,60 +508,38 @@ fn validate_consignment_genesis_fail() {
     // schema ID: change genesis[schemaId] with CFA schema ID
     let consignment = get_consignment_from_json("attack_genesis_schema_id");
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem,
-    );
-    assert!(res.is_err());
-    let validation_status = match res {
-        Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err(status) => status,
-    };
-    dbg!(&validation_status);
-    assert_eq!(validation_status.failures.len(), 4);
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert!(matches!(
-        validation_status.failures[0],
-        Failure::OperationAbsent(_)
+        res,
+        ValidationError::InvalidConsignment(Failure::OperationAbsent(_))
     ));
-    assert!(matches!(
-        validation_status.failures[1],
-        Failure::MpcInvalid(_, _, _)
-    ));
-    assert!(matches!(
-        validation_status.failures[3],
-        Failure::MpcInvalid(_, _, _)
-    ));
-    assert!(validation_status.warnings.is_empty());
-    assert!(validation_status.info.is_empty());
-    let validity = validation_status.validity();
-    assert_eq!(validity, Validity::Invalid);
 
     // genesis chainNet: change from bitcoinRegtest to bitcoinMainnet
     let consignment = get_consignment_from_json("attack_genesis_testnet");
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem,
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::ContractChainNetMismatch(
+            ChainNet::BitcoinRegtest
+        ))
     );
-    assert!(res.is_err());
-    let validation_status = match res {
-        Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err(status) => status,
-    };
-    dbg!(&validation_status);
-    assert_eq!(validation_status.failures.len(), 1);
-    assert!(matches!(
-        validation_status.failures[0],
-        Failure::ContractChainNetMismatch(_)
-    ));
-    assert!(validation_status.warnings.is_empty());
-    assert!(validation_status.info.is_empty());
-    let validity = validation_status.validity();
-    assert_eq!(validity, Validity::Invalid);
 }
 
 #[cfg(not(feature = "altered"))]
@@ -599,35 +550,19 @@ fn validate_consignment_bundles_fail() {
     // bundles first in time pubWitness inputs[0] sequence: change from 0 to 1
     let consignment = get_consignment_from_json("attack_bundles_pubWitness_data_input_sequence");
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem,
-    );
-    assert!(res.is_err());
-    let validation_status = match res {
-        Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err(status) => status,
-    };
-    dbg!(&validation_status);
-    assert_eq!(validation_status.failures.len(), 3);
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert!(matches!(
-        validation_status.failures[0],
-        Failure::SealNoPubWitness(_, _, _)
+        res,
+        ValidationError::InvalidConsignment(Failure::SealNoPubWitness(_, _))
     ));
-    assert!(matches!(
-        validation_status.failures[1],
-        Failure::SealsInvalid(_, _, _)
-    ));
-    assert!(matches!(
-        validation_status.failures[2],
-        Failure::WitnessMissingInput(_, _, _)
-    ));
-    assert!(validation_status.warnings.is_empty());
-    assert!(validation_status.info.is_empty());
-    let validity = validation_status.validity();
-    assert_eq!(validity, Validity::Invalid);
 }
 
 #[cfg(not(feature = "altered"))]
@@ -639,12 +574,6 @@ fn validate_consignment_resolver_error() {
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let txid =
         Txid::from_str("b411d8dd37353d243a527739fdc39cca22dbfe4fe92517ce16a33563803c5ad2").unwrap();
-    let wbundle = consignment
-        .bundles
-        .iter()
-        .find(|wb| wb.witness_id() == txid)
-        .unwrap();
-    let bundle_id = wbundle.bundle.bundle_id();
 
     struct ConsignmentResolver<'a, 'cons, const TRANSFER: bool> {
         consignment: &'cons IndexedConsignment<'cons, TRANSFER>,
@@ -665,98 +594,126 @@ fn validate_consignment_resolver_error() {
         }
     }
 
-    // resolve_pub_witness error
+    // resolve_pub_witness: ResolverIssue
     let mut resolver = base_resolver.clone();
-    let resolver_error = WitnessResolverError::ResolverIssue(Some(txid), s!("unexpected error"));
+    let resolver_error = WitnessResolverError::ResolverIssue(Some(txid), s!("connection error"));
     *resolver.pub_witnesses.get_mut(&txid).unwrap() =
         MockResolvePubWitness::Error(resolver_error.clone());
     let consignment_resolver = ConsignmentResolver {
         consignment: &IndexedConsignment::new(&consignment),
         fallback: &resolver,
     };
-    let res = consignment.clone().validate(
-        &consignment_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    assert!(res.is_err());
-    let validation_status = match res {
-        Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err(status) => status,
-    };
-    dbg!(&validation_status);
-    assert_eq!(validation_status.failures.len(), 1);
-    assert_eq!(
-        validation_status.failures[0],
-        Failure::SealNoPubWitness(bundle_id, txid, resolver_error)
-    );
-    assert!(validation_status.warnings.is_empty());
-    assert!(validation_status.info.is_empty());
-    assert_eq!(validation_status.validity(), Validity::Invalid);
-    assert_eq!(
-        validation_status,
-        consignment
-            .clone()
-            .validate(
-                &resolver,
-                ChainNet::BitcoinRegtest,
-                None,
-                trusted_typesystem.clone()
-            )
-            .unwrap_err()
-    );
+    let res = consignment
+        .clone()
+        .validate(
+            &consignment_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(res, ValidationError::ResolverError(resolver_error));
 
-    // resolve_pub_witness_ord error
+    // resolve_pub_witness: IdMismatch
     let mut resolver = base_resolver.clone();
-    let resolver_error =
-        WitnessResolverError::ResolverIssue(Some(txid), s!("another unexpected error"));
-    *resolver.pub_witness_ords.get_mut(&txid).unwrap() =
-        MockResolvePubWitnessOrd::Error(resolver_error.clone());
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    assert!(res.is_err());
-    let validation_status = match res {
-        Ok(validated_consignment) => validated_consignment.validation_status().clone(),
-        Err(status) => status,
-    };
-    dbg!(&validation_status);
-    assert_eq!(validation_status.failures.len(), 1);
-    assert_eq!(
-        validation_status.failures[0],
-        Failure::SealNoPubWitness(bundle_id, txid, resolver_error)
-    );
-    assert!(validation_status.warnings.is_empty());
-    assert!(validation_status.info.is_empty());
-    assert_eq!(validation_status.validity(), Validity::Invalid);
-
-    // WitnessResolverError::IdMismatch
-    let mut resolver = base_resolver.clone();
-    let MockResolvePubWitness::Success(mut tx) = resolver.pub_witnesses.get(&txid).unwrap().clone()
-    else {
-        unreachable!()
-    };
-    tx.version = TxVer::from_consensus_i32(3);
-    let new_txid = tx.txid();
-    *resolver.pub_witnesses.get_mut(&txid).unwrap() = MockResolvePubWitness::Success(tx);
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem,
-    );
-    let failures = res.unwrap_err().failures;
     let resolver_error = WitnessResolverError::IdMismatch {
+        actual: Txid::strict_dumb(),
         expected: txid,
-        actual: new_txid,
     };
+    *resolver.pub_witnesses.get_mut(&txid).unwrap() =
+        MockResolvePubWitness::Error(resolver_error.clone());
+    let consignment_resolver = ConsignmentResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+        fallback: &resolver,
+    };
+    let res = consignment
+        .clone()
+        .validate(
+            &consignment_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(res, ValidationError::ResolverError(resolver_error));
+
+    // resolve_pub_witness: InvalidResolverData
+    let mut resolver = base_resolver.clone();
+    let resolver_error = WitnessResolverError::InvalidResolverData;
+    *resolver.pub_witnesses.get_mut(&txid).unwrap() =
+        MockResolvePubWitness::Error(resolver_error.clone());
+    let consignment_resolver = ConsignmentResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+        fallback: &resolver,
+    };
+    let res = consignment
+        .clone()
+        .validate(
+            &consignment_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(res, ValidationError::ResolverError(resolver_error));
+
+    // resolve_pub_witness: WrongChainNet
+    let mut resolver = base_resolver.clone();
+    let resolver_error = WitnessResolverError::WrongChainNet;
+    *resolver.pub_witnesses.get_mut(&txid).unwrap() =
+        MockResolvePubWitness::Error(resolver_error.clone());
+    let consignment_resolver = ConsignmentResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+        fallback: &resolver,
+    };
+    let res = consignment
+        .clone()
+        .validate(
+            &consignment_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(res, ValidationError::ResolverError(resolver_error));
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn validate_consignment_unknown_tx() {
+    let scenario = Scenario::A;
+    let base_resolver = scenario.resolver();
+    let consignment = get_consignment_from_json("attack_resolver_error");
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let txid =
+        Txid::from_str("b411d8dd37353d243a527739fdc39cca22dbfe4fe92517ce16a33563803c5ad2").unwrap();
+    let wbundle = consignment
+        .bundles
+        .iter()
+        .find(|wb| wb.witness_id() == txid)
+        .unwrap();
+    let bundle_id = wbundle.bundle.bundle_id();
+
+    let mut resolver = base_resolver.clone();
+    *resolver.pub_witnesses.get_mut(&txid).unwrap() =
+        MockResolvePubWitness::Success(WitnessStatus::Unresolved);
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures,
-        vec![Failure::SealNoPubWitness(bundle_id, txid, resolver_error)]
+        res,
+        ValidationError::InvalidConsignment(Failure::SealNoPubWitness(bundle_id, txid))
     );
 }
 
@@ -772,25 +729,30 @@ fn validate_consignment_schema_fail() {
 
     // SchemaOpMetaTypeUnknown: schema transition has unknown metatype
     let mut consignment = base_consignment.clone();
+    let meta_type = MetaType::with(42);
     consignment
         .schema
         .transitions
         .get_mut(transition_type)
         .unwrap()
         .transition_schema
-        .metadata = TinyOrdSet::from_checked(bset![MetaType::with(42)]);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+        .metadata = TinyOrdSet::from_checked(bset![meta_type]);
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaOpMetaTypeUnknown(
+            OpFullType::StateTransition(*transition_type),
+            meta_type
+        ))
     );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(
-        failures[0],
-        Failure::SchemaOpMetaTypeUnknown(_, _)
-    ));
 
     // SchemaOpEmptyInputs: schema transition has no inputs
     let mut consignment = base_consignment.clone();
@@ -801,18 +763,25 @@ fn validate_consignment_schema_fail() {
         .unwrap()
         .transition_schema
         .inputs = TinyOrdMap::new();
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaOpEmptyInputs(
+            OpFullType::StateTransition(*transition_type)
+        ))
     );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(failures[0], Failure::SchemaOpEmptyInputs(_)));
 
     // SchemaOpGlobalTypeUnknown: schema transition has unknown global type
     let mut consignment = base_consignment.clone();
+    let global_state_type = GlobalStateType::with(42);
     consignment
         .schema
         .transitions
@@ -820,23 +789,28 @@ fn validate_consignment_schema_fail() {
         .unwrap()
         .transition_schema
         .globals = TinyOrdMap::from_checked(bmap! {
-        GlobalStateType::with(42) => Occurrences::Once
+        global_state_type => Occurrences::Once
     });
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaOpGlobalTypeUnknown(
+            OpFullType::StateTransition(*transition_type),
+            global_state_type
+        ))
     );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(
-        failures[0],
-        Failure::SchemaOpGlobalTypeUnknown(_, _)
-    ));
 
     // SchemaOpAssignmentTypeUnknown: schema transition has unknown assignment type
     let mut consignment = base_consignment.clone();
+    let assignment_type = AssignmentType::with(42);
     consignment
         .schema
         .transitions
@@ -844,90 +818,110 @@ fn validate_consignment_schema_fail() {
         .unwrap()
         .transition_schema
         .assignments = TinyOrdMap::from_checked(bmap! {
-        AssignmentType::with(42) => Occurrences::Once
+        assignment_type => Occurrences::Once
     });
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaOpAssignmentTypeUnknown(
+            OpFullType::StateTransition(*transition_type),
+            assignment_type
+        ))
     );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(
-        failures[0],
-        Failure::SchemaOpAssignmentTypeUnknown(_, _)
-    ));
 
     // SchemaMetaSemIdUnknown: schema meta type has unknown sem id
     let mut consignment = base_consignment.clone();
-    consignment.schema.meta_types =
-        TinyOrdMap::from_checked(bmap! {MetaType::with(42) => MetaDetails {
-            sem_id: SemId::from([42u8; 32]),
-            name: fname!("foo")
-        }});
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let meta_type = MetaType::with(42);
+    let sem_id = SemId::from([42u8; 32]);
+    consignment.schema.meta_types = TinyOrdMap::from_checked(bmap! {meta_type => MetaDetails {
+        sem_id,
+        name: fname!("foo")
+    }});
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaMetaSemIdUnknown(meta_type, sem_id))
     );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(failures[0], Failure::SchemaMetaSemIdUnknown(_, _)));
 
     // SchemaGlobalSemIdUnknown: schema global type has unknown sem id
     let mut consignment = base_consignment.clone();
     let mut global_types = consignment.schema.global_types.release();
+    let global_state_type = GlobalStateType::with(42);
+    let sem_id = SemId::from([42u8; 32]);
     global_types.insert(
-        GlobalStateType::with(42),
+        global_state_type,
         GlobalDetails {
             global_state_schema: GlobalStateSchema {
-                sem_id: SemId::from([42u8; 32]),
+                sem_id,
                 max_items: u24::from_le_bytes([42u8; 3]),
             },
             name: fname!("foo"),
         },
     );
     consignment.schema.global_types = TinyOrdMap::from_checked(global_types);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaGlobalSemIdUnknown(
+            global_state_type,
+            sem_id
+        ))
     );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(
-        failures[0],
-        Failure::SchemaGlobalSemIdUnknown(_, _)
-    ));
 
     // SchemaOwnedSemIdUnknown: schema owned type has unknown sem id
     let mut consignment = base_consignment.clone();
     let mut owned_types = consignment.schema.owned_types.release();
+    let assignment_type = AssignmentType::with(56);
+    let sem_id = SemId::from([42u8; 32]);
     owned_types.insert(
-        AssignmentType::with(56),
+        assignment_type,
         AssignmentDetails {
-            owned_state_schema: OwnedStateSchema::Structured(SemId::from([42u8; 32])),
+            owned_state_schema: OwnedStateSchema::Structured(sem_id),
             default_transition: TransitionType::with(42),
             name: fname!("foo"),
         },
     );
     consignment.schema.owned_types = TinyOrdMap::from_checked(owned_types);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem,
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaOwnedSemIdUnknown(
+            assignment_type,
+            sem_id
+        ))
     );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
-    dbg!(&failures);
-    assert!(matches!(
-        failures[0],
-        Failure::SchemaOwnedSemIdUnknown(_, _)
-    ));
 }
 
 #[cfg(not(feature = "altered"))]
@@ -939,32 +933,36 @@ fn validate_consignment_commitments_fail() {
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
 
-    // CyclicGraph: it's enough to make the same opid appear twice, changing InputMap and
-    // PubWitness to avoid automated removal of duplicates
+    // CyclicGraph: duplicate the same transition within a bundle to create a cycle
     let mut consignment = base_consignment.clone();
-    let bundle = consignment.bundles.iter().last().unwrap();
-    let mut new_bundle = bundle.clone();
-    new_bundle.pub_witness = PubWitness::new(
-        Txid::from_str("a6e7e4775ea6e8b7155f6cfcc8d193df326c468dce99e9c4ee0a26511659feb3").unwrap(),
-    );
-    new_bundle
+    let mut bundles = consignment.bundles.release();
+    let witness_bundle = bundles.last_mut().unwrap();
+    let existing_transition = witness_bundle
         .bundle
-        .input_map
-        .insert(Opout::strict_dumb(), OpId::strict_dumb())
+        .known_transitions
+        .last()
+        .unwrap()
+        .clone();
+    let opid = existing_transition.opid;
+    witness_bundle
+        .bundle
+        .known_transitions
+        .push(existing_transition)
         .unwrap();
-
-    consignment.bundles = LargeVec::from_checked(vec![bundle.clone(), new_bundle]);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::CyclicGraph(opid))
     );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert!(failures
-        .iter()
-        .any(|f| matches!(f, Failure::CyclicGraph(_))));
 
     // DoubleSpend: add different transition that spends the same opouts
     let mut consignment = base_consignment.clone();
@@ -984,22 +982,21 @@ fn validate_consignment_commitments_fail() {
         .known_transitions
         .push(KnownTransition::new(transition.id(), transition))
         .unwrap();
+    let bundle_id = new_bundle.bundle().bundle_id();
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::ExtraKnownTransition(bundle_id))
     );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 3);
-    assert!(matches!(failures[0], Failure::ExtraKnownTransition(_)));
-    assert!(matches!(failures[1], Failure::DoubleSpend(_)));
-    assert!(matches!(
-        failures[2],
-        Failure::MissingInputMapTransition(_, _)
-    ));
 
     // OperationAbsent: remove a bundle that contains spent assignments
     let mut consignment = base_consignment.clone();
@@ -1010,7 +1007,7 @@ fn validate_consignment_commitments_fail() {
         .flat_map(|kt| kt.transition.inputs.iter())
         .map(|ti| ti.op)
         .collect::<HashSet<_>>();
-    let bundle_id_to_remove = consignment
+    let bundle_to_remove = consignment
         .bundles
         .iter()
         .map(|wb| wb.clone().bundle)
@@ -1019,8 +1016,14 @@ fn validate_consignment_commitments_fail() {
                 .iter()
                 .any(|st| b.known_transitions_contain_opid(st))
         })
+        .unwrap();
+    let bundle_id_to_remove = bundle_to_remove.bundle_id();
+    let missing_opid = bundle_to_remove
+        .known_transitions
+        .iter()
+        .find(|kt| spent_transitions.contains(&kt.opid))
         .unwrap()
-        .bundle_id();
+        .opid;
     consignment.bundles = LargeVec::from_checked(
         consignment
             .bundles
@@ -1028,97 +1031,99 @@ fn validate_consignment_commitments_fail() {
             .filter(|b| b.bundle.bundle_id() != bundle_id_to_remove)
             .collect::<Vec<_>>(),
     );
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::OperationAbsent(missing_opid))
     );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert!(failures
-        .iter()
-        .any(|f| matches!(f, Failure::OperationAbsent(_))));
 
-    // NoPrevState: add input with missing assignment type to a transition
+    // NoPrevState: modify a transition input to use a missing assignment type
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let new_bundle = bundles.last_mut().unwrap();
-    let mut transition = new_bundle
+    let witness_bundle = bundles.last_mut().unwrap();
+    let mut transition = witness_bundle
         .bundle
         .known_transitions
         .last()
         .unwrap()
         .transition
         .clone();
-    let fst_input = *transition.inputs.as_unconfined().first().unwrap();
-    transition
-        .inputs
-        .push(Opout {
-            ty: AssignmentType::with(42),
-            ..fst_input
-        })
-        .unwrap();
-    new_bundle
-        .bundle
-        .known_transitions
-        .push(KnownTransition::new(transition.id(), transition))
-        .unwrap();
-
+    let old_opid = transition.id();
+    let mut transition_inputs = transition.inputs.as_unconfined().clone();
+    let mut fst_input = transition_inputs.pop_first().unwrap();
+    let state_type = AssignmentType::with(42);
+    fst_input.ty = state_type;
+    transition_inputs.insert(fst_input);
+    transition.inputs = NonEmptyOrdSet::from_checked(transition_inputs).into();
+    replace_transition_in_bundle(witness_bundle, old_opid, transition.clone());
+    let opid = transition.id();
+    let mut input_map = witness_bundle.bundle.input_map.clone().release();
+    let prev_id = fst_input.op;
+    input_map.insert(fst_input, transition.id());
+    witness_bundle.bundle.input_map = NonEmptyOrdMap::from_checked(input_map);
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::NoPrevState {
+            opid,
+            prev_id,
+            state_type
+        })
     );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert!(failures.iter().any(|f| matches!(
-        f,
-        Failure::NoPrevState {
-            opid: _,
-            prev_id: _,
-            state_type: _
-        }
-    )));
 
-    // NoPrevOut: add input with missing assignment number to a transition
+    // NoPrevOut: modify input to reference non-existing assignment number
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let new_bundle = bundles.last_mut().unwrap();
-    let mut transition = new_bundle
+    let witness_bundle = bundles.last_mut().unwrap();
+    let mut transition = witness_bundle
         .bundle
         .known_transitions
         .last()
         .unwrap()
         .transition
         .clone();
-    let fst_input = *transition.inputs.as_unconfined().first().unwrap();
-    transition
-        .inputs
-        .push(Opout {
-            no: 42,
-            ..fst_input
-        })
-        .unwrap();
-    new_bundle
-        .bundle
-        .known_transitions
-        .push(KnownTransition::new(transition.id(), transition))
-        .unwrap();
+    let old_opid = transition.id();
+    let mut transition_inputs = transition.inputs.as_unconfined().clone();
+    let mut fst_input = transition_inputs.pop_first().unwrap();
+    fst_input.no = 42;
+    transition_inputs.insert(fst_input);
+    transition.inputs = NonEmptyOrdSet::from_checked(transition_inputs).into();
+    replace_transition_in_bundle(witness_bundle, old_opid, transition.clone());
+    let opid = transition.id();
+    let mut input_map = witness_bundle.bundle.input_map.clone().release();
+    input_map.insert(fst_input, transition.id());
+    witness_bundle.bundle.input_map = NonEmptyOrdMap::from_checked(input_map);
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::NoPrevOut(opid, fst_input))
     );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert!(failures
-        .iter()
-        .any(|f| matches!(f, Failure::NoPrevOut(_, _))));
 
     // ConfidentialSeal: one of the transitions includes blinded assignments
     let mut consignment = base_consignment.clone();
@@ -1139,11 +1144,17 @@ fn validate_consignment_commitments_fail() {
         })
         .unwrap();
     let mut transitions = new_bundle.clone().bundle.known_transitions;
-    let transition = transitions
+    let transition_kt = transitions
         .iter_mut()
         .find(|kt| spent_transitions.contains(&kt.opid))
-        .map(|kt| &mut kt.transition)
         .unwrap();
+    let op = transition_kt.opid;
+    let transition = &mut transition_kt.transition;
+    let opout = Opout {
+        op,
+        ty: AssignmentType::ASSET,
+        no: 0,
+    };
     let assignments = transition
         .assignments
         .remove(&AssignmentType::ASSET)
@@ -1167,17 +1178,19 @@ fn validate_consignment_commitments_fail() {
         .unwrap();
     new_bundle.bundle.known_transitions = transitions;
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::ConfidentialSeal(opout))
     );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert!(failures
-        .iter()
-        .any(|f| matches!(f, Failure::ConfidentialSeal(_))));
 
     // ExtraKnownTransition: replace known_transition referenced in input map
     let mut consignment = base_consignment.clone();
@@ -1193,23 +1206,63 @@ fn validate_consignment_commitments_fail() {
     transition.nonce -= 1;
     new_bundle.bundle.known_transitions =
         NonEmptyVec::from_checked(vec![KnownTransition::new(transition.id(), transition)]);
+    let bundle_id = new_bundle.bundle().bundle_id();
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::ExtraKnownTransition(bundle_id))
     );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 2);
-    assert!(matches!(failures[0], Failure::ExtraKnownTransition(_)));
-    assert!(matches!(
-        failures[1],
-        Failure::MissingInputMapTransition(_, _)
-    ));
+
+    // MissingInputMapTransition
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let witness_bundle = bundles.last_mut().unwrap();
+    let mut transition = witness_bundle
+        .bundle
+        .known_transitions
+        .last()
+        .unwrap()
+        .transition
+        .clone();
+    let old_opid = transition.id();
+    let fst_input = *transition.inputs.as_unconfined().first().unwrap();
+    transition
+        .inputs
+        .push(Opout { no: 9, ..fst_input })
+        .unwrap();
+    replace_transition_in_bundle(witness_bundle, old_opid, transition.clone());
+    let bundle_id = witness_bundle.bundle.bundle_id();
+    consignment.bundles = LargeVec::from_checked(bundles);
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::MissingInputMapTransition(
+            bundle_id,
+            fst_input.op
+        ))
+    );
 
     // MpcInvalid: cannot edit consignment since fields are private
+    let bundle = base_consignment.bundles[0].clone();
+    let bundle_id = bundle.bundle.bundle_id();
+    let witness_id = bundle.witness_id();
     let mut consignment: Value =
         serde_json::from_str(&serde_json::to_string(&base_consignment).unwrap()).unwrap();
     *consignment
@@ -1225,16 +1278,19 @@ fn validate_consignment_commitments_fail() {
         .unwrap() = Value::Number(42.into());
     let consignment: Transfer =
         serde_json::from_str(&serde_json::to_string(&consignment).unwrap()).unwrap();
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(failures[0], Failure::MpcInvalid(_, _, _)));
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert!(matches!(
+        res,
+        ValidationError::InvalidConsignment(Failure::MpcInvalid(bid, wid, _)) if bid == bundle_id && wid == witness_id
+    ));
 
     // NoDbcOutput
     let mut consignment = base_consignment.clone();
@@ -1251,16 +1307,20 @@ fn validate_consignment_commitments_fail() {
     let consignment_resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &consignment_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .clone()
+        .validate(
+            &consignment_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::NoDbcOutput(witness_id))
     );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
-    assert_eq!(failures[0], Failure::NoDbcOutput(witness_id));
 
     // InvalidProofType
     let mut consignment = base_consignment.clone();
@@ -1269,45 +1329,52 @@ fn validate_consignment_commitments_fail() {
     let witness_id = new_bundle.witness_id();
     new_bundle.anchor.dbc_proof = DbcProof::Tapret(TapretProof::strict_dumb());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 2);
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::InvalidProofType(witness_id, bp::dbc::Method::TapretFirst)
+        res,
+        ValidationError::InvalidConsignment(Failure::InvalidProofType(
+            witness_id,
+            bp::dbc::Method::TapretFirst
+        ))
     );
 
     // SealsInvalid
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let new_bundle = bundles.last_mut().unwrap();
+    let bundle_id = new_bundle.bundle.bundle_id();
     let mut witness_tx = new_bundle.pub_witness.tx().unwrap().clone();
     let mut inputs = witness_tx.inputs.release().clone();
     inputs.pop();
     witness_tx.inputs = LargeVec::from_checked(inputs);
+    let witness_id = witness_tx.txid();
     new_bundle.pub_witness = PubWitness::Tx(witness_tx);
-    //update_witness_and_anchor(witness_bundle, contract_id);
     consignment.bundles = LargeVec::from_checked(bundles);
     let consignment_resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &consignment_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 2);
-    assert!(matches!(failures[0], Failure::SealsInvalid(_, _, _)));
-    assert!(matches!(failures[1], Failure::WitnessMissingInput(_, _, _)));
+    let res = consignment
+        .clone()
+        .validate(
+            &consignment_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert!(matches!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(bid, wid, _)) if bid == bundle_id && wid == witness_id
+    ));
 
     // UnorderedTransition: put last bundle as first
     let mut consignment = base_consignment.clone();
@@ -1315,14 +1382,19 @@ fn validate_consignment_commitments_fail() {
     let opid = bundles[0].bundle.known_transitions[0].opid;
     bundles.swap(0, 1);
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::UnorderedTransition(opid))
     );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures, vec![Failure::UnorderedTransition(opid)]);
 
     // DBC-related error cases
     //  EmbedVerifyError::CommitmentMismatch
@@ -1347,17 +1419,24 @@ fn validate_consignment_commitments_fail() {
     let consignment_resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &consignment_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
+    let res = consignment
+        .clone()
+        .validate(
+            &consignment_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     let expected_msg = s!("commitment doesn't match the message.");
     assert_eq!(
-        failures,
-        vec![Failure::SealsInvalid(bundle_id, witness_id, expected_msg)]
+        res,
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(
+            bundle_id,
+            witness_id,
+            expected_msg
+        ))
     );
     //  EmbedVerifyError::InvalidMessage
     let mut consignment = base_consignment.clone();
@@ -1380,18 +1459,25 @@ fn validate_consignment_commitments_fail() {
     let consignment_resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &consignment_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
+    let res = consignment
+        .clone()
+        .validate(
+            &consignment_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     let expected_msg =
         s!("first OP_RETURN output inside the transaction already contains some data.");
     assert_eq!(
-        failures,
-        vec![Failure::SealsInvalid(bundle_id, witness_id, expected_msg)]
+        res,
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(
+            bundle_id,
+            witness_id,
+            expected_msg
+        ))
     );
     //  EmbedVerifyError::InvalidMessage
     let mut consignment = base_consignment.clone();
@@ -1414,18 +1500,25 @@ fn validate_consignment_commitments_fail() {
     let consignment_resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &consignment_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
+    let res = consignment
+        .clone()
+        .validate(
+            &consignment_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     let expected_msg =
         s!("first OP_RETURN output inside the transaction already contains some data.");
     assert_eq!(
-        failures,
-        vec![Failure::SealsInvalid(bundle_id, witness_id, expected_msg)]
+        res,
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(
+            bundle_id,
+            witness_id,
+            expected_msg
+        ))
     );
 }
 
@@ -1445,21 +1538,21 @@ fn validate_consignment_logic_fail() {
     alt_schema.name = tn!("NonInflatableAsset2");
     let alt_schema_id = alt_schema.schema_id();
     consignment.schema = alt_schema;
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::SchemaMismatch {
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaMismatch {
             expected: schema_id,
-            actual: alt_schema_id,
-        }
+            actual: alt_schema_id
+        })
     );
 
     // SchemaUnknownTransitionType: replace transition with unsupported transition type
@@ -1480,18 +1573,21 @@ fn validate_consignment_logic_fail() {
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::SchemaUnknownTransitionType(transition_id, TransitionType::with(42))
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaUnknownTransitionType(
+            transition_id,
+            TransitionType::with(42)
+        ))
     );
 
     // SchemaUnknownMetaType: replace transition with unsupported meta type
@@ -1515,18 +1611,21 @@ fn validate_consignment_logic_fail() {
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::SchemaUnknownMetaType(transition_id, MetaType::with(42))
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaUnknownMetaType(
+            transition_id,
+            MetaType::with(42)
+        ))
     );
 
     // SchemaUnknownGlobalStateType: replace transition with unsupported global state type
@@ -1550,18 +1649,21 @@ fn validate_consignment_logic_fail() {
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::SchemaUnknownGlobalStateType(transition_id, GlobalStateType::with(42))
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaUnknownGlobalStateType(
+            transition_id,
+            GlobalStateType::with(42)
+        ))
     );
 
     // SchemaUnknownAssignmentType: add unsupported assignment type to transition
@@ -1585,18 +1687,21 @@ fn validate_consignment_logic_fail() {
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::SchemaUnknownAssignmentType(transition_id, AssignmentType::with(42))
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(
+            transition_id,
+            AssignmentType::with(42)
+        ))
     );
 
     // SchemaAssignmentOccurrences: add transition with no assignments
@@ -1617,17 +1722,18 @@ fn validate_consignment_logic_fail() {
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::SchemaAssignmentOccurrences(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaAssignmentOccurrences(
             transition_id,
             AssignmentType::with(4000),
             OccurrencesMismatch {
@@ -1635,7 +1741,7 @@ fn validate_consignment_logic_fail() {
                 max: 65535,
                 found: 0
             }
-        )
+        ))
     );
 
     // StateTypeMismatch
@@ -1669,22 +1775,23 @@ fn validate_consignment_logic_fail() {
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::StateTypeMismatch {
+        res,
+        ValidationError::InvalidConsignment(Failure::StateTypeMismatch {
             opid: transition_id,
             state_type: assignment_type,
             expected: StateType::Fungible,
             found: StateType::Void
-        }
+        })
     );
 
     // ScriptFailure: e.g. one can't do simple inflation
@@ -1726,18 +1833,22 @@ fn validate_consignment_logic_fail() {
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::ScriptFailure(transition_id, Some(ERRNO_NON_EQUAL_IN_OUT), None)
+        res,
+        ValidationError::InvalidConsignment(Failure::ScriptFailure(
+            transition_id,
+            Some(ERRNO_NON_EQUAL_IN_OUT),
+            None
+        ))
     );
 
     // ContractMismatch: operations should commit to the correct contract
@@ -1761,18 +1872,21 @@ fn validate_consignment_logic_fail() {
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::ContractMismatch(transition_id, ContractId::strict_dumb())
+        res,
+        ValidationError::InvalidConsignment(Failure::ContractMismatch(
+            transition_id,
+            ContractId::strict_dumb()
+        ))
     );
 
     // Error: zero-amount allocations are not allowed
@@ -1803,17 +1917,22 @@ fn validate_consignment_logic_fail() {
     let alt_resolver =
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::ScriptFailure(opid, Some(ERRNO_NON_EQUAL_IN_OUT), None)
+        res,
+        ValidationError::InvalidConsignment(Failure::ScriptFailure(
+            opid,
+            Some(ERRNO_NON_EQUAL_IN_OUT),
+            None
+        ))
     );
 
     // UnsafeHistory
@@ -1890,17 +2009,19 @@ fn validate_consignment_logic_fail() {
     let resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::SchemaNoMetadata(opid, MS_ALLOWED_INFLATION)
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaNoMetadata(opid, MS_ALLOWED_INFLATION))
     );
 
     // SchemaInvalidMetadata
@@ -1927,16 +2048,21 @@ fn validate_consignment_logic_fail() {
     let resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     let sem_id = StandardTypes::with(rgb_contract_stl()).get("RGBContract.Amount");
-    assert_eq!(failures[0], Failure::SchemaInvalidMetadata(opid, sem_id));
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaInvalidMetadata(opid, sem_id))
+    );
 
     // SchemaGlobalStateOccurrences
     let mut consignment = base_consignment.clone();
@@ -1946,6 +2072,8 @@ fn validate_consignment_logic_fail() {
         .find(|wb| wb.witness_id() == old_txid)
         .unwrap();
     let mut transition = base_transition.clone();
+    let globals = transition.globals.clone();
+    let global_state_type = globals.keys().next().unwrap();
     transition.globals = none!();
     let opid = transition.id();
     replace_transition_in_bundle(wbundle, old_opid, transition);
@@ -1959,18 +2087,28 @@ fn validate_consignment_logic_fail() {
     let resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaGlobalStateOccurrences(
+            opid,
+            *global_state_type,
+            OccurrencesMismatch {
+                min: 1,
+                max: 1,
+                found: 0
+            }
+        ))
     );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 1);
-    assert!(matches!(
-        failures[0],
-        Failure::SchemaGlobalStateOccurrences(_, _, _)
-    ));
 
     // SchemaInvalidGlobalValue
     let mut consignment = base_consignment.clone();
@@ -1998,22 +2136,27 @@ fn validate_consignment_logic_fail() {
     let resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert_eq!(failures.len(), 1);
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     let sem_id = StandardTypes::with(rgb_contract_stl()).get("RGBContract.Amount");
     assert_eq!(
-        failures[0],
-        Failure::SchemaInvalidGlobalValue(opid, GS_ISSUED_SUPPLY, sem_id)
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaInvalidGlobalValue(
+            opid,
+            GS_ISSUED_SUPPLY,
+            sem_id
+        ))
     );
 
-    // SchemaUnknownAssignmentType: unexpected assingment type in transition input
+    // SchemaUnknownAssignmentType: unexpected assignment type in transition input
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let mut witness_id = None;
@@ -2051,19 +2194,22 @@ fn validate_consignment_logic_fail() {
     let resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures,
-        vec![
-            Failure::SchemaUnknownAssignmentType(opid, OS_INFLATION),
-            Failure::ScriptFailure(opid, Some(ERRNO_NON_EQUAL_IN_OUT), None)
-        ]
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(
+            opid,
+            OS_INFLATION
+        ))
     );
 }
 
@@ -2116,19 +2262,22 @@ fn validate_consignment_remove_scripts_code() {
     consignment.bundles = LargeVec::from_checked(bundles);
     let mut scripts = base_consignment.scripts.clone().release();
     let mut lib = scripts.pop_last().unwrap().clone();
+    let lib_id = lib.id();
     lib.code = none!();
     consignment.scripts = Confined::<BTreeSet<_>, 0, 1024>::from_checked(bset![lib]);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem,
-    );
-    let failures = res.unwrap_err().failures;
-    dbg!(&failures);
-    assert!(failures
-        .iter()
-        .all(|f| matches!(f, Failure::MissingScript(_, _))));
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert!(matches!(
+        res,
+        ValidationError::InvalidConsignment(Failure::MissingScript(_, lid)) if lid == lib_id
+    ));
 }
 
 #[cfg(not(feature = "altered"))]
@@ -2186,19 +2335,19 @@ fn validate_consignment_unmatching_transition_id() {
         resolver.with_new_transaction(other_wbundle.pub_witness.tx().unwrap().clone());
     bundles.push(other_wbundle);
     consignment.bundles = LargeVec::from_checked(bundles);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem,
-    );
-    let failures = res.unwrap_err().failures;
-    assert_eq!(failures.len(), 2);
+    let res = consignment
+        .validate(
+            &alt_resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures[0],
-        Failure::TransitionIdMismatch(opid, transition.id())
+        res,
+        ValidationError::InvalidConsignment(Failure::TransitionIdMismatch(opid, transition.id()))
     );
-    assert_eq!(failures[1], Failure::OperationAbsent(OpId::strict_dumb()));
 }
 
 #[cfg(not(feature = "altered"))]
@@ -2333,20 +2482,23 @@ fn validate_consignment_ifa() {
     let resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures,
-        vec![Failure::ScriptFailure(
+        res,
+        ValidationError::InvalidConsignment(Failure::ScriptFailure(
             child_opid,
             Some(ERRNO_REPLACE_HIDDEN_BURN),
             None
-        )]
+        ))
     );
 
     // Error: replace rights cannot be created from thin air
@@ -2385,20 +2537,23 @@ fn validate_consignment_ifa() {
     let resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures,
-        vec![Failure::ScriptFailure(
+        res,
+        ValidationError::InvalidConsignment(Failure::ScriptFailure(
             opid,
             Some(ERRNO_REPLACE_NO_INPUT),
             None
-        )]
+        ))
     );
 
     // Error: replace rights cannot be burned via transfer operation (1 in, 0 out)
@@ -2425,20 +2580,23 @@ fn validate_consignment_ifa() {
     let resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures,
-        vec![Failure::ScriptFailure(
+        res,
+        ValidationError::InvalidConsignment(Failure::ScriptFailure(
             opid,
             Some(ERRNO_REPLACE_HIDDEN_BURN),
             None
-        )]
+        ))
     );
 
     // Error: zero-amount allocations are not allowed for fungible assignment types
@@ -2475,20 +2633,23 @@ fn validate_consignment_ifa() {
         let resolver = OfflineResolver {
             consignment: &IndexedConsignment::new(&consignment),
         };
-        let res = consignment.clone().validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        );
-        let failures = res.unwrap_err().failures;
+        let res = consignment
+            .clone()
+            .validate(
+                &resolver,
+                ChainNet::BitcoinRegtest,
+                None,
+                trusted_typesystem.clone(),
+            )
+            .unwrap_err();
+        dbg!(&res);
         assert_eq!(
-            failures,
-            vec![Failure::ScriptFailure(
+            res,
+            ValidationError::InvalidConsignment(Failure::ScriptFailure(
                 opid,
                 Some(ERRNO_NON_EQUAL_IN_OUT),
                 None
-            )]
+            ))
         );
     }
 
@@ -2516,20 +2677,23 @@ fn validate_consignment_ifa() {
         let resolver = OfflineResolver {
             consignment: &IndexedConsignment::new(&consignment),
         };
-        let res = consignment.clone().validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        );
-        let failures = res.unwrap_err().failures;
+        let res = consignment
+            .clone()
+            .validate(
+                &resolver,
+                ChainNet::BitcoinRegtest,
+                None,
+                trusted_typesystem.clone(),
+            )
+            .unwrap_err();
+        dbg!(&res);
         assert_eq!(
-            failures,
-            vec![Failure::ScriptFailure(
+            res,
+            ValidationError::InvalidConsignment(Failure::ScriptFailure(
                 opid,
                 Some(ERRNO_NON_EQUAL_IN_OUT),
                 None
-            )]
+            ))
         );
     }
 
@@ -2570,28 +2734,26 @@ fn validate_consignment_ifa() {
         let resolver = OfflineResolver {
             consignment: &IndexedConsignment::new(&consignment),
         };
-        let res = consignment.clone().validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        );
-        let failures = res.unwrap_err().failures;
+        let res = consignment
+            .clone()
+            .validate(
+                &resolver,
+                ChainNet::BitcoinRegtest,
+                None,
+                trusted_typesystem.clone(),
+            )
+            .unwrap_err();
+        dbg!(&res);
         let mismatch = OccurrencesMismatch {
             min: 1,
             max: 65535,
             found: 0,
         };
-        let errno = match input.ty {
-            OS_REPLACE => ERRNO_REPLACE_NO_INPUT,
-            _ => ERRNO_NON_EQUAL_IN_OUT,
-        };
         assert_eq!(
-            failures,
-            vec![
-                Failure::SchemaInputOccurrences(opid, input.ty, mismatch),
-                Failure::ScriptFailure(opid, Some(errno), None)
-            ]
+            res,
+            ValidationError::InvalidConsignment(Failure::SchemaInputOccurrences(
+                opid, input.ty, mismatch
+            ))
         );
     }
 
@@ -2616,20 +2778,23 @@ fn validate_consignment_ifa() {
     let resolver = OfflineResolver {
         consignment: &IndexedConsignment::new(&consignment),
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
-    let failures = res.unwrap_err().failures;
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
     assert_eq!(
-        failures,
-        vec![Failure::ScriptFailure(
+        res,
+        ValidationError::InvalidConsignment(Failure::ScriptFailure(
             opid,
             Some(ERRNO_NON_EQUAL_IN_OUT),
             None
-        )]
+        ))
     );
 
     // Error: replace transitions can't burn allocations
@@ -2650,29 +2815,28 @@ fn validate_consignment_ifa() {
         let resolver = OfflineResolver {
             consignment: &IndexedConsignment::new(&consignment),
         };
-        let res = consignment.clone().validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        );
-        let failures = res.unwrap_err().failures;
+        let res = consignment
+            .clone()
+            .validate(
+                &resolver,
+                ChainNet::BitcoinRegtest,
+                None,
+                trusted_typesystem.clone(),
+            )
+            .unwrap_err();
+        dbg!(&res);
         let mismatch = OccurrencesMismatch {
             min: 1,
             max: 65535,
             found: 0,
         };
-        let errno = match assignment_type {
-            OS_ASSET => ERRNO_NON_EQUAL_IN_OUT,
-            OS_REPLACE => ERRNO_REPLACE_HIDDEN_BURN,
-            _ => unreachable!(),
-        };
         assert_eq!(
-            failures,
-            vec![
-                Failure::SchemaAssignmentOccurrences(opid, assignment_type, mismatch),
-                Failure::ScriptFailure(opid, Some(errno), None)
-            ]
+            res,
+            ValidationError::InvalidConsignment(Failure::SchemaAssignmentOccurrences(
+                opid,
+                assignment_type,
+                mismatch
+            ))
         );
     }
 
@@ -2716,21 +2880,24 @@ fn validate_consignment_ifa() {
         let resolver = OfflineResolver {
             consignment: &IndexedConsignment::new(&consignment),
         };
-        let res = consignment.clone().validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        );
-        let failures = res.unwrap_err().failures;
+        let res = consignment
+            .clone()
+            .validate(
+                &resolver,
+                ChainNet::BitcoinRegtest,
+                None,
+                trusted_typesystem.clone(),
+            )
+            .unwrap_err();
+        dbg!(&res);
         let errno = match assignment_type {
             OS_ASSET => ERRNO_ISSUED_MISMATCH,
             OS_INFLATION => ERRNO_INFLATION_MISMATCH,
             _ => unreachable!(),
         };
         assert_eq!(
-            failures,
-            vec![Failure::ScriptFailure(opid, Some(errno), None)]
+            res,
+            ValidationError::InvalidConsignment(Failure::ScriptFailure(opid, Some(errno), None))
         );
     }
 
@@ -2780,16 +2947,22 @@ fn validate_consignment_ifa() {
         let resolver = OfflineResolver {
             consignment: &IndexedConsignment::new(&consignment),
         };
-        let res = consignment.clone().validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        );
-        let failures = res.unwrap_err().failures;
+        let res = consignment
+            .clone()
+            .validate(
+                &resolver,
+                ChainNet::BitcoinRegtest,
+                None,
+                trusted_typesystem.clone(),
+            )
+            .unwrap_err();
+        dbg!(&res);
         assert_eq!(
-            failures,
-            vec![Failure::SchemaUnknownAssignmentType(opid, assignment_type)]
+            res,
+            ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(
+                opid,
+                assignment_type
+            ))
         );
     }
 }
@@ -2848,11 +3021,14 @@ fn validate_consignment_typesystem_fail() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
-    let res = consignment.validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem,
-    );
-    assert!(res.is_err());
+    let res = consignment
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem,
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert!(matches!(res, ValidationError::InvalidConsignment(_)));
 }
