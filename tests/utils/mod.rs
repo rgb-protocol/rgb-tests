@@ -118,14 +118,14 @@ pub use rgb_altered::{
     stl::{rgb_contract_stl, ContractTerms, RejectListUrl, StandardTypes},
     validation::{
         DbcProof, Failure, ResolveWitness, Scripts, Validator, Validity, Warning,
-        WitnessResolverError, WitnessStatus,
+        WitnessOrdProvider, WitnessResolverError, WitnessStatus,
     },
     vm::{WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
     MetaValue, Occurrences, OccurrencesMismatch, OpId, Opout, OwnedStateSchema, RevealedData,
     RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey, TransferParams,
-    Transition, TransitionBundle, TransitionType, TypedAssigns, VoidState, WalletProvider,
+    Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState, WalletProvider,
 };
 pub use rgbstd::{
     containers::{

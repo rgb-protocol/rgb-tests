@@ -1693,28 +1693,6 @@ dependencies = [
 
 [[package]]
 name = "rgb-api"
-version = "0.11.1-rc.3"
-source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#b69c8cc7d74b741209009663ec37f51162d9a0a4"
-dependencies = [
- "amplify",
- "baid64",
- "bp-core",
- "bp-std",
- "bp-wallet",
- "chrono",
- "commit_verify",
- "getrandom 0.3.3",
- "indexmap 2.10.0",
- "nonasync",
- "rgb-ops",
- "rgb-psbt-utils 0.11.1-rc.3",
- "serde",
- "strict_types",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "rgb-api"
 version = "0.11.1-rc.4"
 dependencies = [
  "amplify",
@@ -1729,6 +1707,28 @@ dependencies = [
  "nonasync",
  "rgb-ops",
  "rgb-psbt-utils 0.11.1-rc.4",
+ "serde",
+ "strict_types",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "rgb-api"
+version = "0.11.1-rc.4"
+source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#a7da08782ca57be13336f94dfb3e52bc4a4080b3"
+dependencies = [
+ "amplify",
+ "baid64",
+ "bp-core",
+ "bp-std",
+ "bp-wallet",
+ "chrono",
+ "commit_verify",
+ "getrandom 0.3.3",
+ "indexmap 2.10.0",
+ "nonasync",
+ "rgb-ops",
+ "rgb-psbt-utils 0.11.1-rc.4 (git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer)",
  "serde",
  "strict_types",
  "wasm-bindgen",
@@ -1801,8 +1801,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-psbt-utils"
-version = "0.11.1-rc.3"
-source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#b69c8cc7d74b741209009663ec37f51162d9a0a4"
+version = "0.11.1-rc.4"
 dependencies = [
  "amplify",
  "baid64",
@@ -1818,6 +1817,7 @@ dependencies = [
 [[package]]
 name = "rgb-psbt-utils"
 version = "0.11.1-rc.4"
+source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#a7da08782ca57be13336f94dfb3e52bc4a4080b3"
 dependencies = [
  "amplify",
  "baid64",
@@ -1860,11 +1860,11 @@ dependencies = [
  "once_cell",
  "psbt",
  "rand 0.8.5",
- "rgb-api 0.11.1-rc.3",
  "rgb-api 0.11.1-rc.4",
+ "rgb-api 0.11.1-rc.4 (git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer)",
  "rgb-ops",
- "rgb-psbt-utils 0.11.1-rc.3",
  "rgb-psbt-utils 0.11.1-rc.4",
+ "rgb-psbt-utils 0.11.1-rc.4 (git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer)",
  "rgb-schemas",
  "rstest",
  "rstest_reuse",
