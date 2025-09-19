@@ -16,7 +16,7 @@ fn issue_nia(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
+    let mut wallet = BpTestWallet::with_descriptor(&wallet_desc);
 
     let issued_supply = 999;
     let ticker = "TCKR";
@@ -64,7 +64,7 @@ fn issue_uda(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
+    let mut wallet = BpTestWallet::with_descriptor(&wallet_desc);
 
     let ticker = "TCKR";
     let name = "asset name";
@@ -148,7 +148,7 @@ fn issue_cfa(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
+    let mut wallet = BpTestWallet::with_descriptor(&wallet_desc);
 
     let issued_supply = 999;
     let name = "asset name";
@@ -196,7 +196,7 @@ fn issue_ifa(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
+    let mut wallet = BpTestWallet::with_descriptor(&wallet_desc);
 
     let issued_supply = 999;
     let ticker = "TCKR";
@@ -282,7 +282,7 @@ fn issue_nia_multiple_utxos(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
+    let mut wallet = BpTestWallet::with_descriptor(&wallet_desc);
 
     let amounts = vec![222, 444, 333];
     let outpoints: Vec<_> = (0..amounts.len())
@@ -300,11 +300,12 @@ fn issue_nia_multiple_utxos(wallet_desc: DescriptorType) {
     let allocations = wallet.contract_fungible_allocations(contract_id, false);
     assert_eq!(allocations.len(), amounts.len());
     for (amt, outpoint) in amounts.iter().zip(outpoints.into_iter()) {
+        let outpoint = outpoint.unwrap();
         assert!(allocations.iter().any(|a| a.state == Amount::from(*amt)
             && a.seal
                 == ExplicitSeal {
-                    txid: outpoint.unwrap().txid,
-                    vout: outpoint.unwrap().vout
+                    txid: outpoint.txid,
+                    vout: Vout::from_u32(outpoint.vout)
                 }))
     }
 }
@@ -316,7 +317,7 @@ fn issue_cfa_multiple_utxos(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
+    let mut wallet = BpTestWallet::with_descriptor(&wallet_desc);
 
     let amounts = vec![222, 444, 333];
     let outpoints: Vec<_> = (0..amounts.len())
@@ -334,11 +335,12 @@ fn issue_cfa_multiple_utxos(wallet_desc: DescriptorType) {
     let allocations = wallet.contract_fungible_allocations(contract_id, false);
     assert_eq!(allocations.len(), amounts.len());
     for (amt, outpoint) in amounts.iter().zip(outpoints.into_iter()) {
+        let outpoint = outpoint.unwrap();
         assert!(allocations.iter().any(|a| a.state == Amount::from(*amt)
             && a.seal
                 == ExplicitSeal {
-                    txid: outpoint.unwrap().txid,
-                    vout: outpoint.unwrap().vout
+                    txid: outpoint.txid,
+                    vout: Vout::from_u32(outpoint.vout)
                 }))
     }
 }
@@ -355,9 +357,9 @@ fn issue_on_different_layers(#[case] scenario: &str) {
     initialize();
 
     let mut wlt_1 = if scenario == "liquid_mainnet_invoice" {
-        TestWallet::new_mainnet()
+        BpTestWallet::new_mainnet()
     } else {
-        TestWallet::with_descriptor(&DescriptorType::Wpkh)
+        BpTestWallet::with_descriptor(&DescriptorType::Wpkh)
     };
 
     let issued_amt = 100;
@@ -394,9 +396,9 @@ fn issue_on_different_layers(#[case] scenario: &str) {
     wlt_1.import_contract(&contract, resolver);
 
     let mut wlt_2 = if scenario == "liquid_mainnet_invoice" {
-        TestWallet::new_mainnet()
+        BpTestWallet::new_mainnet()
     } else {
-        TestWallet::with_descriptor(&DescriptorType::Wpkh)
+        BpTestWallet::with_descriptor(&DescriptorType::Wpkh)
     };
     let contract_id = contract.contract_id();
     let amt = 60;
@@ -415,7 +417,9 @@ fn issue_on_different_layers(#[case] scenario: &str) {
         }
         "liquid_testnet_invoice" => {
             let address = wlt_2.get_address();
-            let beneficiary = Beneficiary::WitnessVout(Pay2Vout::new(address.payload), None);
+            let address_payload =
+                address_payload_bitcoin_from_script_pubkey(&address.payload.script_pubkey());
+            let beneficiary = Beneficiary::WitnessVout(Pay2Vout::new(address_payload), None);
             let builder = RgbInvoiceBuilder::new(XChainNet::LiquidTestnet(beneficiary))
                 .set_contract(contract_id)
                 .set_amount_raw(amt);
@@ -424,12 +428,14 @@ fn issue_on_different_layers(#[case] scenario: &str) {
         }
         "liquid_mainnet_invoice" => {
             let address = wlt_2.get_address();
-            let beneficiary = Beneficiary::WitnessVout(Pay2Vout::new(address.payload), None);
+            let address_payload =
+                address_payload_bitcoin_from_script_pubkey(&address.payload.script_pubkey());
+            let beneficiary = Beneficiary::WitnessVout(Pay2Vout::new(address_payload), None);
             let builder = RgbInvoiceBuilder::new(XChainNet::LiquidMainnet(beneficiary))
                 .set_contract(contract_id)
                 .set_amount_raw(issued_amt);
             let invoice = builder.finish();
-            let (_, _, consignment) = wlt_1.pay(invoice, Some(500), Some(100));
+            let (_, _, consignment) = wlt_1.pay_invoice(invoice, Some(500), Some(100));
             wlt_2.accept_transfer(consignment.clone(), None);
         }
         _ => unreachable!(),
@@ -469,7 +475,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
             "rgb:AYzddSFf-K_6Piay-l_nnowW-YMDgUlJ-LniVRJP-C3b7uNQ",
         ),
         AssetSchema::Pfa => {
-            let pubkey = CompressedPk::from_str(
+            let pubkey = CompressedPublicKey::from_str(
                 "03b2dbebaf199c3e49bb18d2690f3d6777e566d6b075dce432c8f4f5cf2ffd3d8d",
             )
             .unwrap();
@@ -484,7 +490,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
         ),
     };
 
-    let mut wallet = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wallet = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
     let contract_id = wallet.issue_with_info(asset_info, outpoints, created_at, blinding);
 
     assert_eq!(contract_id.to_string(), expected_cid.to_string());
@@ -495,7 +501,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
 fn contract_globals_order() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_amounts = vec![999, 888, 777, 666, 555, 444, 333, 222, 111];
     let tot_inflation = issue_amounts[1..].iter().sum();

@@ -1,5 +1,5 @@
 pub mod chain;
-pub mod helpers;
+pub mod wallet;
 
 pub const TEST_DATA_DIR: &str = "test-data";
 pub const INTEGRATION_DATA_DIR: &str = "integration";
@@ -13,7 +13,8 @@ pub const UDA_FIXED_INDEX: u32 = 0;
 pub const DEFAULT_FEE_ABS: u64 = 400;
 pub const MEDIA_FPATH: &str = "tests/fixtures/rgb_logo.jpeg";
 pub const REJECT_LIST_URL: &str = "example.xyz/rejectList";
-pub const PURPOSE: u32 = 86;
+pub const PURPOSE_BIP84: u32 = 84;
+pub const PURPOSE_BIP86: u32 = 86;
 pub const COIN_RGB_TESTNET: u32 = 827167;
 pub const ACCOUNT: u32 = 0;
 
@@ -25,6 +26,8 @@ pub type TT = TransferType;
 pub type DT = DescriptorType;
 pub type AS = AssetSchema;
 
+#[cfg(not(target_os = "windows"))]
+pub use std::os::unix::process::CommandExt;
 pub use std::{
     borrow::Borrow,
     cell::{OnceCell, RefCell},
@@ -36,7 +39,6 @@ pub use std::{
     fs::OpenOptions,
     io::Write,
     num::NonZeroU32,
-    os::unix::process::CommandExt,
     path::{MAIN_SEPARATOR, PathBuf},
     process::{Command, Stdio},
     str::FromStr,
@@ -57,55 +59,98 @@ pub use amplify::{
     num::u24,
     s, set,
 };
-use bitcoin_hashes::{Hash, sha256};
-pub use bp::{
-    CompressedPk, ConsensusDecode, InternalPk, IntoTapHash, LeafScript, LeafVer, LockTime,
-    Outpoint, Sats, ScriptPubkey, SeqNo, TapBranchHash, TapNodeHash, TapScript, Tx, TxVer, Txid,
-    Vout,
-    dbc::tapret::{TapretCommitment, TapretNodePartner, TapretProof, TapretRightBranch},
-    seals::txout::TxPtr,
-    seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
-    secp256k1::{Message, Secp256k1, SecretKey},
+use bdk_electrum::{
+    BdkElectrumClient,
+    electrum_client::{Client as ElectrumClient, ElectrumApi as _},
 };
-pub use bpstd::{
-    Address, DerivationPath, DerivationSeg, Derive, DerivedAddr, Descriptor, HardenedIndex, Idx,
-    IdxBase, Keychain, Network, NormalIndex, Terminal, XkeyOrigin, Xpriv, XprivAccount, Xpub,
-    XpubAccount, XpubDerivable, XpubFp, h, signers::TestnetSigner,
+use bdk_esplora::{
+    EsploraExt,
+    esplora_client::{BlockingClient as EsploraClient, Builder as EsploraBuilder},
 };
+pub use bdk_wallet::{
+    ChangeSet, KeychainKind, PersistedWallet, SignOptions, Update, Wallet as BdkWallet,
+    bitcoin::{
+        bip32::Xpriv,
+        psbt::{Output as BdkOutput, raw::ProprietaryKey},
+    },
+    chain::{
+        ChainPosition,
+        spk_client::{FullScanRequest, FullScanResponse},
+    },
+    file_store::Store,
+};
+pub use bitcoin_hashes::{Hash, sha256};
 pub use bpwallet::{
-    AnyIndexer, Indexer as BpIndexer, Wallet, WalletUtxo, fs::FsTextStore,
-    indexers::esplora::Client as EsploraClient,
+    Address as BpAddress, AnyIndexer, ConsensusDecode, DerivationPath, DerivationSeg, Derive,
+    DerivedAddr, Descriptor, HardenedIndex, Idx, IdxBase, Indexer as BpIndexer, InternalPk,
+    Keychain, LockTime, Network as BpNetwork, NormalIndex, Outpoint as BpOutpoint, Sats,
+    ScriptPubkey, SeqNo, Terminal as BpTerminal, Tx, TxStatus, TxVer, Txid as BpTxid,
+    Vout as BpVout, Wallet as BpWallet, WalletUtxo, Wpkh, XkeyOrigin, XprivAccount, Xpub,
+    XpubAccount, XpubDerivable, XpubFp,
+    fs::FsTextStore,
+    h,
+    indexers::esplora::Client as BpEsploraClient,
+    psbt::{
+        Beneficiary as PsbtBeneficiary, KeyMap, Output, Payment, Prevout, PropKey, Psbt as BpPsbt,
+        PsbtConstructor, PsbtMeta as BpPsbtMeta, PsbtVer, Utxo,
+    },
+    signers::TestnetSigner,
 };
 pub use chrono::Utc;
-pub use commit_verify::{CommitVerify, mpc};
-pub use descriptors::Wpkh;
-pub use electrum::{Client as ElectrumClient, ElectrumApi, Param};
+pub use electrum::{Client as BpElectrumClient, ElectrumApi as _, Param};
 pub use file_format::FileFormat;
 pub use lazy_static::lazy_static;
+#[cfg(not(target_os = "windows"))]
 pub use nix::unistd::{self, Pid};
 pub use once_cell::sync::Lazy;
-pub use psbt::{
-    Beneficiary as PsbtBeneficiary, KeyMap, Payment, Prevout, PropKey, Psbt, PsbtConstructor,
-    PsbtMeta, PsbtVer, Utxo,
+#[cfg(not(feature = "altered"))]
+pub use psrgbt::{
+    OpoutAndOpids, RgbOutExt, RgbPropKeyExt, RgbPsbtExt, Terminal,
+    bp_conversion_utils::{
+        address_bitcoin_to_bp, address_bp_to_bitcoin, address_payload_bitcoin_from_script_pubkey,
+        address_payload_bp_from_script_pubkey, internal_pk_to_untweakedpublickey,
+        network_bp_to_bitcoin, outpoint_bitcoin_to_bp, outpoint_bp_to_bitcoin,
+        script_buf_to_script_pubkey, tx_bitcoin_to_bp, tx_bp_to_bitcoin, txid_bitcoin_to_bp,
+        txid_bp_to_bitcoin, untweakedpublickey_to_internal_pk,
+    },
 };
-pub use psrgbt::{OpoutAndOpids, ProprietaryKeyRgb, RgbExt, RgbPsbt, TxParams};
+#[cfg(feature = "altered")]
+pub use psrgbt_altered::{
+    OpoutAndOpids, RgbOutExt, RgbPropKeyExt, RgbPsbtExt, Terminal,
+    bp_conversion_utils::{
+        address_bitcoin_to_bp, address_bp_to_bitcoin, address_payload_bitcoin_from_script_pubkey,
+        address_payload_bp_from_script_pubkey, internal_pk_to_untweakedpublickey,
+        network_bp_to_bitcoin, outpoint_bitcoin_to_bp, outpoint_bp_to_bitcoin,
+        script_buf_to_script_pubkey, tx_bitcoin_to_bp, tx_bp_to_bitcoin, txid_bitcoin_to_bp,
+        txid_bp_to_bitcoin, untweakedpublickey_to_internal_pk,
+    },
+};
 pub use rand::{Rng, RngCore, SeedableRng, rngs::StdRng, seq::SliceRandom};
 #[cfg(not(feature = "altered"))]
 pub use rgb::{
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
-    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
-    RevealedData, RevealedValue, RgbDescr, RgbWallet, StateType, TapretKey, TransferParams,
-    Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState, WalletProvider,
+    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, Outpoint,
+    OwnedStateSchema, RevealedData, RevealedValue, RgbDescr, RgbWallet, StateType, TapretKey,
+    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
+    WalletProvider, WpkhDescr,
     assignments::AssignVec,
+    bitcoin::{
+        Address, CompressedPublicKey, Network, Psbt, ScriptBuf, TapLeafHash, TapNodeHash,
+        Transaction, hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1, taproot::LeafScript,
+        taproot::LeafVersion,
+    },
     containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{
         AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection, SchemaWrapper,
     },
     info::ContractInfo,
-    invoice::Pay2Vout,
-    persistence::{MemContract, MemContractState, Stock},
+    invoice::{AddressPayload, Pay2Vout},
+    opret::OpretProof,
+    pay::{PsbtMeta, TxParams},
+    persistence::{ContractAssignments, MemContract, MemContractState, Stock},
     stl::{ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl},
+    tapret::{TapretNodePartner, TapretRightBranch},
     validation::{
         DbcProof, Failure, OpoutsDagData, ResolveWitness, Scripts, Status, ValidationConfig,
         ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError,
@@ -117,24 +162,41 @@ pub use rgb::{
 pub use rgb_altered::{
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
-    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
-    RevealedData, RevealedValue, RgbDescr, RgbWallet, StateType, TapretKey, TransferParams,
-    Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState, WalletProvider,
+    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, Outpoint,
+    OwnedStateSchema, RevealedData, RevealedValue, RgbDescr, RgbWallet, StateType, TapretKey,
+    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
+    WalletProvider, WpkhDescr,
     assignments::AssignVec,
+    bitcoin::{
+        Address, CompressedPublicKey, Network, Psbt, ScriptBuf, TapLeafHash, TapNodeHash,
+        Transaction, hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1, taproot::LeafScript,
+        taproot::LeafVersion,
+    },
     containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{
         AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection, SchemaWrapper,
     },
     info::ContractInfo,
-    invoice::Pay2Vout,
-    persistence::{MemContract, MemContractState, Stock},
+    invoice::{AddressPayload, Pay2Vout},
+    opret::OpretProof,
+    pay::{PsbtMeta, TxParams},
+    persistence::{ContractAssignments, MemContract, MemContractState, Stock},
     stl::{ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl},
+    tapret::{TapretNodePartner, TapretRightBranch},
     validation::{
         DbcProof, Failure, OpoutsDagData, ResolveWitness, Scripts, Status, ValidationConfig,
         ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError,
         WitnessStatus,
     },
     vm::{ContractStateAccess, GlobalsIter, WitnessOrd, WitnessPos},
+};
+pub use rgbcore::{
+    Txid, Vout,
+    commit_verify::mpc,
+    dbc::tapret::{TapretCommitment, TapretProof},
+    seals::txout::TxPtr,
+    seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
+    secp256k1::{Message, Secp256k1, SecretKey},
 };
 pub use rgbstd::{
     Allocation, Amount, ChainNet, ContractId, GlobalStateType, KnownState, Layer1, Operation,
@@ -176,7 +238,7 @@ pub use strum::IntoEnumIterator;
 pub use strum_macros::EnumIter;
 pub use time::OffsetDateTime;
 
-pub use crate::utils::{chain::*, helpers::*};
+pub use crate::utils::{chain::*, wallet::*};
 
 fn running_in_docker() -> bool {
     std::path::Path::new("/.dockerenv").exists()

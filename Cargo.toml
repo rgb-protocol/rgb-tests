@@ -14,111 +14,96 @@ license = "Apache-2.0"
 description = "RGB tests"
 
 [dependencies]
+amplify = "4.8.1"
+bdk_wallet = { version = "2.0.0", features = [
+    "file_store",
+    "std",
+] }
+bdk_electrum = "0.23.0"
+bdk_esplora = "0.22.0"
 bitcoin_hashes = "0.14.0"
+bp-electrum = { version = "=0.11.1-alpha.2" }
+bp-esplora = { version = "=0.11.1-alpha.2", features = [
+    "blocking-https",
+] }
+bp-wallet = { version = "=0.11.1-alpha.2", features = [
+    "electrum",
+    "esplora",
+    "fs",
+    "signers"
+] }
 chrono = "0.4.41"
 crossbeam = "0.8"
 dhat = "0.3"
-file-format = { version = "0.25.0", features = ["reader"] }
+file-format = { version = "0.25.0", features = [
+    "reader",
+] }
 lazy_static = { version = "1.5.0", default-features = false }
 libc = "0.2"
-nix = { version = "0.30", features = ["process"] }
+nix = { version = "0.30", features = [
+    "process",
+] }
 once_cell = "1.19.0"
 rand = "0.8.5"
 rstest = "0.19.0"
 rstest_reuse = "0.6.0"
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = [
+    "derive",
+] }
 serde_json = "1.0.140"
 serial_test = "3.2.0"
 signal-hook = "0.3"
-strum = { version = "0.26.2", features = ["derive"] }
+strum = { version = "0.26.2", features = [
+    "derive",
+] }
 strum_macros = "0.26.2"
 sysinfo = "0.37"
 time = "0.3.34"
 
 # RGB-related deps
-## bp-core
-bp-core = { path = "./bp-core" }
-## bp-electrum-client
-bp-electrum = { path = "./bp-electrum-client" }
-## bp-esplora
-bp-esplora = { path = "./bp-esplora-client", features = [
-    "blocking-https",
-] }
-## bp-std
-bp-std = { path = "./bp-std", features = ["signers"] }
-descriptors = { path = "./bp-std/descriptors" }
-bp-invoice = { path = "./bp-std/invoice" }
-psbt = { path = "./bp-std/psbt" }
-## bp-wallet
-bp-wallet = { path = "./bp-wallet", features = [
-    "electrum",
-    "esplora",
-    "fs",
-] }
-## client_side_validation
-commit_verify = { path = "./client_side_validation/commit_verify" }
 ## rgb-api
 rgb-api = { path = "./rgb-api", features = [
+    "bp",
+    "bdk",
     "electrum_blocking",
     "esplora_blocking",
     "fs",
 ] }
-rgb-psbt-utils = { path = "./rgb-api/psbt" }
-## altered_submodules/rgb (cannot use path, see https://github.com/rust-lang/cargo/issues/10353)
+rgb-psbt-utils = { path = "./rgb-api/psbt", features = [
+    "bp",
+] }
+## altered_submodules/rgb (cannot use path, see https://github.com/rust-lang/cargo/issues/8639)
 rgb_altered = { git = "https://github.com/rgb-protocol/rgb-api", branch = "revert_fix_same_blinded_transfer", package = "rgb-api", features = [
+    "bp",
+    "bdk",
     "electrum_blocking",
     "esplora_blocking",
     "fs",
 ], optional = true }
-psrgbt_altered = { git = "https://github.com/rgb-protocol/rgb-api", branch = "revert_fix_same_blinded_transfer", package = "rgb-psbt-utils", optional = true }
+psrgbt_altered = { git = "https://github.com/rgb-protocol/rgb-api", branch = "revert_fix_same_blinded_transfer", package = "rgb-psbt-utils", features = [
+    "bp",
+], optional = true }
+## rgb-consensus
+rgb-consensus = { path = "./rgb-consensus", features = [
+    "rand",
+] }
 ## rgb-ops
-rgb-ops = { path = "./rgb-ops", features = ["fs"] }
+rgb-ops = { path = "./rgb-ops", features = [
+    "fs",
+] }
 ## rgb-schemas
 rgb-schemas = { path = "./rgb-schemas" }
-## rust-amplify
-amplify = { path = "./rust-amplify" }
 ## strict-encoding
-strict_encoding = { path = "./strict-encoding/rust" }
+rgb-strict-encoding = { path = "./rgb-strict-encoding/rust" }
 ## strict-types
-strict_types = { path = "./strict-types" }
+rgb-strict-types = { path = "./rgb-strict-types" }
 
 [patch.crates-io]
 # patching all RGB-related deps, to measure code coverage
 ## aluvm
-aluvm = { path = "./aluvm" }
-## amplify-derive
-amplify_derive = { path = "./amplify-derive" }
-amplify_syn = { path = "./amplify-derive/syn" }
-## amplify-nonasync
-nonasync = { path = "./amplify-nonasync" }
-## amplify-num
-amplify_apfloat = { path = "./amplify-num/apfloat" }
-amplify_num = { path = "./amplify-num/num" }
+rgb-aluvm = { path = "./rgb-aluvm" }
 ## ascii-armor
-ascii-armor = { path = "./ascii-armor" }
-## baid64
-baid64 = { path = "./rust-baid64" }
-## bp-core
-bp-core = { path = "./bp-core" }
-bp-consensus = { path = "./bp-core/consensus" }
-bp-dbc = { path = "./bp-core/dbc" }
-bp-seals = { path = "./bp-core/seals" }
-## bp-electrum-client
-bp-electrum = { path = "./bp-electrum-client" }
-## bp-esplora-client
-bp-esplora = { path = "./bp-esplora-client" }
-## bp-std
-bp-derive = { path = "./bp-std/derive" }
-bp-std = { path = "./bp-std" }
-descriptors = { path = "./bp-std/descriptors" }
-bp-invoice = { path = "./bp-std/invoice" }
-psbt = { path = "./bp-std/psbt" }
-## bp-wallet
-bp-wallet = { path = "./bp-wallet" }
-## client_side_validation
-commit_verify = { path = "./client_side_validation/commit_verify" }
-commit_encoding_derive = { path = "./client_side_validation/commit_verify/derive" }
-single_use_seals = { path = "./client_side_validation/single_use_seals" }
+rgb-ascii-armor = { path = "./rgb-ascii-armor" }
 ## rgb-api
 rgb-api = { path = "./rgb-api" }
 rgb-psbt-utils = { path = "./rgb-api/psbt" }
@@ -129,15 +114,11 @@ rgb-ops = { path = "./rgb-ops" }
 rgb-invoicing = { path = "./rgb-ops/invoice" }
 ## rgb-schemas
 rgb-schemas = { path = "./rgb-schemas" }
-## rust-amplify
-amplify = { path = "./rust-amplify" }
 ## strict-encoding
-strict_encoding = { path = "./strict-encoding/rust" }
-strict_encoding_derive = { path = "./strict-encoding/rust/derive" }
+rgb-strict-encoding = { path = "./rgb-strict-encoding/rust" }
+rgb-strict-encoding-derive = { path = "./rgb-strict-encoding/rust/derive" }
 ## strict-types
-strict_types = { path = "./strict-types" }
-## vesper
-vesper-lang = { path = "./vesper" }
+rgb-strict-types = { path = "./rgb-strict-types" }
 
 [features]
 default = []

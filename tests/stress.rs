@@ -48,8 +48,8 @@ fn back_and_forth(
         "send_2_tot",
     ]);
 
-    let mut wlt_1 = TestWallet::with_descriptor(&wlt_1_desc);
-    let mut wlt_2 = TestWallet::with_descriptor(&wlt_2_desc);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&wlt_1_desc);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&wlt_2_desc);
 
     let issued_supply = u64::MAX;
 
@@ -99,6 +99,7 @@ fn back_and_forth(
     println!("elapsed: {elapsed:.2?}");
 }
 
+#[cfg(not(target_os = "windows"))]
 #[test]
 #[ignore = "run if desired"]
 fn random_transfers() {
@@ -492,9 +493,9 @@ fn random_transfers() {
     // - contract transfer map: contract index -> number of transfers
     type ContractTransferMap = BTreeMap<u8, u16>;
     // - UTXO map: outpoint -> BTC amount (sats), unique index
-    type UTXOMap = HashMap<Outpoint, (Sats, usize)>;
+    type UTXOMap = HashMap<Outpoint, (u64, usize)>;
     // - wallet map: index -> wallet, descriptor type, seed
-    type WalletsType = HashMap<usize, (RefCell<TestWallet>, Vec<u8>)>;
+    type WalletsType = HashMap<usize, (RefCell<BpTestWallet>, Vec<u8>)>;
     // - wallet holder, with helper methods
     struct Wallets {
         // infex for the next wallet
@@ -550,9 +551,9 @@ fn random_transfers() {
                 .iter()
                 .map(|(idx, seed)| {
                     let (xpriv_account, wallet_dir) = TestWallet::gen_keys(seed);
-                    let wallet = TestWallet::new(
+                    let wallet = BpTestWallet::new(
                         None,
-                        Network::Regtest,
+                        BpNetwork::Regtest,
                         wallet_dir,
                         WalletAccount::Private(xpriv_account),
                         INSTANCE_1,
@@ -597,20 +598,20 @@ fn random_transfers() {
             self.wallets.len()
         }
 
-        fn add(&mut self, wallet: TestWallet, seed: Vec<u8>) {
+        fn add(&mut self, wallet: BpTestWallet, seed: Vec<u8>) {
             self.wallets
                 .insert(self.next_wallet_idx, (RefCell::new(wallet), seed));
             self.outpoints.insert(self.next_wallet_idx, HashMap::new());
             self.next_wallet_idx = self.len();
         }
 
-        fn get_mut(&mut self, idx: usize) -> &mut TestWallet {
+        fn get_mut(&mut self, idx: usize) -> &mut BpTestWallet {
             self.wallets.get_mut(&idx).unwrap().0.get_mut()
         }
 
         fn add_outpoints(&mut self, idx: usize) {
             let wallet = self.wallets.get_mut(&idx).unwrap().0.get_mut();
-            let utxos = wallet.get_unspents();
+            let utxos = wallet.list_unspents();
             let outpoints = self.outpoints.get_mut(&idx).unwrap();
             let idx_begin = outpoints.len();
             let mut idx_next = idx_begin;
@@ -625,7 +626,7 @@ fn random_transfers() {
             let deterministic = if idx_next - idx_begin > 1 {
                 let new_outpoint_txid_set: HashSet<&Txid> =
                     new_outpoints.iter().map(|(o, ..)| &o.txid).collect();
-                let new_outpoint_sat_set: HashSet<&Sats> =
+                let new_outpoint_sat_set: HashSet<&u64> =
                     new_outpoints.iter().map(|(_, s, _)| s).collect();
                 // if only a single TX is involved, sorting is deterministic due to vout
                 // if multiple TXs are involved and sats are different, sorting is deterministic
@@ -641,7 +642,7 @@ fn random_transfers() {
 
         fn del_outpoints(&mut self, idx: usize) {
             let wallet = self.wallets.get_mut(&idx).unwrap().0.get_mut();
-            let utxos = wallet.get_unspents();
+            let utxos = wallet.list_unspents();
             let outpoints = self.outpoints.get_mut(&idx).unwrap();
             outpoints.retain(|o, _| utxos.contains_key(o));
             let idx_begin = outpoints.len();
@@ -652,14 +653,14 @@ fn random_transfers() {
             }
         }
 
-        fn get_outpoint_map(&self, idx: usize) -> HashMap<Outpoint, (Sats, usize)> {
+        fn get_outpoint_map(&self, idx: usize) -> HashMap<Outpoint, (u64, usize)> {
             self.outpoints.get(&idx).unwrap().clone()
         }
 
         fn get_outpoint_iter(
             &self,
             idx: usize,
-        ) -> impl Iterator<Item = (Outpoint, Sats, usize)> + '_ {
+        ) -> impl Iterator<Item = (Outpoint, u64, usize)> + '_ {
             self.outpoints
                 .get(&idx)
                 .unwrap()
@@ -678,8 +679,8 @@ fn random_transfers() {
                     eprintln!("    - {o} -> {s} {i}");
                 }
                 eprintln!("  - utxos:");
-                for u in wallet.utxos() {
-                    eprintln!("    - {}: {} {}", u.outpoint, u.value, u.status.is_mined());
+                for (outpoint, sats) in wallet.list_unspents() {
+                    eprintln!("    - {}: {}", outpoint, sats);
                 }
                 eprintln!("  - contracts:");
                 for a in wallet.list_contracts() {
@@ -861,7 +862,7 @@ fn random_transfers() {
     ) -> (
         InputOutpointMap,
         u64,
-        Vec<(Outpoint, Sats)>,
+        Vec<(Outpoint, u64)>,
         Option<Outpoint>,
         CloseMethod,
     ) {
@@ -894,20 +895,17 @@ fn random_transfers() {
         let mut input_sats = 0;
         for (outpoint, ..) in &input_outpoints {
             let sats = utxos.iter().find(|u| u.0 == outpoint).unwrap().1.0;
-            input_sats += sats.sats();
+            input_sats += sats;
         }
         // add more inputs to cover the BTC required amount, if needed
-        let mut remaining_utxos: Vec<(&Outpoint, &Sats, usize)> = utxos
+        let mut remaining_utxos: Vec<(&Outpoint, &u64, usize)> = utxos
             .iter()
             .filter(|(o, _)| !input_outpoints.contains_key(o))
             .map(|(o, (s, i))| (o, s, *i))
             .collect();
         // sort by sat amount and unique index (as tie-breaker) to avoid non-deterministic sort
         remaining_utxos.sort_by(|(_, a_sats, a_idx), (_, b_sats, b_idx)| {
-            a_sats
-                .sats()
-                .cmp(&b_sats.sats())
-                .then_with(|| a_idx.cmp(b_idx))
+            a_sats.cmp(b_sats).then_with(|| a_idx.cmp(b_idx))
         });
         //remaining_utxos.sort_by(|(_, a_sats), (_, b_sats)| a_sats.sats().cmp(&b_sats.sats()));
         for (o, s, _) in remaining_utxos.iter() {
@@ -915,7 +913,7 @@ fn random_transfers() {
                 break;
             }
             assert!(input_outpoints.insert(**o, None).is_none());
-            input_sats += s.sats();
+            input_sats += *s;
         }
         remaining_utxos.retain(|(o, ..)| !input_outpoints.contains_key(o));
         // create a new bitcoin UTXO and add it as input, if needed to cover the BTC required amount
@@ -946,7 +944,7 @@ fn random_transfers() {
             wallets.get_mut(send_idx).close_method()
         };
         // return selected inputs and related info
-        let remaining_utxos: Vec<(Outpoint, Sats)> = remaining_utxos
+        let remaining_utxos: Vec<(Outpoint, u64)> = remaining_utxos
             .into_iter()
             .map(|(o, s, _)| (*o, *s))
             .collect();
@@ -976,17 +974,14 @@ fn random_transfers() {
                 ),
                 TransferType::Blinded => {
                     let utxos_being_spent: Vec<&Outpoint> = input_outpoints.keys().collect();
-                    let mut usable_utxos: Vec<(Outpoint, Sats, usize)> = wallets
+                    let mut usable_utxos: Vec<(Outpoint, u64, usize)> = wallets
                         .get_outpoint_iter(*r)
                         .filter(|u| !utxos_being_spent.contains(&&u.0))
                         .collect();
                     // use a random available UTXO (if any) with 80% probability
                     let outpoint = if !usable_utxos.is_empty() && rng.gen_bool(0.8) {
                         usable_utxos.sort_by(|(_, a_sats, a_idx), (_, b_sats, b_idx)| {
-                            a_sats
-                                .sats()
-                                .cmp(&b_sats.sats())
-                                .then_with(|| a_idx.cmp(b_idx))
+                            a_sats.cmp(b_sats).then_with(|| a_idx.cmp(b_idx))
                         });
                         let utxo_idx = rng.gen_range(0..usable_utxos.len());
                         Some(usable_utxos[utxo_idx].0)
@@ -1292,7 +1287,7 @@ fn random_transfers() {
             } else {
                 DescriptorType::Tr
             };
-            let (wlt, seed) = TestWallet::with_rng(&descriptor_type, None, true, None);
+            let (wlt, seed) = BpTestWallet::with_rng(&descriptor_type, None, true, None);
             wallets.add(wlt, seed);
         }
     }
@@ -1499,7 +1494,9 @@ fn random_transfers() {
         // mine a block + wait for TX to be confirmed in indexer
         let mine_start = Instant::now();
         let txid = tx.txid();
-        wallets.get_mut(send_idx).mine_tx(&txid, false);
+        wallets
+            .get_mut(send_idx)
+            .mine_tx(&txid_bp_to_bitcoin(txid), false);
         let mine_duration = mine_start.elapsed();
         report.write_duration(mine_duration);
 

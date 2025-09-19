@@ -79,6 +79,7 @@ fn _bitcoin_cli_cmd(instance: u8, args: Vec<&str>) -> String {
         ]),
         Indexer::Esplora => bitcoin_cli.extend(vec![service_name, "cli".to_string()]),
     };
+    #[cfg(not(target_os = "windows"))]
     let output = unsafe {
         Command::new("docker")
             .stdin(Stdio::null())
@@ -96,6 +97,15 @@ fn _bitcoin_cli_cmd(instance: u8, args: Vec<&str>) -> String {
             .output()
             .unwrap_or_else(|_| panic!("failed to call bitcoind with args {args:?}"))
     };
+    #[cfg(target_os = "windows")]
+    let output = Command::new("docker")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .arg("compose")
+        .args(bitcoin_cli)
+        .args(&args)
+        .output()
+        .unwrap_or_else(|_| panic!("failed to call bitcoind with args {args:?}"));
     if !output.status.success() {
         println!("{output:?}");
         panic!("failed to get succesful output with args {args:?}");
@@ -243,11 +253,11 @@ pub fn get_height_custom(instance: u8) -> u32 {
 
 pub fn indexer_url(instance: u8, network: Network) -> String {
     match (INDEXER.get().unwrap(), network, instance) {
-        (Indexer::Electrum, Network::Mainnet, _) => ELECTRUM_MAINNET_URL,
+        (Indexer::Electrum, Network::Bitcoin, _) => ELECTRUM_MAINNET_URL,
         (Indexer::Electrum, Network::Regtest, INSTANCE_1) => &ELECTRUM_1_REGTEST_URL,
         (Indexer::Electrum, Network::Regtest, INSTANCE_2) => &ELECTRUM_2_REGTEST_URL,
         (Indexer::Electrum, Network::Regtest, INSTANCE_3) => &ELECTRUM_3_REGTEST_URL,
-        (Indexer::Esplora, Network::Mainnet, _) => ESPLORA_MAINNET_URL,
+        (Indexer::Esplora, Network::Bitcoin, _) => ESPLORA_MAINNET_URL,
         (Indexer::Esplora, Network::Regtest, INSTANCE_1) => &ESPLORA_1_REGTEST_URL,
         (Indexer::Esplora, Network::Regtest, INSTANCE_2) => &ESPLORA_2_REGTEST_URL,
         (Indexer::Esplora, Network::Regtest, INSTANCE_3) => &ESPLORA_3_REGTEST_URL,
@@ -256,22 +266,36 @@ pub fn indexer_url(instance: u8, network: Network) -> String {
     .to_string()
 }
 
+pub enum IndexerClient {
+    Electrum(Box<ElectrumClient>),
+    Esplora(Box<EsploraClient>),
+}
+
+pub fn get_indexer_client(indexer_url: &str) -> IndexerClient {
+    match INDEXER.get().unwrap() {
+        Indexer::Electrum => {
+            IndexerClient::Electrum(Box::new(ElectrumClient::new(indexer_url).unwrap()))
+        }
+        Indexer::Esplora => IndexerClient::Esplora(Box::new(EsploraClient::from_builder(
+            EsploraBuilder::new(indexer_url),
+        ))),
+    }
+}
+
 fn _wait_indexer_sync(instance: u8) {
     let t_0 = OffsetDateTime::now_utc();
     let blockcount = get_height_custom(instance);
     loop {
         std::thread::sleep(Duration::from_millis(100));
         let url = &indexer_url(instance, Network::Regtest);
-        match INDEXER.get().unwrap() {
-            Indexer::Electrum => {
-                let electrum_client = ElectrumClient::new(url).unwrap();
-                if electrum_client.block_header(blockcount as usize).is_ok() {
+        match get_indexer_client(url) {
+            IndexerClient::Electrum(client) => {
+                if client.block_header(blockcount as usize).is_ok() {
                     break;
                 }
             }
-            Indexer::Esplora => {
-                let esplora_client = EsploraClient::new_esplora(url).unwrap();
-                if esplora_client.block_hash(blockcount).is_ok() {
+            IndexerClient::Esplora(client) => {
+                if client.get_block_hash(blockcount).is_ok() {
                     break;
                 }
             }

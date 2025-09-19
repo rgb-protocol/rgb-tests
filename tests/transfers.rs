@@ -108,9 +108,44 @@ fn transfer_loop(
 
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&wlt_1_desc);
-    let mut wlt_2 = TestWallet::with_descriptor(&wlt_2_desc);
+    match (wlt_1_desc, wlt_2_desc) {
+        (DescriptorType::Wpkh, DescriptorType::Wpkh) => {
+            let wlt_1 = BdkTestWallet::with_descriptor(&wlt_1_desc);
+            let wlt_2 = BdkTestWallet::with_descriptor(&wlt_2_desc);
+            transfer_loop_impl(wlt_1, wlt_2, transfer_type, asset_schema_1, asset_schema_2);
+        }
+        (DescriptorType::Wpkh, DescriptorType::Tr) => {
+            let wlt_1 = BdkTestWallet::with_descriptor(&wlt_1_desc);
+            let wlt_2 = BpTestWallet::with_descriptor(&wlt_2_desc);
+            transfer_loop_impl(wlt_1, wlt_2, transfer_type, asset_schema_1, asset_schema_2);
+        }
+        (DescriptorType::Tr, DescriptorType::Wpkh) => {
+            let wlt_1 = BpTestWallet::with_descriptor(&wlt_1_desc);
+            let wlt_2 = BdkTestWallet::with_descriptor(&wlt_2_desc);
+            transfer_loop_impl(wlt_1, wlt_2, transfer_type, asset_schema_1, asset_schema_2);
+        }
+        (DescriptorType::Tr, DescriptorType::Tr) => {
+            let wlt_1 = BpTestWallet::with_descriptor(&wlt_1_desc);
+            let wlt_2 = BpTestWallet::with_descriptor(&wlt_2_desc);
+            transfer_loop_impl(wlt_1, wlt_2, transfer_type, asset_schema_1, asset_schema_2);
+        }
+    }
+}
 
+fn transfer_loop_impl<W1, D1, W2, D2>(
+    mut wlt_1: TestWallet<W1, D1>,
+    mut wlt_2: TestWallet<W2, D2>,
+    transfer_type: TransferType,
+    asset_schema_1: AssetSchema,
+    asset_schema_2: AssetSchema,
+) where
+    W1: WalletProvider,
+    W2: WalletProvider,
+    TestWallet<W1, D1>: TestWalletExt,
+    <TestWallet<W1, D1> as TestWalletExt>::Psbt: Serialize,
+    TestWallet<W2, D2>: TestWalletExt,
+    <TestWallet<W2, D2> as TestWalletExt>::Psbt: Serialize,
+{
     let issued_supply_1 = 999;
     let issued_supply_2 = 666;
 
@@ -369,8 +404,8 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
 
     initialize();
 
-    let mut wlt_1 = TestWallet::with(&DescriptorType::Wpkh, None, false);
-    let mut wlt_2 = TestWallet::with(&DescriptorType::Wpkh, None, false);
+    let mut wlt_1 = BpTestWallet::with(&DescriptorType::Wpkh, None, false);
+    let mut wlt_2 = BpTestWallet::with(&DescriptorType::Wpkh, None, false);
 
     let (contract_id, secret_key) = match asset_schema {
         AssetSchema::Nia => (wlt_1.issue_nia(600, None), None),
@@ -379,7 +414,7 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
         AssetSchema::Pfa => {
             let (secret_key, public_key) =
                 Secp256k1::new().generate_keypair(&mut rand::thread_rng());
-            let pubkey = CompressedPk::from_byte_array(public_key.serialize()).unwrap();
+            let pubkey = CompressedPublicKey::from_slice(&public_key.serialize()).unwrap();
             (wlt_1.issue_pfa(600, None, pubkey), Some(secret_key))
         }
         AssetSchema::Ifa => (wlt_1.issue_ifa(600, None, vec![], vec![]), None),
@@ -410,8 +445,8 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
 fn rbf_transfer() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 600;
     let contract_id = wlt_1.issue_nia(issue_supply, None);
@@ -435,7 +470,7 @@ fn rbf_transfer() {
     let final_height = get_height();
     assert_eq!(initial_height, final_height);
 
-    wlt_1.mine_tx(&tx.txid(), true);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), true);
     wlt_2.accept_transfer(consignment.clone(), None);
     wlt_1.sync_and_update_witnesses(None);
     wlt_2.sync_and_update_witnesses(None);
@@ -464,8 +499,8 @@ fn same_transfer_twice_no_update_witnesses(#[case] transfer_type: TransferType) 
 
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 2000;
     let contract_id = wlt_1.issue_nia(issue_supply, None);
@@ -506,7 +541,7 @@ fn same_transfer_twice_no_update_witnesses(#[case] transfer_type: TransferType) 
     // with TransferType::Blinded this shows 1900+200 as owned, but we issued 2000
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
 
-    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     // with TransferType::Blinded this works but should fail
     wlt_1.send(
@@ -530,8 +565,8 @@ fn same_transfer_twice_update_witnesses(#[case] transfer_type: TransferType) {
 
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 2000;
     let contract_id = wlt_1.issue_nia(issue_supply, None);
@@ -546,7 +581,7 @@ fn same_transfer_twice_update_witnesses(#[case] transfer_type: TransferType) {
     // with TransferType::Blinded this fails with an AbsentValidWitness error
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, Some(1000), true, None);
 
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_2.accept_transfer(consignment, None);
     wlt_1.sync();
 
@@ -572,8 +607,8 @@ fn invoice_reuse(#[case] transfer_type: TransferType) {
 
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let asset_info = AssetInfo::default_nia(vec![500, 400]);
     let contract_id = wlt_1.issue_with_info(asset_info, vec![None, None], None, None);
@@ -596,8 +631,8 @@ fn invoice_reuse(#[case] transfer_type: TransferType) {
 fn accept_0conf() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 600;
     let contract_id = wlt_1.issue_nia(issue_supply, None);
@@ -606,7 +641,7 @@ fn accept_0conf() {
     let amt = 200;
     let invoice = wlt_2.invoice(contract_id, schema_id, amt, InvoiceType::Witness);
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice.clone(), None, None, true, None);
-    let txid = tx.txid();
+    let txid = txid_bp_to_bitcoin(tx.txid());
 
     wlt_2.accept_transfer(consignment.clone(), None);
 
@@ -643,8 +678,8 @@ fn accept_0conf() {
 fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
     let pre_funding_height = get_height();
 
     let utxo_1 = wlt_1.get_utxo(Some(10_000));
@@ -757,7 +792,7 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     let beneficiaries = vec![(witness_info_0.address(), witness_info_0.amount_sats)];
     let (mut psbt, mut meta) = wlt_1.construct_psbt_offchain(
         vec![(
-            input_outpoint,
+            outpoint_bitcoin_to_bp(input_outpoint),
             htlc_btc_amt,
             htlc_witness_info.terminal(),
             htlc_witness_info.script_pubkey(),
@@ -804,7 +839,7 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
         txid_same_bundle_2 = psbt.txid();
         offset += 1;
     }
-    fascia.seal_witness.public = PubWitness::with(psbt.to_unsigned_tx().into());
+    fascia.seal_witness.public = PubWitness::with(psbt.unsigned_tx());
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     let mut old_psbt = psbt.clone();
 
@@ -859,7 +894,7 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     let beneficiaries = vec![(witness_info_0.address(), witness_info_0.amount_sats)];
     let (mut psbt, mut meta) = wlt_1.construct_psbt_offchain(
         vec![(
-            input_outpoint,
+            outpoint_bitcoin_to_bp(input_outpoint),
             htlc_btc_amt,
             htlc_witness_info.terminal(),
             htlc_witness_info.script_pubkey(),
@@ -933,11 +968,11 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     println!("\n8. broadcast old PSBT");
     let tx = wlt_1.sign_finalize_extract(&mut old_psbt);
     wlt_1.broadcast_tx(&tx);
-    let txid = tx.txid();
+    let txid = txid_bp_to_bitcoin(tx.txid());
     wlt_1.mine_tx(&txid, false);
     wlt_1.sync();
     wlt_1.update_witnesses(pre_funding_height, vec![txid]);
-    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
     wlt_1.send(
         &mut wlt_3,
         TransferType::Blinded,
@@ -954,7 +989,7 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     let beneficiaries = vec![(witness_info_0.address(), witness_info_0.amount_sats)];
     let (mut psbt, mut meta) = wlt_1.construct_psbt_offchain(
         vec![(
-            input_outpoint,
+            outpoint_bitcoin_to_bp(input_outpoint),
             htlc_btc_amt,
             htlc_witness_info.terminal(),
             htlc_witness_info.script_pubkey(),
@@ -992,8 +1027,8 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
 fn mainnet_wlt_receiving_test_asset(#[case] custom_invoice: bool) {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::new_mainnet();
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::new_mainnet();
 
     let contract_id = wlt_1.issue_nia(700, None);
     let schema_id = wlt_1.schema_id(contract_id);
@@ -1018,7 +1053,7 @@ fn mainnet_wlt_receiving_test_asset(#[case] custom_invoice: bool) {
 fn sync_mainnet_wlt() {
     initialize();
 
-    let mut wlt_1 = TestWallet::new_mainnet();
+    let mut wlt_1 = BpTestWallet::new_mainnet();
 
     // sometimes this fails with a 'Too many requests' error when using esplora
     wlt_1.sync();
@@ -1029,9 +1064,9 @@ fn sync_mainnet_wlt() {
 fn collaborative_transfer() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let sats = 30_000;
 
@@ -1046,13 +1081,13 @@ fn collaborative_transfer() {
         18_000,
         None,
     );
-    let utxo_1 = Outpoint::new(tx.txid(), 2); // change: 11_600 sat
-    let utxo_2 = Outpoint::new(tx.txid(), 1); // transfered: 18_000 sat
+    let utxo_1 = Outpoint::new(txid_bp_to_bitcoin(tx.txid()), 2); // change: 11_600 sat
+    let utxo_2 = Outpoint::new(txid_bp_to_bitcoin(tx.txid()), 1); // transfered: 18_000 sat
 
-    let mut psbt = Psbt::default();
+    let mut psbt = BpPsbt::default();
 
-    wlt_1.psbt_add_input(&mut psbt, utxo_1);
-    wlt_2.psbt_add_input(&mut psbt, utxo_2);
+    wlt_1.psbt_add_input(&mut psbt, outpoint_bitcoin_to_bp(utxo_1));
+    wlt_2.psbt_add_input(&mut psbt, outpoint_bitcoin_to_bp(utxo_2));
 
     let witness_info = wlt_3.get_witness_info(Some(sats - 2 * DEFAULT_FEE_ABS), None);
     psbt.construct_output_expect(
@@ -1090,7 +1125,7 @@ fn collaborative_transfer() {
         nonce: None,
         close_method: CloseMethod::OpretFirst,
     };
-    let mut meta = PsbtMeta {
+    let mut meta = BpPsbtMeta {
         change_vout: None,
         change_terminal: None,
     };
@@ -1137,9 +1172,9 @@ fn collaborative_transfer() {
 fn receive_from_unbroadcasted_transfer_to_blinded() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let contract_id = wlt_1.issue_nia(600, None);
     let schema_id = wlt_1.schema_id(contract_id);
@@ -1181,7 +1216,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
     }
 
     let resolver = OffchainResolver {
-        witness_id,
+        witness_id: txid_bp_to_bitcoin(witness_id),
         consignment: &consignment,
         fallback: &wlt_2.get_resolver(),
     };
@@ -1192,7 +1227,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
 
     let invoice = wlt_3.invoice(contract_id, schema_id, 50, InvoiceType::Witness);
     let (consignment, tx, _, _) = wlt_2.pay_full(invoice, Some(2000), None, true, None);
-    wlt_2.mine_tx(&tx.txid(), false);
+    wlt_2.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
 
     // consignment validation fails because it notices an unbroadcasted TX in the history
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
@@ -1215,8 +1250,8 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
 fn check_fungible_history() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 600;
 
@@ -1252,7 +1287,7 @@ fn check_fungible_history() {
 fn send_to_oneself() {
     initialize();
 
-    let mut wlt = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 600;
 
@@ -1264,7 +1299,7 @@ fn send_to_oneself() {
     let invoice = wlt.invoice(contract_id, schema_id, amt, InvoiceType::Witness);
 
     let (consignment, tx, _, _) = wlt.pay_full(invoice.clone(), None, None, true, None);
-    wlt.mine_tx(&tx.txid(), false);
+    wlt.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt.accept_transfer(consignment, None);
     wlt.sync();
 
@@ -1282,9 +1317,9 @@ fn send_to_oneself() {
 fn tapret_opret_same_utxo() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Tr);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Tr);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let contract_id_1 = wlt_1.issue_nia(600, None);
     let schema_id_1 = wlt_1.schema_id(contract_id_1);
@@ -1334,8 +1369,8 @@ fn tapret_opret_same_utxo() {
 fn multiple_transitions_per_vin() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let contract_id_1 = wlt_1.issue_nia(600, None);
     let schema_id_1 = wlt_1.schema_id(contract_id_1);
@@ -1401,8 +1436,8 @@ fn multiple_transitions_per_vin() {
 fn tapret_commitments_on_beneficiary_output() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Tr);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Tr);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Tr);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Tr);
 
     let sats = 3000;
     let issued_amt = 600;
@@ -1426,13 +1461,14 @@ fn tapret_commitments_on_beneficiary_output() {
         None,
     );
     assert_eq!(tx.outputs.len(), 1);
+    let mut beneficiary_script_1 = None;
     let mut beneficiary_address_1 = None;
     if let Beneficiary::WitnessVout(pay2vout, _) = invoice_1.beneficiary.into_inner() {
-        beneficiary_address_1 = Some(pay2vout.into_address(wlt_2.network().into()));
+        beneficiary_script_1 = Some(script_buf_to_script_pubkey(pay2vout.to_script()));
+        beneficiary_address_1 = Some(pay2vout.into_address(wlt_2.network()));
     }
-    if tx.outputs().last().unwrap().script_pubkey != beneficiary_address_1.unwrap().script_pubkey()
-    {
-        wlt_2.try_add_tapret_tweak(consignment.clone(), &tx.txid());
+    if tx.outputs().last().unwrap().script_pubkey != beneficiary_script_1.unwrap() {
+        wlt_2.try_add_tapret_tweak(consignment.clone(), &txid_bp_to_bitcoin(tx.txid()));
         wlt_2.sync();
     } else {
         panic!("unexpected");
@@ -1445,13 +1481,13 @@ fn tapret_commitments_on_beneficiary_output() {
     let invoice_2 = wlt_1.invoice(contract_id, schema_id, amt, InvoiceType::WitnessTapret);
     let (_, tx) = wlt_2.send_to_invoice(&mut wlt_1, invoice_2.clone(), Some(1000), None, None);
     assert_eq!(tx.outputs.len(), 2);
-    let mut beneficiary_address = None;
+    let mut beneficiary_script = None;
     if let Beneficiary::WitnessVout(pay2vout, _) = invoice_2.beneficiary.into_inner() {
-        beneficiary_address = Some(pay2vout.into_address(wlt_1.network().into()));
+        beneficiary_script = Some(script_buf_to_script_pubkey(pay2vout.to_script()));
     }
     assert_eq!(
         tx.outputs().last().unwrap().script_pubkey,
-        beneficiary_address.unwrap().script_pubkey()
+        beneficiary_script.unwrap()
     );
     wlt_1.check_allocations(contract_id, schema_id, vec![amt], false);
     wlt_2.check_allocations(contract_id, schema_id, vec![change_amt], false);
@@ -1471,13 +1507,12 @@ fn tapret_commitments_on_beneficiary_output() {
     let (consignment, tx) =
         wlt_1.send_to_invoice(&mut wlt_2, invoice_1.clone(), Some(100000600), None, None);
     assert_eq!(tx.outputs.len(), 1);
-    let mut beneficiary_address_2 = None;
+    let mut beneficiary_script_2 = None;
     if let Beneficiary::WitnessVout(pay2vout, _) = invoice_1.beneficiary.into_inner() {
-        beneficiary_address_2 = Some(pay2vout.into_address(wlt_2.network().into()));
+        beneficiary_script_2 = Some(script_buf_to_script_pubkey(pay2vout.to_script()));
     }
-    if tx.outputs().last().unwrap().script_pubkey != beneficiary_address_2.unwrap().script_pubkey()
-    {
-        wlt_2.try_add_tapret_tweak(consignment.clone(), &tx.txid());
+    if tx.outputs().last().unwrap().script_pubkey != beneficiary_script_2.unwrap() {
+        wlt_2.try_add_tapret_tweak(consignment.clone(), &txid_bp_to_bitcoin(tx.txid()));
         wlt_2.sync();
     } else {
         panic!("unexpected");
@@ -1509,11 +1544,11 @@ fn tapret_commitments_on_beneficiary_output() {
 fn pfa() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let (secret_key, public_key) = Secp256k1::new().generate_keypair(&mut rand::thread_rng());
-    let pubkey = CompressedPk::from_byte_array(public_key.serialize()).unwrap();
+    let pubkey = CompressedPublicKey::from_slice(&public_key.serialize()).unwrap();
 
     let utxo = wlt_1.get_utxo(None);
 
@@ -1564,9 +1599,9 @@ fn pfa() {
 fn ifa_inflation() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_supply = 999;
     let inflation_supply = 555;
@@ -1684,8 +1719,8 @@ fn ifa_inflation() {
 fn ifa_zero_issuance_with_inflation() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     // issue zero assets
     let issued_supply = 0;
@@ -1723,8 +1758,8 @@ fn ifa_zero_issuance_with_inflation() {
 fn ifa_move_inflation_right() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_supply = 999;
     let inflation_supply = 555;
@@ -1827,8 +1862,8 @@ fn ifa_move_inflation_right() {
 fn ifa_burn() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let contract_id = wlt_1.issue_ifa(999, None, vec![], vec![]);
 
@@ -1865,9 +1900,9 @@ fn ifa_burn() {
 fn ifa_replace() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let right_utxo = wlt_1.get_utxo(None);
     let amount = 999;
@@ -1886,7 +1921,7 @@ fn ifa_replace() {
     assert_eq!(right_utxo, replace_outpoints[0]);
 
     // history that will be excluded after replace
-    let mut txs_before_replace = HashSet::<Txid>::new();
+    let mut txs_before_replace = HashSet::<BpTxid>::new();
     let (_, tx) = wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, amount);
     txs_before_replace.insert(tx.txid());
     let (_, tx) = wlt_2.send_ifa(&mut wlt_1, TransferType::Blinded, contract_id, amount);
@@ -1910,8 +1945,8 @@ fn ifa_replace() {
     let spent_witnesses = consignment
         .bundles
         .iter()
-        .map(|b| b.witness_id())
-        .collect::<HashSet<Txid>>();
+        .map(|b| txid_bitcoin_to_bp(b.witness_id()))
+        .collect::<HashSet<BpTxid>>();
     assert!(spent_witnesses.is_disjoint(&txs_before_replace));
 
     // check replace right has been moved
@@ -1944,8 +1979,8 @@ fn ifa_replace() {
 fn extra_known_transition() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 900;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -1968,7 +2003,7 @@ fn extra_known_transition() {
         InvoiceType::Blinded(Some(utxo_1)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment, None);
     wlt_1.sync();
 
@@ -1980,7 +2015,7 @@ fn extra_known_transition() {
         1000,
         None,
     );
-    let base_txid = tx.txid();
+    let base_txid = txid_bp_to_bitcoin(tx.txid());
 
     // allocate additional assets on spent utxo_1
     let amt_1 = 400;
@@ -1991,14 +2026,12 @@ fn extra_known_transition() {
         InvoiceType::Blinded(Some(utxo_1)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment, None);
     wlt_1.sync();
 
     let (opout, _) = wlt_1
-        .stock()
         .contract_assignments_for(contract_id, vec![utxo_1])
-        .unwrap()
         .into_values()
         .flat_map(|s| s.into_iter())
         .find(|(_, s)| match s {
@@ -2048,8 +2081,8 @@ fn extra_known_transition() {
 fn uncommitted_input_opout() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 900;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -2059,13 +2092,13 @@ fn uncommitted_input_opout() {
     let amt_0 = 500;
     let invoice = wlt_1.invoice(contract_id, schema_id, amt_0, InvoiceType::Witness);
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment, None);
     wlt_1.sync();
 
     // merge the 2 allocation to send to wlt_2
     let invoice = wlt_2.invoice(contract_id, schema_id, issued_amt, InvoiceType::Witness);
-    let (mut psbt, _, mut consignment) = wlt_1.pay(invoice, None, None);
+    let (mut psbt, _, mut consignment) = wlt_1.pay_invoice(invoice, None, None);
     let prev_txids = consignment
         .bundles
         .iter()
@@ -2073,11 +2106,12 @@ fn uncommitted_input_opout() {
         .collect::<HashSet<_>>();
 
     // remove commitment to one of the spent opouts
-    consignment.modify_bundle(psbt.txid(), |witness_bundle| {
+    consignment.modify_bundle(txid_bp_to_bitcoin(psbt.txid()), |witness_bundle| {
         let mut input_map = witness_bundle.bundle.input_map.clone().release();
         input_map.pop_last();
         witness_bundle.bundle.input_map = NonEmptyOrdMap::from_checked(input_map);
-        let mut witness_psbt = Psbt::from_tx(witness_bundle.pub_witness.tx().unwrap().clone());
+        let tx = tx_bitcoin_to_bp(witness_bundle.pub_witness.tx().unwrap().clone());
+        let mut witness_psbt = BpPsbt::from_tx(tx);
         let idx = witness_psbt
             .outputs()
             .find(|o| o.script.is_op_return())
@@ -2093,11 +2127,7 @@ fn uncommitted_input_opout() {
         let protocol_id = mpc::ProtocolId::from(contract_id);
         let message = mpc::Message::from(witness_bundle.bundle.bundle_id());
         witness_psbt.output_mut(idx).unwrap().script = ScriptPubkey::op_return(&[]);
-        witness_psbt
-            .output_mut(idx)
-            .unwrap()
-            .set_opret_host()
-            .unwrap();
+        witness_psbt.output_mut(idx).unwrap().set_opret_host();
         witness_psbt
             .output_mut(idx)
             .unwrap()
@@ -2111,7 +2141,7 @@ fn uncommitted_input_opout() {
             .unwrap();
         let witness: Tx = witness_psbt.to_unsigned_tx().into();
         witness_bundle.anchor.mpc_proof = proof.to_merkle_proof(protocol_id).unwrap();
-        witness_bundle.pub_witness = PubWitness::Tx(witness.clone());
+        witness_bundle.pub_witness = PubWitness::Tx(tx_bp_to_bitcoin(witness.clone()));
     });
     let tx = consignment
         .bundles
@@ -2122,7 +2152,8 @@ fn uncommitted_input_opout() {
         .tx()
         .unwrap();
     let opret_script = tx
-        .outputs()
+        .output
+        .iter()
         .find(|o| o.script_pubkey.is_op_return())
         .unwrap()
         .script_pubkey
@@ -2130,8 +2161,8 @@ fn uncommitted_input_opout() {
     psbt.outputs_mut()
         .find(|o| o.script.is_op_return())
         .unwrap()
-        .script = opret_script;
-    assert_eq!(tx.txid(), psbt.txid());
+        .script = script_buf_to_script_pubkey(opret_script);
+    assert_eq!(tx.compute_txid(), txid_bp_to_bitcoin(psbt.txid()));
     let new_tx = wlt_1.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&new_tx);
     wlt_2.accept_transfer(consignment, None);
@@ -2142,8 +2173,8 @@ fn uncommitted_input_opout() {
 fn concealed_known_transition() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 700;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -2168,7 +2199,7 @@ fn concealed_known_transition() {
         InvoiceType::Blinded(Some(utxo)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment, None);
     wlt_1.sync();
 
@@ -2180,15 +2211,13 @@ fn concealed_known_transition() {
         InvoiceType::Blinded(Some(utxo)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment, None);
     wlt_1.sync();
 
     // retrieve the two opouts on utxo
     let allocations = wlt_1
-        .stock()
         .contract_assignments_for(contract_id, vec![utxo])
-        .unwrap()
         .into_values()
         .flat_map(|v| v.into_iter())
         .collect::<Vec<_>>();
@@ -2208,7 +2237,7 @@ fn concealed_known_transition() {
     let btc_change = wlt_1.get_address();
     let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo], vec![(btc_change, None)], None);
     psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
-    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.output_mut(1).unwrap().set_opret_host();
     psbt.set_rgb_close_method(CloseMethod::OpretFirst);
 
     // 1st transition
@@ -2256,7 +2285,7 @@ fn concealed_known_transition() {
     }
     // we don't push this transition to keep it concealed
 
-    psbt.complete_construction();
+    psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
     wlt_1.consume_fascia(fascia, witness_id);
@@ -2289,8 +2318,8 @@ fn concealed_known_transition() {
 fn remove_scripts_code() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 700;
     let utxo = wlt_1.get_utxo(None);
@@ -2308,7 +2337,7 @@ fn remove_scripts_code() {
     let btc_change = wlt_1.get_address();
     let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo], vec![(btc_change, None)], None);
     psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
-    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.output_mut(1).unwrap().set_opret_host();
     psbt.set_rgb_close_method(CloseMethod::OpretFirst);
 
     // 1st transition
@@ -2338,7 +2367,7 @@ fn remove_scripts_code() {
     }
     psbt.push_rgb_transition(transition).unwrap();
 
-    psbt.complete_construction();
+    psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
     wlt_1.consume_fascia(fascia, witness_id);
@@ -2377,9 +2406,9 @@ fn remove_scripts_code() {
 fn accept_bundle_missing_transitions() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 700;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -2402,7 +2431,7 @@ fn accept_bundle_missing_transitions() {
         InvoiceType::Blinded(Some(utxo_1)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment.clone(), None);
     wlt_1.sync();
 
@@ -2415,15 +2444,13 @@ fn accept_bundle_missing_transitions() {
         InvoiceType::Blinded(Some(utxo_2)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment.clone(), None);
     wlt_1.sync();
 
     // retrieve the two opouts on utxo
     let allocations = wlt_1
-        .stock()
         .contract_assignments_for(contract_id, vec![utxo_1])
-        .unwrap()
         .into_values()
         .flat_map(|v| v.into_iter())
         .collect::<Vec<_>>();
@@ -2434,9 +2461,7 @@ fn accept_bundle_missing_transitions() {
         panic!("unexpected state type");
     };
     let allocations = wlt_1
-        .stock()
         .contract_assignments_for(contract_id, vec![utxo_2])
-        .unwrap()
         .into_values()
         .flat_map(|v| v.into_iter())
         .collect::<Vec<_>>();
@@ -2451,7 +2476,7 @@ fn accept_bundle_missing_transitions() {
     let btc_change = wlt_1.get_address();
     let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo_1, utxo_2], vec![(btc_change, None)], None);
     psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
-    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.output_mut(1).unwrap().set_opret_host();
     psbt.set_rgb_close_method(CloseMethod::OpretFirst);
 
     // 1st transition (revealed)
@@ -2490,7 +2515,7 @@ fn accept_bundle_missing_transitions() {
     let opid_2 = transition.id();
     psbt.push_rgb_transition(transition).unwrap();
 
-    psbt.complete_construction();
+    psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
     wlt_1.consume_fascia(fascia, witness_id);
@@ -2556,8 +2581,8 @@ fn accept_bundle_missing_transitions() {
 fn unordered_transitions_within_bundle() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let utxo_0 = wlt_1.get_utxo(Some(8000));
     let issued_amt = 666;
@@ -2577,7 +2602,7 @@ fn unordered_transitions_within_bundle() {
     let btc_change = wlt_1.get_address();
     let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo_0, utxo_1], vec![(btc_change, None)], None);
     psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
-    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.output_mut(1).unwrap().set_opret_host();
     psbt.set_rgb_close_method(CloseMethod::OpretFirst);
 
     let mut beneficiaries = AssetBeneficiariesMap::new();
@@ -2621,7 +2646,7 @@ fn unordered_transitions_within_bundle() {
         transition_2.nonce -= 1;
     }
     psbt.push_rgb_transition(transition_2).unwrap();
-    psbt.complete_construction();
+    psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
     wlt_1.consume_fascia(fascia, witness_id);
@@ -2651,9 +2676,9 @@ fn unordered_transitions_within_bundle() {
 fn transition_spending_uncommitted_opout() {
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 700;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -2677,7 +2702,7 @@ fn transition_spending_uncommitted_opout() {
         InvoiceType::Blinded(Some(utxo_1)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment.clone(), None);
     let amt_2 = 400;
     let invoice = wlt_1.invoice(
@@ -2687,7 +2712,7 @@ fn transition_spending_uncommitted_opout() {
         InvoiceType::Blinded(Some(utxo_1)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment.clone(), None);
     wlt_1.sync();
 
@@ -2695,15 +2720,13 @@ fn transition_spending_uncommitted_opout() {
     let btc_change = wlt_1.get_address();
     let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo_1], vec![(btc_change, None)], None);
     psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
-    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.output_mut(1).unwrap().set_opret_host();
     psbt.set_rgb_close_method(CloseMethod::OpretFirst);
 
     let mut beneficiaries = AssetBeneficiariesMap::new();
     // transition 1: spends opid_1 and will be concealed
     let (opout_1, _) = wlt_1
-        .stock()
         .contract_assignments_for(contract_id, vec![utxo_1])
-        .unwrap()
         .into_values()
         .flat_map(|s| s.into_iter())
         .find(|(_, s)| match s {
@@ -2731,9 +2754,7 @@ fn transition_spending_uncommitted_opout() {
 
     // transition 2: spends opid_1+opid_2 and will be revealed
     let (opout_2, _) = wlt_1
-        .stock()
         .contract_assignments_for(contract_id, vec![utxo_1])
-        .unwrap()
         .into_values()
         .flat_map(|s| s.into_iter())
         .find(|(_, s)| match s {
@@ -2774,7 +2795,7 @@ fn transition_spending_uncommitted_opout() {
     items.insert(opout_1, opid_1);
     psbt.insert_proprietary(key, items.serialize().into());
 
-    psbt.complete_construction();
+    psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
     wlt_1.consume_fascia(fascia, witness_id);
@@ -2794,8 +2815,8 @@ fn multiasset_transfer() {
     initialize();
 
     let wlt_desc = DescriptorType::Tr;
-    let mut wlt_1 = TestWallet::with_descriptor(&wlt_desc);
-    let mut wlt_2 = TestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&wlt_desc);
 
     let utxo = wlt_1.get_utxo(None);
 
@@ -2834,7 +2855,7 @@ fn multiasset_transfer() {
         close_method: wlt_1.close_method(),
     };
     let (consignments, tx, _, tweak_info) = wlt_1.pay_full_flexible(coloring_info, None, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     for consignment in consignments.into_values() {
         wlt_2.accept_transfer(consignment.clone(), None);
     }
@@ -2883,8 +2904,8 @@ fn extra_after_merge() {
     initialize();
 
     let wlt_desc = DescriptorType::Wpkh;
-    let mut wlt_1 = TestWallet::with_descriptor(&wlt_desc);
-    let mut wlt_2 = TestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&wlt_desc);
 
     let utxo_1 = wlt_1.get_utxo(None);
     let utxo_2 = wlt_1.get_utxo(None);
@@ -2915,15 +2936,13 @@ fn extra_after_merge() {
         InvoiceType::Blinded(Some(utxo_1)),
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice.clone(), None, None, true, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     wlt_1.accept_transfer(consignment, None);
     wlt_1.sync();
 
     // retrieve the two opouts on utxo
     let mut allocations = wlt_1
-        .stock()
         .contract_assignments_for(contract_id, vec![utxo_1])
-        .unwrap()
         .into_values()
         .flat_map(|v| v.into_iter())
         .collect::<Vec<_>>();
@@ -2935,7 +2954,7 @@ fn extra_after_merge() {
     let btc_change = wlt_1.get_address();
     let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo_1], vec![(btc_change, None)], None);
     psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
-    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.output_mut(1).unwrap().set_opret_host();
     psbt.set_rgb_close_method(CloseMethod::OpretFirst);
     // 1st transition
     let mut transition_builder = wlt_1
@@ -2969,7 +2988,7 @@ fn extra_after_merge() {
         .unwrap();
     let transition = transition_builder.complete_transition().unwrap();
     psbt.push_rgb_transition(transition).unwrap();
-    psbt.complete_construction();
+    psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
     wlt_1.consume_fascia(fascia, witness_id);
@@ -3002,8 +3021,8 @@ fn reorg_history(#[case] history_type: HistoryType, #[case] reorg_type: ReorgTyp
     initialize();
     connect_reorg_nodes();
 
-    let mut wlt_1 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
-    let mut wlt_2 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_1 = BpTestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_2 = BpTestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     let contract_id = match history_type {
         HistoryType::Linear | HistoryType::Branching => wlt_1.issue_nia(600, None),
@@ -3196,7 +3215,7 @@ fn reorg_history(#[case] history_type: HistoryType, #[case] reorg_type: ReorgTyp
     wlt_1.switch_to_instance(INSTANCE_2);
     wlt_2.switch_to_instance(INSTANCE_2);
 
-    let mut wlt_3 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_3 = BpTestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     match history_type {
         HistoryType::Linear => {
@@ -3307,8 +3326,8 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
     initialize();
     connect_reorg_nodes();
 
-    let mut wlt_1 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
-    let mut wlt_2 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_1 = BpTestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_2 = BpTestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     let contract_id = match history_type {
         HistoryType::Linear | HistoryType::Branching => wlt_1.issue_nia(600, None),
@@ -3396,6 +3415,7 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
                 InvoiceType::Blinded(Some(utxo_wlt_2_1)),
             );
             let (_, tx_0) = wlt_1.send_to_invoice(&mut wlt_2, invoice, None, None, None);
+            let tx_0_txid = txid_bp_to_bitcoin(tx_0.txid());
 
             let amt_1 = 200;
             let invoice = wlt_2.invoice(
@@ -3422,7 +3442,7 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
                 .collect();
             let safe_height = height_pre_transfer - 6; // min 6 confirmations
             for (utxo, txid) in utxos {
-                let height = if txid == tx_0.txid() {
+                let height = if txid == tx_0_txid {
                     height_pre_transfer - 1
                 } else {
                     height_pre_transfer
@@ -3437,7 +3457,8 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
             }
             // sender proceeds with the tranfer even if there's unsafe history
             let (consignment, tx_2, _, _) = wlt_2.pay_full(invoice, None, None, true, None);
-            wlt_2.mine_tx(&tx_2.txid(), false);
+            let txid = txid_bp_to_bitcoin(tx_2.txid());
+            wlt_2.mine_tx(&txid, false);
             // receiver checks if it's safe to receive allocations
             let safe_height = height_pre_transfer; // min 1 confirmation
             let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
@@ -3454,7 +3475,7 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
             let validation_status = validated_consignment.clone().into_validation_status();
             assert_eq!(validation_status.warnings.len(), 1);
             let unsafe_height = height_pre_transfer + 1;
-            let unsafe_history_map = HashMap::from([(unsafe_height, HashSet::from([tx_2.txid()]))]);
+            let unsafe_history_map = HashMap::from([(unsafe_height, HashSet::from([txid]))]);
             assert!(
                 matches!(&validation_status.warnings[0], Warning::UnsafeHistory(map) if *map == unsafe_history_map)
             );
@@ -3509,7 +3530,7 @@ fn revert_genesis(#[case] with_transfers: bool) {
     connect_reorg_nodes();
     disconnect_reorg_nodes();
 
-    let mut wlt = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt = BpTestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     let issued_supply = 600;
     let utxo = wlt.get_utxo(None);
@@ -3519,7 +3540,7 @@ fn revert_genesis(#[case] with_transfers: bool) {
     wlt.check_allocations(contract_id, schema_id, vec![issued_supply], false);
 
     if with_transfers {
-        let mut recv_wlt = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+        let mut recv_wlt = BpTestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
         let amt = 200;
         wlt.send(
             &mut recv_wlt,
@@ -3540,7 +3561,7 @@ fn revert_genesis(#[case] with_transfers: bool) {
     assert_eq!(wlt.get_witness_ord(&utxo.txid), WitnessOrd::Archived);
 
     wlt.sync();
-    let utxos = wlt.utxos();
+    let utxos = wlt.list_unspents();
     assert!(utxos.is_empty());
 
     wlt.check_allocations(contract_id, schema_id, vec![], false);

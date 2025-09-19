@@ -31,9 +31,9 @@ impl ResolveWitness for MockResolver {
     }
 }
 impl MockResolver {
-    pub fn with_new_transaction(&self, witness: Tx) -> Self {
+    pub fn with_new_transaction(&self, witness: Transaction) -> Self {
         let mut resolver = self.clone();
-        let witness_id = witness.txid();
+        let witness_id = witness.compute_txid();
         resolver.pub_witnesses.insert(
             witness_id,
             MockResolvePubWitness::Success(WitnessStatus::Resolved(witness, WitnessOrd::Tentative)),
@@ -66,7 +66,8 @@ impl Scenario {
         for entry in std::fs::read_dir(self.txs_folder()).unwrap() {
             let file = std::fs::File::open(entry.unwrap().path()).unwrap();
             let tx: Tx = serde_json::from_reader(file).unwrap();
-            txs.insert(tx.txid(), tx);
+            let tx = tx_bp_to_bitcoin(tx);
+            txs.insert(tx.compute_txid(), tx);
         }
         MockResolver {
             pub_witnesses: txs
@@ -127,12 +128,6 @@ fn replace_transition_in_bundle(
 }
 
 fn update_anchor(witness_bundle: &mut WitnessBundle, contract_id: Option<ContractId>) {
-    let mut witness_psbt = Psbt::from_tx(witness_bundle.pub_witness.tx().unwrap().clone());
-    let idx = if let Some(output) = witness_psbt.outputs().find(|o| o.script.is_op_return()) {
-        output.index()
-    } else {
-        return;
-    };
     let contract_id = contract_id.unwrap_or(
         witness_bundle
             .bundle
@@ -144,24 +139,37 @@ fn update_anchor(witness_bundle: &mut WitnessBundle, contract_id: Option<Contrac
     );
     let protocol_id = mpc::ProtocolId::from(contract_id);
     let message = mpc::Message::from(witness_bundle.bundle.bundle_id());
-    witness_psbt.output_mut(idx).unwrap().script = ScriptPubkey::op_return(&[]);
-    witness_psbt
-        .output_mut(idx)
-        .unwrap()
-        .set_opret_host()
+    let mut tx = witness_bundle.pub_witness.tx().unwrap().clone();
+    let idx = tx
+        .output
+        .iter()
+        .enumerate()
+        .find(|(_, o)| o.script_pubkey.is_op_return())
+        .map(|(i, _)| i)
         .unwrap();
+    tx.output[idx].script_pubkey = ScriptBuf::new_op_return([]);
+    let mut witness_psbt = Psbt::from_unsigned_tx(tx).unwrap();
+    witness_psbt.outputs.get_mut(idx).unwrap().set_opret_host();
     witness_psbt
-        .output_mut(idx)
+        .outputs
+        .get_mut(idx)
         .unwrap()
         .set_mpc_message(protocol_id, message)
         .unwrap();
-    let (commitment, proof) = witness_psbt.output_mut(idx).unwrap().mpc_commit().unwrap();
+    let (commitment, proof) = witness_psbt
+        .outputs
+        .get_mut(idx)
+        .unwrap()
+        .mpc_commit()
+        .unwrap();
     witness_psbt
-        .output_mut(idx)
+        .outputs
+        .get_mut(idx)
         .unwrap()
         .opret_commit(commitment)
         .unwrap();
-    let witness: Tx = witness_psbt.to_unsigned_tx().into();
+    witness_psbt.set_opret_commitment(idx);
+    let witness = witness_psbt.unsigned_tx();
 
     let mut anchor = witness_bundle.anchor.clone();
     anchor.mpc_proof = proof.to_merkle_proof(protocol_id).unwrap();
@@ -237,9 +245,9 @@ fn update_transition_children(
         );
         // update transition: change inputs according to modified txids
         let mut witness = wbundle.pub_witness.tx().unwrap().clone();
-        witness.inputs.iter_mut().for_each(|i| {
-            let txid = &i.prev_output.txid;
-            i.prev_output.txid = *changed_txids.get(txid).unwrap_or(txid);
+        witness.input.iter_mut().for_each(|i| {
+            let txid = &i.previous_output.txid;
+            i.previous_output.txid = *changed_txids.get(txid).unwrap_or(txid);
         });
         wbundle.pub_witness = PubWitness::Tx(witness);
         update_anchor(wbundle, None);
@@ -281,8 +289,8 @@ fn remove_transition_children(
 fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
     initialize();
     if let Scenario::D = scenario {
-        let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Tr);
-        let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Tr);
+        let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Tr);
+        let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Tr);
 
         let issued_supply = 999;
 
@@ -321,8 +329,8 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
         _ => unreachable!(),
     };
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_supply_1 = 999;
     let issued_supply_2 = 666;
@@ -350,7 +358,7 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
             wlt_1.invoice(contract_id_2, schema_id_2, 100, InvoiceType::Blinded(None));
         invoice.assignment_name = Some(FieldName::from_str("inflationAllowance").unwrap());
         let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-        wlt_1.mine_tx(&tx.txid(), false);
+        wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
         wlt_1.accept_transfer(consignment, None);
         wlt_1.sync();
         txes.push(tx);
@@ -365,7 +373,7 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
             sats - 1000,
             None,
         );
-        let change_utxo = Outpoint::new(tx.txid(), Vin::from_u32(2));
+        let change_utxo = Outpoint::new(txid_bp_to_bitcoin(tx.txid()), 2);
         txes.push(tx);
 
         // replace assets
@@ -406,11 +414,7 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
 
     let (consignment, tx) = if scenario == Scenario::C {
         // burn all allocations
-        let wlt_1_utxos = wlt_1
-            .utxos()
-            .iter()
-            .map(|wu| wu.outpoint)
-            .collect::<Vec<_>>();
+        let wlt_1_utxos = wlt_1.list_unspent_outpoints();
         wlt_1.burn_ifa(contract_id_2, wlt_1_utxos)
     } else {
         // spend change of previous send
@@ -1305,10 +1309,10 @@ fn validate_consignment_commitments_fail() {
     let mut bundles = consignment.bundles.release();
     let new_bundle = bundles.last_mut().unwrap();
     let mut witness_tx = new_bundle.pub_witness.tx().unwrap().clone();
-    let mut outputs = witness_tx.outputs.release().clone();
+    let mut outputs = witness_tx.output.clone();
     outputs.retain(|o| !o.script_pubkey.is_op_return());
-    witness_tx.outputs = LargeVec::from_checked(outputs);
-    let witness_id = witness_tx.txid();
+    witness_tx.output = outputs;
+    let witness_id = witness_tx.compute_txid();
     new_bundle.pub_witness = PubWitness::Tx(witness_tx);
     //update_witness_and_anchor(witness_bundle, contract_id);
     consignment.bundles = LargeVec::from_checked(bundles);
@@ -1340,7 +1344,7 @@ fn validate_consignment_commitments_fail() {
         res,
         ValidationError::InvalidConsignment(Failure::InvalidProofType(
             witness_id,
-            bp::dbc::Method::TapretFirst
+            CloseMethod::TapretFirst
         ))
     );
 
@@ -1350,10 +1354,10 @@ fn validate_consignment_commitments_fail() {
     let new_bundle = bundles.last_mut().unwrap();
     let bundle_id = new_bundle.bundle.bundle_id();
     let mut witness_tx = new_bundle.pub_witness.tx().unwrap().clone();
-    let mut inputs = witness_tx.inputs.release().clone();
-    let missing_outpoint = inputs.pop().unwrap().prev_output;
-    witness_tx.inputs = LargeVec::from_checked(inputs);
-    let witness_id = witness_tx.txid();
+    let mut inputs = witness_tx.input.clone();
+    let missing_outpoint = inputs.pop().unwrap().previous_output;
+    witness_tx.input = inputs;
+    let witness_id = witness_tx.compute_txid();
     new_bundle.pub_witness = PubWitness::Tx(witness_tx);
     consignment.bundles = LargeVec::from_checked(bundles);
     let consignment_resolver = OfflineResolver {
@@ -1397,16 +1401,16 @@ fn validate_consignment_commitments_fail() {
     let wbundle = bundles.last_mut().unwrap();
     let bundle_id = wbundle.bundle().bundle_id();
     let mut witness_tx = wbundle.pub_witness.tx().unwrap().clone();
-    let mut outputs = witness_tx.outputs.release().clone();
+    let mut outputs = witness_tx.output.clone();
     let output = outputs
         .iter_mut()
         .find(|o| o.script_pubkey.is_op_return())
         .unwrap();
-    let mut script_pubkey = output.script_pubkey.as_unconfined().clone();
+    let mut script_pubkey = output.script_pubkey.clone().into_bytes();
     script_pubkey.swap(1, 2);
-    output.script_pubkey = ScriptPubkey::from_unsafe(script_pubkey);
-    witness_tx.outputs = LargeVec::from_checked(outputs);
-    let witness_id = witness_tx.txid();
+    output.script_pubkey = ScriptBuf::from_bytes(script_pubkey);
+    witness_tx.output = outputs;
+    let witness_id = witness_tx.compute_txid();
     wbundle.pub_witness = PubWitness::Tx(witness_tx);
 
     consignment.bundles = LargeVec::from_checked(bundles);
@@ -1433,15 +1437,15 @@ fn validate_consignment_commitments_fail() {
     let wbundle = bundles.last_mut().unwrap();
     let bundle_id = wbundle.bundle().bundle_id();
     let mut witness_tx = wbundle.pub_witness.tx().unwrap().clone();
-    let mut outputs = witness_tx.outputs.release().clone();
+    let mut outputs = witness_tx.output.clone();
     outputs
         .iter_mut()
         .find(|o| o.script_pubkey.is_op_return())
         .unwrap()
         .script_pubkey
-        .push_slice(&[42]);
-    witness_tx.outputs = LargeVec::from_checked(outputs);
-    let witness_id = witness_tx.txid();
+        .push_slice([42]);
+    witness_tx.output = outputs;
+    let witness_id = witness_tx.compute_txid();
     wbundle.pub_witness = PubWitness::Tx(witness_tx);
 
     consignment.bundles = LargeVec::from_checked(bundles);
@@ -1469,15 +1473,15 @@ fn validate_consignment_commitments_fail() {
     let wbundle = bundles.last_mut().unwrap();
     let bundle_id = wbundle.bundle().bundle_id();
     let mut witness_tx = wbundle.pub_witness.tx().unwrap().clone();
-    let mut outputs = witness_tx.outputs.release().clone();
+    let mut outputs = witness_tx.output.clone();
     outputs
         .iter_mut()
         .find(|o| o.script_pubkey.is_op_return())
         .unwrap()
         .script_pubkey
-        .push_slice(&[42]);
-    witness_tx.outputs = LargeVec::from_checked(outputs);
-    let witness_id = witness_tx.txid();
+        .push_slice([42]);
+    witness_tx.output = outputs;
+    let witness_id = witness_tx.compute_txid();
     wbundle.pub_witness = PubWitness::Tx(witness_tx);
 
     consignment.bundles = LargeVec::from_checked(bundles);
@@ -1879,7 +1883,7 @@ fn validate_consignment_logic_fail() {
         .tx()
         .unwrap()
         .clone();
-    let witness_id = witness_tx.txid();
+    let witness_id = witness_tx.compute_txid();
     // transaction is added as tentative
     let alt_resolver = resolver.with_new_transaction(witness_tx);
     let mut validation_config_mod = validation_config.clone();
@@ -3015,15 +3019,8 @@ fn validate_consignment_tapret_partner() {
     let mut json_consignment = base_consignment.clone();
     let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
     *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
-    let consignment =
-        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
-            .unwrap();
-    let res = Transfer::from_strict_serialized(
-        consignment
-            .to_strict_serialized::<{ usize::MAX }>()
-            .unwrap(),
-    );
-    res.unwrap_err();
+    serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+        .unwrap_err();
 
     // SUCCESS (PartnerNode::RightBranch)
     let test_case = Case::SuccessRightBranch;
@@ -3308,67 +3305,60 @@ fn gen_tapret_values(case: Case) -> (Value, Value) {
         .convolve(protocol_id, message)
         .unwrap();
     let tapret_commitment = TapretCommitment::with(commitment, nonce);
-    let script_commitment = TapScript::commit(&tapret_commitment);
+    let script_commitment = tapret_commitment.commit();
 
-    let commitment_leaf = script_commitment.tap_leaf_hash();
+    let commitment_leaf = script_commitment.tapscript_leaf_hash();
     let commitment_hash = TapNodeHash::from(commitment_leaf);
     let random_hash = "cec6cd42645c3d426925940d320e3204fadba480aa7ffff98911d00f6e2124ff";
     let mut val = 0xff;
     let partner = loop {
         let partner = match case {
             Case::SuccessRightLeaf | Case::UnorderedRightLeaf => {
-                TapretNodePartner::RightLeaf(LeafScript::new(
-                    LeafVer::TapScript,
-                    ScriptPubkey::op_return(&[val; 32]).into(),
-                ))
+                TapretNodePartner::RightLeaf(LeafScript {
+                    version: LeafVersion::TapScript,
+                    script: ScriptBuf::new_op_return([val; 32]),
+                })
             }
             Case::SuccessRightBranch | Case::UnorderedRightBranch => {
                 TapretNodePartner::RightBranch(TapretRightBranch::with(
-                    TapNodeHash::from_hex(random_hash).unwrap(),
-                    LeafScript::new(
-                        LeafVer::TapScript,
-                        ScriptPubkey::op_return(&[val; 32]).into(),
-                    )
-                    .tap_leaf_hash()
-                    .into_tap_hash(),
+                    TapNodeHash::from_str(random_hash).unwrap(),
+                    TapNodeHash::from(TapLeafHash::from_script(
+                        &ScriptBuf::new_op_return([val; 32]),
+                        LeafVersion::TapScript,
+                    )),
                 ))
             }
-            Case::SuccessLeftNode | Case::UnorderedLeftNode => TapretNodePartner::LeftNode(
-                TapBranchHash::with_nodes(
-                    TapNodeHash::from_hex(random_hash).unwrap(),
-                    LeafScript::new(
-                        LeafVer::TapScript,
-                        ScriptPubkey::op_return(&[val; 32]).into(),
-                    )
-                    .tap_leaf_hash()
-                    .into_tap_hash(),
-                )
-                .into_tap_hash(),
-            ),
+            Case::SuccessLeftNode | Case::UnorderedLeftNode => {
+                TapretNodePartner::LeftNode(TapNodeHash::from_node_hashes(
+                    TapNodeHash::from_str(random_hash).unwrap(),
+                    TapNodeHash::from(TapLeafHash::from_script(
+                        &ScriptBuf::new_op_return([val; 32]),
+                        LeafVersion::TapScript,
+                    )),
+                ))
+            }
             Case::ErrorRightLeaf => {
                 let alt_commitment =
-                    TapScript::commit(&TapretCommitment::with(mpc::Commitment::strict_dumb(), val));
-                TapretNodePartner::RightLeaf(LeafScript::new(
-                    LeafVer::TapScript,
-                    alt_commitment.as_script_bytes().clone(),
-                ))
+                    TapretCommitment::with(mpc::Commitment::strict_dumb(), val).commit();
+                TapretNodePartner::RightLeaf(LeafScript {
+                    version: LeafVersion::TapScript,
+                    script: alt_commitment,
+                })
             }
             Case::ErrorRightBranch => TapretNodePartner::RightBranch(TapretRightBranch::with(
-                TapNodeHash::from_hex(
+                TapNodeHash::from_str(
                     "50505050505050505050505050505050505050505050505050505050506a2100",
                 )
                 .unwrap(),
-                LeafScript::new(
-                    LeafVer::TapScript,
-                    ScriptPubkey::op_return(&[val; 32]).into(),
-                )
-                .tap_leaf_hash()
-                .into_tap_hash(),
+                TapNodeHash::from(TapLeafHash::from_script(
+                    &ScriptBuf::new_op_return([val; 32]),
+                    LeafVersion::TapScript,
+                )),
             )),
-            Case::RightLeafFutureVersion => TapretNodePartner::RightLeaf(LeafScript::new(
-                LeafVer::from_consensus_u8(4).unwrap(),
-                ScriptPubkey::op_return(&[val; 32]).into(),
-            )),
+            Case::RightLeafFutureVersion => TapretNodePartner::RightLeaf(LeafScript {
+                version: LeafVersion::from_consensus(4).unwrap(),
+                script: ScriptBuf::new_op_return([val; 32]),
+            }),
         };
 
         if match case {
@@ -3387,8 +3377,12 @@ fn gen_tapret_values(case: Case) -> (Value, Value) {
         val -= 1;
     };
     let merkle_root: TapNodeHash =
-        TapBranchHash::with_nodes(commitment_hash, partner.tap_node_hash()).into();
-    let new_spk = ScriptPubkey::p2tr(tapret_proof.internal_pk, Some(merkle_root));
+        TapNodeHash::from_node_hashes(commitment_hash, partner.tap_node_hash());
+    let new_spk = ScriptBuf::new_p2tr(
+        &BitcoinSecp256k1::new(),
+        tapret_proof.internal_pk,
+        Some(merkle_root),
+    );
     (
         serde_json::from_str::<Value>(&serde_json::to_string(&partner).unwrap()).unwrap(),
         serde_json::from_str::<Value>(&serde_json::to_string(&new_spk).unwrap()).unwrap(),

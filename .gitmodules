@@ -1,51 +1,15 @@
-[submodule "client_side_validation"]
-	path = client_side_validation
-	url = https://github.com/LNP-BP/client_side_validation/
-[submodule "bp-core"]
-	path = bp-core
-	url = https://github.com/BP-WG/bp-core
-[submodule "bp-std"]
-	path = bp-std
-	url = https://github.com/BP-WG/bp-std
-[submodule "strict-types"]
-	path = strict-types
-	url = https://github.com/strict-types/strict-types
-[submodule "strict-encoding"]
-	path = strict-encoding
-	url = https://github.com/strict-types/strict-encoding
-[submodule "bp-electrum-client"]
-	path = bp-electrum-client
-	url = https://github.com/BP-WG/bp-electrum-client/
-[submodule "rust-amplify"]
-	path = rust-amplify
-	url = https://github.com/rust-amplify/rust-amplify
-[submodule "bp-wallet"]
-	path = bp-wallet
-	url = https://github.com/BP-WG/bp-wallet
-[submodule "amplify-num"]
-	path = amplify-num
-	url = https://github.com/rust-amplify/amplify-num.git
-[submodule "amplify-derive"]
-	path = amplify-derive
-	url = https://github.com/rust-amplify/amplify-derive.git
-[submodule "ascii-armor"]
-	path = ascii-armor
-	url = https://github.com/UBIDECO/ascii-armor.git
-[submodule "bp-esplora-client"]
-	path = bp-esplora-client
-	url = https://github.com/zoedberg/bp-esplora-client.git
-[submodule "vesper"]
-	path = vesper
-	url = https://github.com/UBIDECO/vesper.git
-[submodule "rust-baid64"]
-	path = rust-baid64
-	url = https://github.com/UBIDECO/rust-baid64.git
-[submodule "amplify-nonasync"]
-	path = amplify-nonasync
-	url = https://github.com/rust-amplify/amplify-nonasync.git
-[submodule "aluvm"]
-	path = aluvm
-	url = https://github.com/aluvm/aluvm
+[submodule "rgb-strict-types"]
+	path = rgb-strict-types
+	url = https://github.com/rgb-protocol/rgb-strict-types
+[submodule "rgb-strict-encoding"]
+	path = rgb-strict-encoding
+	url = https://github.com/rgb-protocol/rgb-strict-encoding
+[submodule "rgb-ascii-armor"]
+	path = rgb-ascii-armor
+	url = https://github.com/rgb-protocol/rgb-ascii-armor
+[submodule "rgb-aluvm"]
+	path = rgb-aluvm
+	url = https://github.com/rgb-protocol/rgb-aluvm
 [submodule "rgb-consensus"]
 	path = rgb-consensus
 	url = https://github.com/rgb-protocol/rgb-consensus

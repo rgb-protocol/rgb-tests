@@ -89,15 +89,6 @@ visualize on a browser (e.g. `firefox target/llvm-cov/html/index.html`).
 
 Coverage will be measured for all patched crates.
 
-The GitHub organizations of submodule repositories are:
-- https://github.com/rgb-protocol
-- https://github.com/LNP-BP
-- https://github.com/BP-WG
-- https://github.com/aluvm
-- https://github.com/strict-types
-- https://github.com/rust-amplify
-- https://github.com/UBIDECO
-
 ## Contribute
 
 ### Submodule revision change helper

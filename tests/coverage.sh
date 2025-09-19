@@ -115,7 +115,7 @@ if [ "$RUN_UNIT_TESTS" = 1 ]; then
     SUBMODULE_PATHS=$(git submodule | awk '{print $2}' | grep -v altered_submodules)
     for SP in $SUBMODULE_PATHS; do
         FEATURES="--all-features"
-        [ "$SP" = "ascii-armor" ] && FEATURES=""
+        [ "$SP" = "rgb-ascii-armor" ] && FEATURES=""
         "${COV[@]}" "${COV_OPTS[@]}" --manifest-path "$SP/Cargo.toml" --workspace $FEATURES --all-targets 2>&1 | tee $COV_RUN_FILE.$RUN
         ((RUN += 1))
     done

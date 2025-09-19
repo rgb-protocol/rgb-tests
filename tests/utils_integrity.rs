@@ -24,8 +24,8 @@ fn flexible_change_and_extra(
 
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&wlt_desc);
-    let mut wlt_2 = TestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&wlt_desc);
 
     let utxo = wlt_1.get_utxo(Some(30_000));
     let contract_id_1 = wlt_1.issue_nia(600, Some(&utxo));
@@ -60,7 +60,7 @@ fn flexible_change_and_extra(
     };
     let (consignments, tx, _, tweak_info) =
         wlt_1.pay_full_flexible(coloring_info, None, change_utxo);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     for consignment in consignments.into_values() {
         wlt_2.accept_transfer(consignment.clone(), None);
     }
@@ -102,8 +102,8 @@ fn flexible_wlt_descriptor_compatibility(
 
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&descriptor_1);
-    let mut wlt_2 = TestWallet::with_descriptor(&descriptor_2);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&descriptor_1);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&descriptor_2);
 
     let utxo_1 = wlt_1.get_utxo(None);
     let contract_id = wlt_1.issue_nia(600, Some(&utxo_1));
@@ -127,7 +127,7 @@ fn flexible_wlt_descriptor_compatibility(
     };
     let (consignments, tx, psbt_meta, tweak_info) =
         wlt_1.pay_full_flexible(coloring_info, None, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     for consignment in consignments.into_values() {
         wlt_2.accept_transfer(consignment.clone(), None);
     }
@@ -135,7 +135,10 @@ fn flexible_wlt_descriptor_compatibility(
         wlt_2.add_tapret_tweak(witness_info.terminal(), tapret_commitment);
     }
     wlt_2.sync();
-    let chg_utxo_1 = Outpoint::new(tx.txid(), psbt_meta.change_vout.unwrap());
+    let chg_utxo_1 = Outpoint::new(
+        txid_bp_to_bitcoin(tx.txid()),
+        psbt_meta.change_vout.unwrap().into_u32(),
+    );
     wlt_1.sync();
 
     let winfo_3 = wlt_1.get_witness_info(None, None);
@@ -155,7 +158,7 @@ fn flexible_wlt_descriptor_compatibility(
         close_method: CloseMethod::OpretFirst,
     };
     let (consignments, tx, _, tweak_info) = wlt_2.pay_full_flexible(coloring_info, None, None);
-    wlt_2.mine_tx(&tx.txid(), false);
+    wlt_2.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     for consignment in consignments.into_values() {
         wlt_1.accept_transfer(consignment.clone(), None);
     }
@@ -163,7 +166,7 @@ fn flexible_wlt_descriptor_compatibility(
         wlt_1.add_tapret_tweak(witness_info.terminal(), tapret_commitment);
     }
     wlt_2.sync();
-    let utxo_3 = Outpoint::new(tx.txid(), 1);
+    let utxo_3 = Outpoint::new(txid_bp_to_bitcoin(tx.txid()), 1);
 
     let utxo_4 = wlt_2.get_utxo(None);
     let coloring_info = ColoringInfo {
@@ -182,7 +185,7 @@ fn flexible_wlt_descriptor_compatibility(
         close_method: wlt_1.close_method(),
     };
     let (consignments, tx, _, tweak_info) = wlt_1.pay_full_flexible(coloring_info, None, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     for consignment in consignments.into_values() {
         wlt_2.accept_transfer(consignment.clone(), None);
     }
@@ -202,8 +205,8 @@ fn flexible_multiple_transitions_per_vin() {
     initialize();
 
     let wlt_desc = DescriptorType::Wpkh;
-    let mut wlt_1 = TestWallet::with_descriptor(&wlt_desc);
-    let mut wlt_2 = TestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&wlt_desc);
 
     let utxo = wlt_1.get_utxo(Some(30_000));
     let contract_id_1 = wlt_1.issue_nia(600, Some(&utxo));
@@ -241,7 +244,7 @@ fn flexible_multiple_transitions_per_vin() {
         close_method: wlt_1.close_method(),
     };
     let (consignments, tx, _, tweak_info) = wlt_1.pay_full_flexible(coloring_info, None, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     for consignment in consignments.into_values() {
         wlt_2.accept_transfer(consignment.clone(), None);
     }
@@ -307,8 +310,8 @@ fn flexible_tapret_no_change(#[case] recv_descriptor: DescriptorType) {
 
     initialize();
 
-    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Tr);
-    let mut wlt_2 = TestWallet::with_descriptor(&recv_descriptor);
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Tr);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&recv_descriptor);
 
     let utxo = wlt_1.get_utxo(Some(800));
     let issued_amt = 666;
@@ -331,7 +334,7 @@ fn flexible_tapret_no_change(#[case] recv_descriptor: DescriptorType) {
         close_method: CloseMethod::TapretFirst,
     };
     let (consignments, tx, _, tweak_info) = wlt_1.pay_full_flexible(coloring_info, None, None);
-    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
     for consignment in consignments.into_values() {
         wlt_2.accept_transfer(consignment.clone(), None);
     }
