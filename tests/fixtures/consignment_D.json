@@ -1,0 +1,866 @@
+{
+  "version": "v0",
+  "transfer": true,
+  "terminals": {},
+  "genesis": {
+    "ffv": 0,
+    "schemaId": "rgb:sch:RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU#remote-digital-pegasus",
+    "timestamp": 1758550845,
+    "issuer": "ssi:anonymous",
+    "chainNet": "bitcoinRegtest",
+    "sealClosingStrategy": "firstOpretOrTapret",
+    "metadata": {},
+    "globals": {
+      "2000": [
+        "074e494154434b520e4e4941206173736574206e616d650002"
+      ],
+      "2001": [
+        "09004e4941207465726d7300"
+      ],
+      "2010": [
+        "e703000000000000"
+      ]
+    },
+    "assignments": {
+      "4000": {
+        "type": "fungible",
+        "items": [
+          {
+            "seal": {
+              "txid": "0b5a8351ea6ca9cf7626d3c2d4f40bddb766ba7000ebf86bd390882f694819cb",
+              "vout": 0,
+              "blinding": 1106150343912858629
+            },
+            "state": 999
+          }
+        ]
+      }
+    }
+  },
+  "bundles": [
+    {
+      "pubWitness": {
+        "tx": {
+          "version": 2,
+          "inputs": [
+            {
+              "prevOutput": "0b5a8351ea6ca9cf7626d3c2d4f40bddb766ba7000ebf86bd390882f694819cb:0",
+              "sigScript": "",
+              "sequence": 0,
+              "witness": []
+            }
+          ],
+          "outputs": [
+            {
+              "value": 99999600,
+              "scriptPubkey": "512087ff5c8b988d394d4e791c4096c2014a9c0d6695fc97db369b2be0ed0f810dbf"
+            }
+          ],
+          "lockTime": 0
+        }
+      },
+      "anchor": {
+        "mpcProof": {
+          "pos": 2,
+          "cofactor": 0,
+          "path": [
+            "8f9332bf1fbfb084c0de3d1a9411d71589a772403be051780d664025deff187c",
+            "c1b2b3873d34d4a727d8954441bfe8a5c08def0042ba829c0125b10ade1bf489",
+            "ad5d3905b7f3edb97a7882af5cd4769bfea153ad5092bac816b371a2e9bbd533"
+          ]
+        },
+        "dbcProof": {
+          "pathProof": {
+            "partnerNode": null,
+            "nonce": 0
+          },
+          "internalPk": "a1edc0d86c22b6e894acd7a5c4f6ab1325b264c88bff043e588b321b6f021988"
+        }
+      },
+      "bundle": {
+        "inputMap": {
+          "1a1789b37521fd5610aa2310a10dcfd34dc23d6192f63627ba81c61dee1e9813/4000/0": "001bf89288c0135516c7729230b20a8f1b0068acfc1c7c738ed831325efd7919"
+        },
+        "knownTransitions": [
+          {
+            "opid": "001bf89288c0135516c7729230b20a8f1b0068acfc1c7c738ed831325efd7919",
+            "transition": {
+              "ffv": 0,
+              "contractId": "rgb:GheJs3Uh-~VYQqiM-QoQ3P00-3CPWGS9-jYnuoHG-He4emBM",
+              "nonce": 18446744073709551615,
+              "transitionType": 10000,
+              "metadata": {},
+              "globals": {},
+              "inputs": [
+                "1a1789b37521fd5610aa2310a10dcfd34dc23d6192f63627ba81c61dee1e9813/4000/0"
+              ],
+              "assignments": {
+                "4000": {
+                  "type": "fungible",
+                  "items": [
+                    {
+                      "seal": {
+                        "txid": null,
+                        "vout": 0,
+                        "blinding": 3105615384636557392
+                      },
+                      "state": 333
+                    },
+                    {
+                      "seal": {
+                        "txid": "442e66bacdd44087a8de60e537f87bab23f9b5b90c10008e0375f74468ff6631",
+                        "vout": 0,
+                        "blinding": 12781310179071312563
+                      },
+                      "state": 666
+                    }
+                  ]
+                }
+              },
+              "signature": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "pubWitness": {
+        "tx": {
+          "version": 2,
+          "inputs": [
+            {
+              "prevOutput": "442e66bacdd44087a8de60e537f87bab23f9b5b90c10008e0375f74468ff6631:0",
+              "sigScript": "",
+              "sequence": 0,
+              "witness": []
+            }
+          ],
+          "outputs": [
+            {
+              "value": 99990600,
+              "scriptPubkey": "5120f51e75d3167f5e3397a85d8d457884920dfae70b4cb54805addf4030fb53c87b"
+            },
+            {
+              "value": 9000,
+              "scriptPubkey": "512087ff5c8b988d394d4e791c4096c2014a9c0d6695fc97db369b2be0ed0f810dbf"
+            }
+          ],
+          "lockTime": 0
+        }
+      },
+      "anchor": {
+        "mpcProof": {
+          "pos": 2,
+          "cofactor": 0,
+          "path": [
+            "2e700d1fba456e633ab3ad695e59b7dd56d16ce0106c392ca3d57458a34d8ed5",
+            "781e5ccd75b26d9196682562c02c56ffdf6b171d6e91edccf5ff675ffe62bfd1",
+            "d24064120fcdd85e146963b5d46530a4fd61e35e7c658709b0a2a75fe763113c"
+          ]
+        },
+        "dbcProof": {
+          "pathProof": {
+            "partnerNode": null,
+            "nonce": 0
+          },
+          "internalPk": "9ca4e6ef1477a5117449faedd010ff0b15a60bd9144fe52cfad479e882cc8bb6"
+        }
+      },
+      "bundle": {
+        "inputMap": {
+          "001bf89288c0135516c7729230b20a8f1b0068acfc1c7c738ed831325efd7919/4000/1": "fc156a89e8f7e7443a769583efbe7807f3acaf89fe62e1609f59c2001564162f"
+        },
+        "knownTransitions": [
+          {
+            "opid": "fc156a89e8f7e7443a769583efbe7807f3acaf89fe62e1609f59c2001564162f",
+            "transition": {
+              "ffv": 0,
+              "contractId": "rgb:GheJs3Uh-~VYQqiM-QoQ3P00-3CPWGS9-jYnuoHG-He4emBM",
+              "nonce": 18446744073709551615,
+              "transitionType": 10000,
+              "metadata": {},
+              "globals": {},
+              "inputs": [
+                "001bf89288c0135516c7729230b20a8f1b0068acfc1c7c738ed831325efd7919/4000/1"
+              ],
+              "assignments": {
+                "4000": {
+                  "type": "fungible",
+                  "items": [
+                    {
+                      "seal": {
+                        "txid": null,
+                        "vout": 0,
+                        "blinding": 13890199132367140368
+                      },
+                      "state": 366
+                    },
+                    {
+                      "seal": {
+                        "txid": null,
+                        "vout": 1,
+                        "blinding": 5371126253009370426
+                      },
+                      "state": 300
+                    }
+                  ]
+                }
+              },
+              "signature": null
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "schema": {
+    "ffv": 0,
+    "name": "NonInflatableAsset",
+    "metaTypes": {},
+    "globalTypes": {
+      "2000": {
+        "globalStateSchema": {
+          "semId": "d7fcbee31ef0a85d5f973bda1b0b8c9e7efbcbc5572577382cacd3bdb4218a01",
+          "maxItems": 1
+        },
+        "name": "spec"
+      },
+      "2001": {
+        "globalStateSchema": {
+          "semId": "5b8bc7543832054a1d22be94226be7538b133a26881cba4613027878e05c6cf7",
+          "maxItems": 1
+        },
+        "name": "terms"
+      },
+      "2010": {
+        "globalStateSchema": {
+          "semId": "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84",
+          "maxItems": 1
+        },
+        "name": "issuedSupply"
+      }
+    },
+    "ownedTypes": {
+      "4000": {
+        "ownedStateSchema": {
+          "fungible": "unsigned64Bit"
+        },
+        "name": "assetOwner",
+        "defaultTransition": 10000
+      }
+    },
+    "genesis": {
+      "metadata": [],
+      "globals": {
+        "2000": "once",
+        "2001": "once",
+        "2010": "once"
+      },
+      "assignments": {
+        "4000": "onceOrMore"
+      },
+      "validator": {
+        "lib": "abf099d28bed50df5e065715327f3a9b329f777cb0b9fefff634c193a03cb626",
+        "pos": 9
+      }
+    },
+    "transitions": {
+      "10000": {
+        "transitionSchema": {
+          "metadata": [],
+          "globals": {},
+          "inputs": {
+            "4000": "onceOrMore"
+          },
+          "assignments": {
+            "4000": "onceOrMore"
+          },
+          "validator": {
+            "lib": "abf099d28bed50df5e065715327f3a9b329f777cb0b9fefff634c193a03cb626",
+            "pos": 0
+          }
+        },
+        "name": "transfer"
+      }
+    },
+    "defaultAssignment": 4000
+  },
+  "types": {
+    "0af65fd62581de85cbd14e23e2db9a92bbef8b7974ffe1b50c4c74db8f86e751": {
+      "List": [
+        "5f5e26e5c5053c1b4544515bc6a0653da02a0791fb31116d71a4fad916e15355",
+        {
+          "min": 0,
+          "max": 7
+        }
+      ]
+    },
+    "18cb946f1293cf180e9d78dcc65bc59b472ffffeadfbf58db198cc8328f64b01": {
+      "Tuple": [
+        "560d96f7a47924b2c3df040e6463398fd65fd591652c294342bfa5f939155154"
+      ]
+    },
+    "1cabbfc3d826c0bfd1e9770a889efacc8b6716ad014a3eec10b6591530229042": {
+      "Primitive": 64
+    },
+    "1cb0758e14c2008c0f008ce6d2d41e9e1937e1cd0f9914c59a7e29e1ce7ba0bb": {
+      "Tuple": [
+        "ccc272928f793803d91f5dad8d51cc986b4332380f9224f7c7c1514d768ebb90"
+      ]
+    },
+    "2a5baaac5089ff098d150b482cfed8bcd01a91c0d7b45d32216ed576ab71ebdd": {
+      "Array": [
+        "1cabbfc3d826c0bfd1e9770a889efacc8b6716ad014a3eec10b6591530229042",
+        32
+      ]
+    },
+    "2fd8f27a172712903e6a3e96f0f85c0480b4211a17acd13059fc51d4a4bbde2c": {
+      "Union": {
+        "none:0": "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c",
+        "some:1": "b070d38ff6d20c5ae5d80715ca31541d5a52bbdecbd3529d38e6ddb672200997"
+      }
+    },
+    "3cd1a29dccad9b917b26305f89a8a4fb2118302a4e73c5ac0a780de6ab005e73": {
+      "Enum": [
+        "excl:33",
+        "hash:35",
+        "dollar:36",
+        "amp:38",
+        "plus:43",
+        "dash:45",
+        "dot:46",
+        "zero:48",
+        "one:49",
+        "two:50",
+        "three:51",
+        "four:52",
+        "five:53",
+        "six:54",
+        "seven:55",
+        "eight:56",
+        "nine:57",
+        "caret:94",
+        "lodash:95",
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122"
+      ]
+    },
+    "3f2b72b7c4af1a630cb6d3ff088baf351093ee465b9e7d472a610082e449d7e4": {
+      "Tuple": [
+        "63aa2314e8b147c8b284dfb39a9e10d19caad5faea848e3cb9849d9167d6344a"
+      ]
+    },
+    "43aa7fc5f6f5644fe5a2ae5e1aa99042cdeb879442e34c723ff5827fb133de8a": {
+      "Struct": [
+        {
+          "name": "type",
+          "ty": "b10ddefe8020add8a0ca08292150abb13c514d76de5168c1c97105a27e676660"
+        },
+        {
+          "name": "digest",
+          "ty": "2a5baaac5089ff098d150b482cfed8bcd01a91c0d7b45d32216ed576ab71ebdd"
+        }
+      ]
+    },
+    "45b780258601c526b23b5b4861460a9050e13f35fbbe8305a8001157e4013888": {
+      "Union": {
+        "none:0": "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c",
+        "some:1": "caff8faeb38a00a04e3621538f8e61d75a85a465cb0a0e48c3593e7eaa6c5fc7"
+      }
+    },
+    "48be23172ae884459ae78334a0063f09fa0e317bea8b233ce782a38875e796b8": {
+      "Enum": [
+        "space:32",
+        "excl:33",
+        "quotes:34",
+        "hash:35",
+        "dollar:36",
+        "percent:37",
+        "ampersand:38",
+        "apostrophe:39",
+        "bracketL:40",
+        "bracketR:41",
+        "asterisk:42",
+        "plus:43",
+        "comma:44",
+        "minus:45",
+        "dot:46",
+        "slash:47",
+        "zero:48",
+        "one:49",
+        "two:50",
+        "three:51",
+        "four:52",
+        "five:53",
+        "six:54",
+        "seven:55",
+        "eight:56",
+        "nine:57",
+        "colon:58",
+        "semiColon:59",
+        "less:60",
+        "equal:61",
+        "greater:62",
+        "question:63",
+        "at:64",
+        "_A:65",
+        "_B:66",
+        "_C:67",
+        "_D:68",
+        "_E:69",
+        "_F:70",
+        "_G:71",
+        "_H:72",
+        "_I:73",
+        "_J:74",
+        "_K:75",
+        "_L:76",
+        "_M:77",
+        "_N:78",
+        "_O:79",
+        "_P:80",
+        "_Q:81",
+        "_R:82",
+        "_S:83",
+        "_T:84",
+        "_U:85",
+        "_V:86",
+        "_W:87",
+        "_X:88",
+        "_Y:89",
+        "_Z:90",
+        "sqBracketL:91",
+        "backSlash:92",
+        "sqBracketR:93",
+        "caret:94",
+        "lodash:95",
+        "backtick:96",
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122",
+        "cBracketL:123",
+        "pipe:124",
+        "cBracketR:125",
+        "tilde:126"
+      ]
+    },
+    "560d96f7a47924b2c3df040e6463398fd65fd591652c294342bfa5f939155154": {
+      "List": [
+        "fba958721a3d335406b368c36f5a82790960cce239febcafe189ba9839d5da78",
+        {
+          "min": 0,
+          "max": 65535
+        }
+      ]
+    },
+    "5b772c8eb15fd74700c79241f60f8fda37e736b3fd462ab017ce4d454efa81aa": {
+      "Tuple": [
+        "5e5ec8924f73cd72c4225c96ab47796658ef1b729ca306e260bca42b25891d0f"
+      ]
+    },
+    "5b8bc7543832054a1d22be94226be7538b133a26881cba4613027878e05c6cf7": {
+      "Struct": [
+        {
+          "name": "text",
+          "ty": "18cb946f1293cf180e9d78dcc65bc59b472ffffeadfbf58db198cc8328f64b01"
+        },
+        {
+          "name": "media",
+          "ty": "e087a83496338799afc48a9211683a427d2bd33e2ea7ebb8a8b880ea4ab4eb81"
+        }
+      ]
+    },
+    "5ca149585de534ee91b3e3a030b7efd4cdb79abea9152f101f3759b4c7210e1f": {
+      "Primitive": 8
+    },
+    "5d03c4178da98e7e3f3af343e3997d74201d11f42732cfbea2b04b8e3ff15f22": {
+      "Enum": [
+        "indivisible:0",
+        "deci:1",
+        "centi:2",
+        "milli:3",
+        "deciMilli:4",
+        "centiMilli:5",
+        "micro:6",
+        "deciMicro:7",
+        "centiMicro:8",
+        "nano:9",
+        "deciNano:10",
+        "centiNano:11",
+        "pico:12",
+        "deciPico:13",
+        "centiPico:14",
+        "femto:15",
+        "deciFemto:16",
+        "centiFemto:17",
+        "atto:18"
+      ]
+    },
+    "5e5ec8924f73cd72c4225c96ab47796658ef1b729ca306e260bca42b25891d0f": {
+      "Tuple": [
+        "822380f475f0edb4b5dc517991de7390ada2dbb3752c4c066851aa01630296c2",
+        "0af65fd62581de85cbd14e23e2db9a92bbef8b7974ffe1b50c4c74db8f86e751"
+      ]
+    },
+    "5f5e26e5c5053c1b4544515bc6a0653da02a0791fb31116d71a4fad916e15355": {
+      "Enum": [
+        "zero:48",
+        "one:49",
+        "two:50",
+        "three:51",
+        "four:52",
+        "five:53",
+        "six:54",
+        "seven:55",
+        "eight:56",
+        "nine:57",
+        "_A:65",
+        "_B:66",
+        "_C:67",
+        "_D:68",
+        "_E:69",
+        "_F:70",
+        "_G:71",
+        "_H:72",
+        "_I:73",
+        "_J:74",
+        "_K:75",
+        "_L:76",
+        "_M:77",
+        "_N:78",
+        "_O:79",
+        "_P:80",
+        "_Q:81",
+        "_R:82",
+        "_S:83",
+        "_T:84",
+        "_U:85",
+        "_V:86",
+        "_W:87",
+        "_X:88",
+        "_Y:89",
+        "_Z:90",
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122"
+      ]
+    },
+    "63aa2314e8b147c8b284dfb39a9e10d19caad5faea848e3cb9849d9167d6344a": {
+      "List": [
+        "fba958721a3d335406b368c36f5a82790960cce239febcafe189ba9839d5da78",
+        {
+          "min": 1,
+          "max": 255
+        }
+      ]
+    },
+    "805ec5bc5312c84190445da16aa1c08a09e300e8323acfae6a23420a29ad003d": {
+      "Tuple": [
+        "c43a7d9eb9b3027973c98f5dd6e1ac04f5cbd34240c0bebc0a0fb808140094d4"
+      ]
+    },
+    "822380f475f0edb4b5dc517991de7390ada2dbb3752c4c066851aa01630296c2": {
+      "Enum": [
+        "_A:65",
+        "_B:66",
+        "_C:67",
+        "_D:68",
+        "_E:69",
+        "_F:70",
+        "_G:71",
+        "_H:72",
+        "_I:73",
+        "_J:74",
+        "_K:75",
+        "_L:76",
+        "_M:77",
+        "_N:78",
+        "_O:79",
+        "_P:80",
+        "_Q:81",
+        "_R:82",
+        "_S:83",
+        "_T:84",
+        "_U:85",
+        "_V:86",
+        "_W:87",
+        "_X:88",
+        "_Y:89",
+        "_Z:90",
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122"
+      ]
+    },
+    "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84": {
+      "Tuple": [
+        "5ca149585de534ee91b3e3a030b7efd4cdb79abea9152f101f3759b4c7210e1f"
+      ]
+    },
+    "b070d38ff6d20c5ae5d80715ca31541d5a52bbdecbd3529d38e6ddb672200997": {
+      "Tuple": [
+        "1cb0758e14c2008c0f008ce6d2d41e9e1937e1cd0f9914c59a7e29e1ce7ba0bb"
+      ]
+    },
+    "b10ddefe8020add8a0ca08292150abb13c514d76de5168c1c97105a27e676660": {
+      "Struct": [
+        {
+          "name": "type",
+          "ty": "1cb0758e14c2008c0f008ce6d2d41e9e1937e1cd0f9914c59a7e29e1ce7ba0bb"
+        },
+        {
+          "name": "subtype",
+          "ty": "2fd8f27a172712903e6a3e96f0f85c0480b4211a17acd13059fc51d4a4bbde2c"
+        },
+        {
+          "name": "charset",
+          "ty": "2fd8f27a172712903e6a3e96f0f85c0480b4211a17acd13059fc51d4a4bbde2c"
+        }
+      ]
+    },
+    "bf8fcbe9c5395731a6b4cd61fb00dfe7a5d629365339c55aeae087a3b90aaa46": {
+      "List": [
+        "3cd1a29dccad9b917b26305f89a8a4fb2118302a4e73c5ac0a780de6ab005e73",
+        {
+          "min": 0,
+          "max": 63
+        }
+      ]
+    },
+    "c43a7d9eb9b3027973c98f5dd6e1ac04f5cbd34240c0bebc0a0fb808140094d4": {
+      "Tuple": [
+        "48be23172ae884459ae78334a0063f09fa0e317bea8b233ce782a38875e796b8",
+        "f5ad172144ccd2dd62ece74ff0fb14641d936a80c1a0c93ebf97727184897cbc"
+      ]
+    },
+    "caff8faeb38a00a04e3621538f8e61d75a85a465cb0a0e48c3593e7eaa6c5fc7": {
+      "Tuple": [
+        "3f2b72b7c4af1a630cb6d3ff088baf351093ee465b9e7d472a610082e449d7e4"
+      ]
+    },
+    "ccc272928f793803d91f5dad8d51cc986b4332380f9224f7c7c1514d768ebb90": {
+      "Tuple": [
+        "f9170804ddae0479f8d5af74ab3bd202e6ea4172d9a9b93707151adb7fc40ca1",
+        "bf8fcbe9c5395731a6b4cd61fb00dfe7a5d629365339c55aeae087a3b90aaa46"
+      ]
+    },
+    "d7fcbee31ef0a85d5f973bda1b0b8c9e7efbcbc5572577382cacd3bdb4218a01": {
+      "Struct": [
+        {
+          "name": "ticker",
+          "ty": "5b772c8eb15fd74700c79241f60f8fda37e736b3fd462ab017ce4d454efa81aa"
+        },
+        {
+          "name": "name",
+          "ty": "805ec5bc5312c84190445da16aa1c08a09e300e8323acfae6a23420a29ad003d"
+        },
+        {
+          "name": "details",
+          "ty": "45b780258601c526b23b5b4861460a9050e13f35fbbe8305a8001157e4013888"
+        },
+        {
+          "name": "precision",
+          "ty": "5d03c4178da98e7e3f3af343e3997d74201d11f42732cfbea2b04b8e3ff15f22"
+        }
+      ]
+    },
+    "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c": {
+      "Primitive": 0
+    },
+    "dc1e2f52567f725fd730ad84867f0da4c9ba9af0813311dfe4ef3e3c4a612548": {
+      "Tuple": [
+        "43aa7fc5f6f5644fe5a2ae5e1aa99042cdeb879442e34c723ff5827fb133de8a"
+      ]
+    },
+    "e087a83496338799afc48a9211683a427d2bd33e2ea7ebb8a8b880ea4ab4eb81": {
+      "Union": {
+        "none:0": "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c",
+        "some:1": "dc1e2f52567f725fd730ad84867f0da4c9ba9af0813311dfe4ef3e3c4a612548"
+      }
+    },
+    "f5ad172144ccd2dd62ece74ff0fb14641d936a80c1a0c93ebf97727184897cbc": {
+      "List": [
+        "48be23172ae884459ae78334a0063f09fa0e317bea8b233ce782a38875e796b8",
+        {
+          "min": 0,
+          "max": 39
+        }
+      ]
+    },
+    "f9170804ddae0479f8d5af74ab3bd202e6ea4172d9a9b93707151adb7fc40ca1": {
+      "Enum": [
+        "a:97",
+        "b:98",
+        "c:99",
+        "d:100",
+        "e:101",
+        "f:102",
+        "g:103",
+        "h:104",
+        "i:105",
+        "j:106",
+        "k:107",
+        "l:108",
+        "m:109",
+        "n:110",
+        "o:111",
+        "p:112",
+        "q:113",
+        "r:114",
+        "s:115",
+        "t:116",
+        "u:117",
+        "v:118",
+        "w:119",
+        "x:120",
+        "y:121",
+        "z:122"
+      ]
+    },
+    "fba958721a3d335406b368c36f5a82790960cce239febcafe189ba9839d5da78": "UnicodeChar"
+  },
+  "scripts": [
+    {
+      "isae": [
+        "ALU",
+        "BPDIGEST",
+        "RGB"
+      ],
+      "code": [
+        11,
+        0,
+        0,
+        0,
+        208,
+        160,
+        15,
+        1,
+        7,
+        11,
+        0,
+        1,
+        0,
+        11,
+        8,
+        0,
+        0,
+        11,
+        1,
+        2,
+        0,
+        200,
+        218,
+        7,
+        1,
+        57,
+        48,
+        0,
+        209,
+        160,
+        15,
+        1,
+        7
+      ],
+      "data": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "libs": []
+    }
+  ]
+}

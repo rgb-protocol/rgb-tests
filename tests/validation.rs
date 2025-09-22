@@ -46,6 +46,7 @@ enum Scenario {
     A,
     B,
     C,
+    D,
 }
 
 impl fmt::Display for Scenario {
@@ -277,11 +278,45 @@ fn remove_transition_children(
 
 fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
     initialize();
+    if let Scenario::D = scenario {
+        let mut wlt_1 = get_wallet(&DescriptorType::Tr);
+        let mut wlt_2 = get_wallet(&DescriptorType::Tr);
+
+        let issued_supply = 999;
+
+        let sats = 9000;
+
+        let utxo = wlt_1.get_utxo(None);
+        let contract_id_1 = wlt_1.issue_nia(issued_supply, Some(&utxo));
+
+        let mut txes = vec![];
+
+        let (_consignment, tx) = wlt_1.send(
+            &mut wlt_2,
+            TransferType::Blinded,
+            contract_id_1,
+            666,
+            sats,
+            None,
+        );
+        txes.push(tx);
+        let (consignment, tx) = wlt_2.send(
+            &mut wlt_1,
+            TransferType::Witness,
+            contract_id_1,
+            300,
+            sats,
+            None,
+        );
+        txes.push(tx);
+        return (consignment, txes);
+    }
 
     let transfer_type = match scenario {
         Scenario::A => TransferType::Blinded,
         Scenario::B => TransferType::Witness,
         Scenario::C => TransferType::Witness,
+        _ => unreachable!(),
     };
 
     let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
@@ -423,6 +458,7 @@ fn validate_consignment_generate() {
         Ok(val) if val.to_uppercase() == Scenario::A.to_string() => Scenario::A,
         Ok(val) if val.to_uppercase() == Scenario::B.to_string() => Scenario::B,
         Ok(val) if val.to_uppercase() == Scenario::C.to_string() => Scenario::C,
+        Ok(val) if val.to_uppercase() == Scenario::D.to_string() => Scenario::D,
         Err(VarError::NotPresent) => Scenario::A,
         _ => panic!("invalid scenario"),
     };
