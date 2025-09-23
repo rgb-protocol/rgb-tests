@@ -3570,3 +3570,18 @@ fn gen_tapret_values(case: Case) -> (Value, Value) {
         serde_json::from_str::<Value>(&serde_json::to_string(&new_spk).unwrap()).unwrap(),
     )
 }
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn validate_consignment_strict_roundtrip() {
+    for scenario in Scenario::iter() {
+        let cons_path = format!("tests/fixtures/consignment_{scenario}.rgb");
+        let consignment =
+            Transfer::strict_deserialize_from_file::<{ usize::MAX }>(&cons_path).unwrap();
+        let cons_bytes = consignment
+            .to_strict_serialized::<{ usize::MAX }>()
+            .unwrap()
+            .release();
+        assert_eq!(std::fs::read(cons_path).unwrap(), cons_bytes);
+    }
+}

@@ -162,7 +162,7 @@ pub use schemata::{
 pub use serde_json::{json, Value};
 pub use serial_test::serial;
 pub use strict_encoding::{fname, tn, FieldName, StrictSerialize, TypeName};
-pub use strict_types::{SemId, StrictDumb, StrictVal, TypeSystem};
+pub use strict_types::{SemId, StrictDeserialize, StrictDumb, StrictVal, TypeSystem};
 pub use strum::IntoEnumIterator;
 pub use strum_macros::EnumIter;
 pub use time::OffsetDateTime;
