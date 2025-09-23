@@ -159,7 +159,7 @@ pub use schemata::{
     OS_ASSET, OS_INFLATION, OS_REPLACE, PFA_SCHEMA_ID, TS_BURN, TS_INFLATION, TS_REPLACE,
     TS_TRANSFER, UDA_SCHEMA_ID,
 };
-pub use serde_json::Value;
+pub use serde_json::{json, Value};
 pub use serial_test::serial;
 pub use strict_encoding::{fname, tn, FieldName, StrictSerialize, TypeName};
 pub use strict_types::{SemId, StrictDumb, StrictVal, TypeSystem};

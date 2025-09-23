@@ -126,11 +126,11 @@ fn replace_transition_in_bundle(
 
 fn update_anchor(witness_bundle: &mut WitnessBundle, contract_id: Option<ContractId>) {
     let mut witness_psbt = Psbt::from_tx(witness_bundle.pub_witness.tx().unwrap().clone());
-    let idx = witness_psbt
-        .outputs()
-        .find(|o| o.script.is_op_return())
-        .unwrap()
-        .index();
+    let idx = if let Some(output) = witness_psbt.outputs().find(|o| o.script.is_op_return()) {
+        output.index()
+    } else {
+        return;
+    };
     let contract_id = contract_id.unwrap_or(
         witness_bundle
             .bundle
@@ -481,7 +481,6 @@ fn validate_consignment_generate() {
 
 fn get_consignment_from_json(fname: &str) -> Transfer {
     let cons_path = format!("tests/fixtures/{fname}.json");
-    println!("loading {cons_path}");
     let file = std::fs::File::open(cons_path).unwrap();
     let consignment: Transfer = serde_json::from_reader(file).unwrap();
     consignment
@@ -3067,4 +3066,507 @@ fn validate_consignment_typesystem_fail() {
         .unwrap_err();
     dbg!(&res);
     assert!(matches!(res, ValidationError::InvalidConsignment(_)));
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn validate_consignment_tapret_partner() {
+    let scenario = Scenario::D;
+    let cons_path = format!("tests/fixtures/consignment_{scenario}.json");
+    let file = std::fs::File::open(cons_path).unwrap();
+    let base_consignment: Value = serde_json::from_reader(file).unwrap();
+    let wbundle_idx = 1;
+    let bundle_path = vec![Step::Key(s!("bundles")), Step::Idx(wbundle_idx)];
+    let partner_node_path = vec![
+        Step::Key(s!("anchor")),
+        Step::Key(s!("dbcProof")),
+        Step::Key(s!("pathProof")),
+        Step::Key(s!("partnerNode")),
+    ];
+    let spk_path = vec![
+        Step::Key(s!("pubWitness")),
+        Step::Key(s!("tx")),
+        Step::Key(s!("outputs")),
+        Step::Idx(0),
+        Step::Key(s!("scriptPubkey")),
+    ];
+
+    // ERROR: validation fails if unexpected partnerNode is provided
+    // scriptPubKey is not updated according to the new DBC proof
+    let partner_node = json!({
+        "rightLeaf":{
+            "version":"tapScript",
+            "script":"6a20fefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefe"
+        }
+    });
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    assert!(matches!(
+        res.unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(_, _, _))
+    ));
+
+    // SUCCESS (PartnerNode::RightLeaf)
+    let test_case = Case::SuccessRightLeaf;
+    let partner_node = json!({
+        "rightLeaf":{
+            "version":"tapScript",
+            "script":"6a20fefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefe"
+        }
+    });
+    let spk = json!("5120f63b581e00fae5368c25310cbb35927cccd920006513f673107e92cb7cdc1550");
+    assert_eq!(
+        gen_tapret_values(test_case),
+        (partner_node.clone(), spk.clone())
+    );
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    *get_entry_at_path_mut(bundle_val, &spk_path) = spk;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    res.unwrap();
+
+    // SUCCESS (PartnerNode::RightBranch)
+    let test_case = Case::SuccessRightBranch;
+    let partner_node = json!({
+        "rightBranch": {
+            "leftNodeHash": "3d5c9311e811696e6f55dbef397c0cc53e804c8e6af1616e6add3ecab4ecfbd6",
+            "rightNodeHash": "cec6cd42645c3d426925940d320e3204fadba480aa7ffff98911d00f6e2124ff"
+        }
+    });
+    let spk = json!("5120b7746313c4057fba0f861897906177158fd27228b6a3ef1a6f8777422cd42e2c");
+    assert_eq!(
+        gen_tapret_values(test_case),
+        (partner_node.clone(), spk.clone())
+    );
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    *get_entry_at_path_mut(bundle_val, &spk_path) = spk;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    res.unwrap();
+
+    // SUCCESS (PartnerNode::LeftNode)
+    let test_case = Case::SuccessLeftNode;
+    let partner_node = json!({
+        "leftNode":"2fca1237a2b0915c3840cb035bf3d697c100bd131f1cacba734c46d2827dce90"
+    });
+    let spk = json!("5120002675d83f06b7a044fbe9b55c605bfbd6503c51462da15870a4208436ea5ee6");
+    assert_eq!(
+        gen_tapret_values(test_case),
+        (partner_node.clone(), spk.clone())
+    );
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    *get_entry_at_path_mut(bundle_val, &spk_path) = spk;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    res.unwrap();
+
+    // ERROR (PartnerNode::RightLeaf looks like a commitment)
+    let test_case = Case::ErrorRightLeaf;
+    let partner_node = json!({
+        "rightLeaf": {
+            "script": "50505050505050505050505050505050505050505050505050505050506a210000000000000000000000000000000000000000000000000000000000000000fd",
+            "version": "tapScript"
+        }
+    });
+    let spk = json!("5120c73994da995199e9c9ee4ca4ba28a61123261bcb6af5bf9dc830f577698ae107");
+    assert_eq!(
+        gen_tapret_values(test_case),
+        (partner_node.clone(), spk.clone())
+    );
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    *get_entry_at_path_mut(bundle_val, &spk_path) = spk;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let wbundle = consignment.bundles[wbundle_idx].clone();
+    assert_eq!(
+        res.unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(
+            wbundle.bundle.bundle_id(),
+            wbundle.witness_id(),
+            s!("the message is invalid since a valid commitment to it can't be created.")
+        ))
+    );
+
+    // ERROR (PartnerNode::RightBranch's left branch looks like a commitment)
+    // TODO: should this be an error?
+    let test_case = Case::ErrorRightBranch;
+    let partner_node = json!({
+        "rightBranch": {
+            "leftNodeHash": "50505050505050505050505050505050505050505050505050505050506a2100",
+            "rightNodeHash": "b2c459126150e0d47063ea7b6d0474a24c39e25908aae5740dd4787b67c6e19a"
+        }
+    });
+    let spk = json!("512007b76a55c11c4f010cb2dd8313bc61412e3f1399a74c716e9dd7e60418d93036");
+    assert_eq!(
+        gen_tapret_values(test_case),
+        (partner_node.clone(), spk.clone())
+    );
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    *get_entry_at_path_mut(bundle_val, &spk_path) = spk;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let wbundle = consignment.bundles[wbundle_idx].clone();
+    assert_eq!(
+        res.unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(
+            wbundle.bundle.bundle_id(),
+            wbundle.witness_id(),
+            s!("the message is invalid since a valid commitment to it can't be created.")
+        ))
+    );
+
+    // ERROR (PartnerNode::RightLeaf should be on the left)
+    let test_case = Case::UnorderedRightLeaf;
+    let partner_node = json!({
+        "rightLeaf":{
+            "version":"tapScript",
+            "script":"6a20ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+    });
+    let spk = json!("5120f3a0260c8b9502e8bcf803134920f0b173aaea7270691907e3d435eae8173ac7");
+    assert_eq!(
+        gen_tapret_values(test_case),
+        (partner_node.clone(), spk.clone())
+    );
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    *get_entry_at_path_mut(bundle_val, &spk_path) = spk;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let wbundle = consignment.bundles[wbundle_idx].clone();
+    assert_eq!(
+        res.unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(
+            wbundle.bundle.bundle_id(),
+            wbundle.witness_id(),
+            s!("the message is invalid since a valid commitment to it can't be created.")
+        ))
+    );
+
+    // ERROR (PartnerNode::RightBranch should be on the left)
+    let test_case = Case::UnorderedRightBranch;
+    let partner_node = json!({
+        "rightBranch": {
+            "leftNodeHash": "b2c459126150e0d47063ea7b6d0474a24c39e25908aae5740dd4787b67c6e19a",
+            "rightNodeHash": "cec6cd42645c3d426925940d320e3204fadba480aa7ffff98911d00f6e2124ff"
+        }
+    });
+    let spk = json!("5120002675d83f06b7a044fbe9b55c605bfbd6503c51462da15870a4208436ea5ee6");
+    assert_eq!(
+        gen_tapret_values(test_case),
+        (partner_node.clone(), spk.clone())
+    );
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    *get_entry_at_path_mut(bundle_val, &spk_path) = spk;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let wbundle = consignment.bundles[wbundle_idx].clone();
+    assert_eq!(
+        res.unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(
+            wbundle.bundle.bundle_id(),
+            wbundle.witness_id(),
+            s!("the message is invalid since a valid commitment to it can't be created.")
+        ))
+    );
+
+    // ERROR (PartnerNode::LeftNode should be on the left)
+    let test_case = Case::UnorderedLeftNode;
+    let partner_node = json!({
+        "leftNode":"f7c69fce92d96473bd9d2399f47b4d77e4673e8ff9f4e2e7c64c0030cb6fa609"
+    });
+    let spk = json!("5120b7746313c4057fba0f861897906177158fd27228b6a3ef1a6f8777422cd42e2c");
+    assert_eq!(
+        gen_tapret_values(test_case),
+        (partner_node.clone(), spk.clone())
+    );
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    *get_entry_at_path_mut(bundle_val, &spk_path) = spk;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let wbundle = consignment.bundles[wbundle_idx].clone();
+    assert_eq!(
+        res.unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(
+            wbundle.bundle.bundle_id(),
+            wbundle.witness_id(),
+            s!("the message is invalid since a valid commitment to it can't be created.")
+        ))
+    );
+
+    // ERROR (CommitmentMismatch): provide wrong internal pk in the DBC proof
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(
+        bundle_val,
+        &vec![
+            Step::Key(s!("anchor")),
+            Step::Key(s!("dbcProof")),
+            Step::Key(s!("internalPk")),
+        ],
+    ) = "0101010101010101010101010101010101010101010101010101010101010101".into();
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let resolver = OfflineResolver {
+        consignment: &IndexedConsignment::new(&consignment),
+    };
+    let res = consignment.clone().validate(
+        &resolver,
+        ChainNet::BitcoinRegtest,
+        None,
+        trusted_typesystem.clone(),
+    );
+    let wbundle = consignment.bundles[wbundle_idx].clone();
+    assert_eq!(
+        res.unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(
+            wbundle.bundle.bundle_id(),
+            wbundle.witness_id(),
+            s!("commitment doesn't match the message.")
+        ))
+    );
+}
+
+#[derive(Debug)]
+enum Case {
+    SuccessRightLeaf,
+    SuccessRightBranch,
+    SuccessLeftNode,
+    ErrorRightLeaf,
+    ErrorRightBranch,
+    UnorderedRightLeaf,
+    UnorderedRightBranch,
+    UnorderedLeftNode,
+}
+
+fn gen_tapret_values(case: Case) -> (Value, Value) {
+    use bp::{
+        dbc::tapret::{TapretNodePartner, TapretRightBranch},
+        IntoTapHash, LeafScript, LeafVer, TapBranchHash, TapNodeHash, TapScript,
+    };
+    use commit_verify::CommitVerify;
+    let scenario = Scenario::D;
+    let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let wbundle = consignment.bundles.last().unwrap().clone();
+    let DbcProof::Tapret(tapret_proof) = wbundle.anchor.dbc_proof.clone() else {
+        panic!()
+    };
+    let nonce = tapret_proof.path_proof.nonce();
+    let protocol_id = mpc::ProtocolId::from(consignment.contract_id());
+    let message = mpc::Message::from(wbundle.bundle.bundle_id());
+    let commitment = wbundle
+        .anchor
+        .mpc_proof
+        .convolve(protocol_id, message)
+        .unwrap();
+    let tapret_commitment = TapretCommitment::with(commitment, nonce);
+    let script_commitment = TapScript::commit(&tapret_commitment);
+
+    let commitment_leaf = script_commitment.tap_leaf_hash();
+    let commitment_hash = TapNodeHash::from(commitment_leaf);
+    let random_hash = "cec6cd42645c3d426925940d320e3204fadba480aa7ffff98911d00f6e2124ff";
+    let mut val = 0xff;
+    let partner = loop {
+        let partner = match case {
+            Case::SuccessRightLeaf | Case::UnorderedRightLeaf => {
+                TapretNodePartner::RightLeaf(LeafScript::new(
+                    LeafVer::TapScript,
+                    ScriptPubkey::op_return(&[val; 32]).into(),
+                ))
+            }
+            Case::SuccessRightBranch | Case::UnorderedRightBranch => {
+                TapretNodePartner::RightBranch(TapretRightBranch::with(
+                    TapNodeHash::from_hex(random_hash).unwrap(),
+                    LeafScript::new(
+                        LeafVer::TapScript,
+                        ScriptPubkey::op_return(&[val; 32]).into(),
+                    )
+                    .tap_leaf_hash()
+                    .into_tap_hash(),
+                ))
+            }
+            Case::SuccessLeftNode | Case::UnorderedLeftNode => TapretNodePartner::LeftNode(
+                TapBranchHash::with_nodes(
+                    TapNodeHash::from_hex(random_hash).unwrap(),
+                    LeafScript::new(
+                        LeafVer::TapScript,
+                        ScriptPubkey::op_return(&[val; 32]).into(),
+                    )
+                    .tap_leaf_hash()
+                    .into_tap_hash(),
+                )
+                .into_tap_hash(),
+            ),
+            Case::ErrorRightLeaf => {
+                let alt_commitment =
+                    TapScript::commit(&TapretCommitment::with(mpc::Commitment::strict_dumb(), val));
+                TapretNodePartner::RightLeaf(LeafScript::new(
+                    LeafVer::TapScript,
+                    alt_commitment.as_script_bytes().clone(),
+                ))
+            }
+            Case::ErrorRightBranch => TapretNodePartner::RightBranch(TapretRightBranch::with(
+                TapNodeHash::from_hex(
+                    "50505050505050505050505050505050505050505050505050505050506a2100",
+                )
+                .unwrap(),
+                LeafScript::new(
+                    LeafVer::TapScript,
+                    ScriptPubkey::op_return(&[val; 32]).into(),
+                )
+                .tap_leaf_hash()
+                .into_tap_hash(),
+            )),
+        };
+
+        if match case {
+            Case::SuccessRightLeaf
+            | Case::SuccessRightBranch
+            | Case::ErrorRightLeaf
+            | Case::ErrorRightBranch
+            | Case::UnorderedLeftNode => partner.tap_node_hash() > commitment_hash,
+            Case::SuccessLeftNode | Case::UnorderedRightLeaf | Case::UnorderedRightBranch => {
+                partner.tap_node_hash() < commitment_hash
+            }
+        } {
+            break partner;
+        };
+        val -= 1;
+    };
+    let merkle_root: TapNodeHash =
+        TapBranchHash::with_nodes(commitment_hash, partner.tap_node_hash()).into();
+    let new_spk = ScriptPubkey::p2tr(tapret_proof.internal_pk, Some(merkle_root));
+    (
+        serde_json::from_str::<Value>(&serde_json::to_string(&partner).unwrap()).unwrap(),
+        serde_json::from_str::<Value>(&serde_json::to_string(&new_spk).unwrap()).unwrap(),
+    )
 }
