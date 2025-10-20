@@ -2937,6 +2937,116 @@ fn multiasset_transfer() {
 
 #[cfg(not(feature = "altered"))]
 #[rstest]
+fn extra_after_merge() {
+    initialize();
+
+    let wlt_desc = DescriptorType::Wpkh;
+    let mut wlt_1 = get_wallet(&wlt_desc);
+    let mut wlt_2 = get_wallet(&wlt_desc);
+
+    let utxo_1 = wlt_1.get_utxo(None);
+    let utxo_2 = wlt_1.get_utxo(None);
+
+    let amt_1 = 100;
+    let amt_2 = 200;
+
+    let contract_id = wlt_1.issue_with_info(
+        AssetInfo::default_nia(vec![amt_1, amt_2]),
+        vec![Some(utxo_1), Some(utxo_2)],
+        None,
+        None,
+    );
+    let asset_schema = wlt_1.asset_schema(contract_id);
+    let schema_id = wlt_1.schema_id(contract_id);
+    let contract = wlt_1.stock().contract_data(contract_id).unwrap();
+    let assignment_type = contract
+        .schema
+        .assignment_types_for_state(asset_schema.default_state_type())[0];
+    let transition_type = contract
+        .schema
+        .default_transition_for_assignment(assignment_type);
+
+    let invoice = wlt_1.invoice(
+        contract_id,
+        schema_id,
+        amt_2,
+        InvoiceType::Blinded(Some(utxo_1)),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice.clone(), None, None, true, None);
+    wlt_1.mine_tx(&tx.txid(), false);
+    wlt_1.accept_transfer(consignment, None);
+    wlt_1.sync();
+
+    // retrieve the two opouts on utxo
+    let mut allocations = wlt_1
+        .stock()
+        .contract_assignments_for(contract_id, vec![utxo_1])
+        .unwrap()
+        .into_values()
+        .flat_map(|v| v.into_iter())
+        .collect::<Vec<_>>();
+    allocations.sort_by(|(_, a1), (_, a2)| a1.cmp(a2));
+    assert_eq!(allocations.len(), 2);
+    let (opout_1, _) = allocations[0];
+    let (opout_2, _) = allocations[1];
+
+    let btc_change = wlt_1.get_address();
+    let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo_1], vec![(btc_change, None)], None);
+    psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
+    psbt.output_mut(1).unwrap().set_opret_host().unwrap();
+    psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+    // 1st transition
+    let mut transition_builder = wlt_1
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let state = asset_schema.allocated_state(amt_1);
+    transition_builder = transition_builder
+        .add_input(opout_1, state.clone())
+        .unwrap();
+    let secret_seal = wlt_2.get_secret_seal(None, None);
+    let seal_1 = BuilderSeal::Concealed(secret_seal);
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, seal_1, state)
+        .unwrap();
+    let transition = transition_builder.complete_transition().unwrap();
+    psbt.push_rgb_transition(transition).unwrap();
+    // 2nd transition
+    let mut transition_builder = wlt_1
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let state = asset_schema.allocated_state(amt_2);
+    transition_builder = transition_builder
+        .add_input(opout_2, state.clone())
+        .unwrap();
+    let secret_seal_extra = wlt_1.get_secret_seal(None, None);
+    let seal_2 = BuilderSeal::Concealed(secret_seal_extra);
+    transition_builder = transition_builder
+        .add_owned_state_raw(*assignment_type, seal_2, state)
+        .unwrap();
+    let transition = transition_builder.complete_transition().unwrap();
+    psbt.push_rgb_transition(transition).unwrap();
+    psbt.complete_construction();
+    let fascia = psbt.rgb_commit().unwrap();
+    let witness_id = psbt.txid();
+    wlt_1.consume_fascia(fascia, witness_id);
+    let tx = wlt_1.sign_finalize_extract(&mut psbt);
+    wlt_1.broadcast_tx(&tx);
+    wlt_2.sync();
+
+    let mut beneficiaries = AssetBeneficiariesMap::new();
+    beneficiaries.insert(contract_id, vec![seal_1]);
+    let consignment = wlt_1
+        .create_consignments(beneficiaries, witness_id)
+        .into_values()
+        .next()
+        .unwrap();
+    wlt_2.accept_transfer(consignment, None);
+}
+
+#[cfg(not(feature = "altered"))]
+#[rstest]
 #[case(HistoryType::Linear, ReorgType::ChangeOrder)]
 #[case(HistoryType::Linear, ReorgType::Revert)]
 #[case(HistoryType::Branching, ReorgType::ChangeOrder)]
