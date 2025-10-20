@@ -455,7 +455,7 @@ fn rbf_transfer() {
 
 #[cfg(feature = "altered")]
 #[rstest]
-#[should_panic(expected = "DoubleSpend")]
+#[should_panic(expected = "InvalidConsignment")]
 #[case(TransferType::Blinded)]
 #[should_panic(expected = "Composition(InsufficientState)")]
 #[case(TransferType::Witness)]
