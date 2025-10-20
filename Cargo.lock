@@ -1812,7 +1812,7 @@ dependencies = [
 [[package]]
 name = "rgb-api"
 version = "0.11.1-rc.5"
-source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#1f77254056bccef41d64b2ad2105fb10815ca6fa"
+source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#82540b402b7666474119e4780b3a08de151c7715"
 dependencies = [
  "amplify",
  "baid64",
@@ -1914,7 +1914,7 @@ dependencies = [
 [[package]]
 name = "rgb-psbt-utils"
 version = "0.11.1-rc.5"
-source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#1f77254056bccef41d64b2ad2105fb10815ca6fa"
+source = "git+https://github.com/rgb-protocol/rgb-api?branch=revert_fix_same_blinded_transfer#82540b402b7666474119e4780b3a08de151c7715"
 dependencies = [
  "amplify",
  "baid64",

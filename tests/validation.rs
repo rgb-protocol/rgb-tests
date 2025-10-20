@@ -429,13 +429,14 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
 }
 
 struct OfflineResolver<'cons, const TRANSFER: bool> {
-    consignment: &'cons IndexedConsignment<'cons, TRANSFER>,
+    consignment: &'cons Consignment<TRANSFER>,
 }
 impl<const TRANSFER: bool> ResolveWitness for OfflineResolver<'_, TRANSFER> {
     fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
         self.consignment
-            .pub_witness(witness_id)
-            .and_then(|p| p.tx().cloned())
+            .bundled_witnesses()
+            .find(|bw| bw.witness_id() == witness_id)
+            .and_then(|p| p.pub_witness.tx().cloned())
             .map_or_else(
                 || Ok(WitnessStatus::Unresolved),
                 |tx| Ok(WitnessStatus::Resolved(tx, WitnessOrd::Tentative)),
@@ -540,10 +541,13 @@ fn validate_consignment_chain_fail() {
 #[cfg(not(feature = "altered"))]
 #[test]
 fn validate_consignment_genesis_fail() {
-    let resolver = Scenario::B.resolver();
+    let scenario = Scenario::B;
+    let resolver = scenario.resolver();
 
     // schema ID: change genesis[schemaId] with CFA schema ID
     let consignment = get_consignment_from_json("attack_genesis_schema_id");
+    let expected = consignment.genesis.schema_id;
+    let actual = consignment.schema_id();
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let res = consignment
         .validate(
@@ -554,10 +558,10 @@ fn validate_consignment_genesis_fail() {
         )
         .unwrap_err();
     dbg!(&res);
-    assert!(matches!(
+    assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::OperationAbsent(_))
-    ));
+        ValidationError::InvalidConsignment(Failure::SchemaMismatch { expected, actual })
+    );
 
     // genesis chainNet: change from bitcoinRegtest to bitcoinMainnet
     let consignment = get_consignment_from_json("attack_genesis_testnet");
@@ -576,6 +580,21 @@ fn validate_consignment_genesis_fail() {
         ValidationError::InvalidConsignment(Failure::ContractChainNetMismatch(
             ChainNet::BitcoinRegtest
         ))
+    );
+
+    // genesis seal closing strategy: only FirstOpretOrTapret is currently supported
+    let cons_path = format!("tests/fixtures/consignment_{scenario}.json");
+    let file = std::fs::File::open(cons_path).unwrap();
+    let base_consignment: Value = serde_json::from_reader(file).unwrap();
+    let mut json_consignment = base_consignment.clone();
+    *json_consignment
+        .get_mut("genesis")
+        .unwrap()
+        .get_mut("sealClosingStrategy")
+        .unwrap() = Value::String(s!("FirstOpretThenTapret"));
+    assert!(
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .is_err()
     );
 }
 
@@ -1002,7 +1021,7 @@ fn validate_consignment_commitments_fail() {
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
 
-    // CyclicGraph: duplicate the same transition within a bundle to create a cycle
+    // NoPrevState: duplicate transition within a bundle, it'll try to spend inputs twice
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let witness_bundle = bundles.last_mut().unwrap();
@@ -1013,6 +1032,7 @@ fn validate_consignment_commitments_fail() {
         .unwrap()
         .clone();
     let opid = existing_transition.opid;
+    let fst_opout = *existing_transition.transition.inputs.first().unwrap();
     witness_bundle
         .bundle
         .known_transitions
@@ -1030,10 +1050,10 @@ fn validate_consignment_commitments_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::CyclicGraph(opid))
+        ValidationError::InvalidConsignment(Failure::NoPrevState(opid, fst_opout))
     );
 
-    // DoubleSpend: add different transition that spends the same opouts
+    // InputMapTransitionMismatch: add different transition that spends the same opouts
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let new_bundle = bundles.last_mut().unwrap();
@@ -1046,6 +1066,8 @@ fn validate_consignment_commitments_fail() {
         .clone();
     transition.nonce -= 1;
 
+    let fst_input = *transition.inputs.first().unwrap();
+    let opid = transition.id();
     new_bundle
         .bundle
         .known_transitions
@@ -1064,7 +1086,9 @@ fn validate_consignment_commitments_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::ExtraKnownTransition(bundle_id))
+        ValidationError::InvalidConsignment(Failure::InputMapTransitionMismatch(
+            bundle_id, opid, fst_input
+        ))
     );
 
     // OperationAbsent: remove a bundle that contains spent assignments
@@ -1100,6 +1124,13 @@ fn validate_consignment_commitments_fail() {
             .filter(|b| b.bundle.bundle_id() != bundle_id_to_remove)
             .collect::<Vec<_>>(),
     );
+    let (missing_opout, child_opid) = consignment
+        .bundles
+        .iter()
+        .flat_map(|wb| wb.bundle.input_map.iter())
+        .find(|(inp, _)| inp.op == missing_opid)
+        .map(|(opout, opid)| (*opout, *opid))
+        .unwrap();
     let res = consignment
         .validate(
             &resolver,
@@ -1111,7 +1142,7 @@ fn validate_consignment_commitments_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::OperationAbsent(missing_opid))
+        ValidationError::InvalidConsignment(Failure::NoPrevState(child_opid, missing_opout))
     );
 
     // NoPrevState: modify a transition input to use a missing assignment type
@@ -1127,21 +1158,25 @@ fn validate_consignment_commitments_fail() {
         .clone();
     let old_opid = transition.id();
     let mut transition_inputs = transition.inputs.as_unconfined().clone();
-    let mut fst_input = transition_inputs.pop_first().unwrap();
+    let mut fst_input = *transition_inputs.first().unwrap();
     let state_type = AssignmentType::with(42);
     fst_input.ty = state_type;
     transition_inputs.insert(fst_input);
     transition.inputs = NonEmptyOrdSet::from_checked(transition_inputs).into();
     replace_transition_in_bundle(witness_bundle, old_opid, transition.clone());
+    update_anchor(witness_bundle, None);
     let opid = transition.id();
     let mut input_map = witness_bundle.bundle.input_map.clone().release();
-    let prev_id = fst_input.op;
     input_map.insert(fst_input, transition.id());
     witness_bundle.bundle.input_map = NonEmptyOrdMap::from_checked(input_map);
     consignment.bundles = LargeVec::from_checked(bundles);
+    let consignment_resolver = OfflineResolver {
+        consignment: &consignment,
+    };
     let res = consignment
+        .clone()
         .validate(
-            &resolver,
+            &consignment_resolver,
             ChainNet::BitcoinRegtest,
             None,
             trusted_typesystem.clone(),
@@ -1150,11 +1185,7 @@ fn validate_consignment_commitments_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::NoPrevState {
-            opid,
-            prev_id,
-            state_type
-        })
+        ValidationError::InvalidConsignment(Failure::NoPrevState(opid, fst_input))
     );
 
     // NoPrevOut: modify input to reference non-existing assignment number
@@ -1175,14 +1206,19 @@ fn validate_consignment_commitments_fail() {
     transition_inputs.insert(fst_input);
     transition.inputs = NonEmptyOrdSet::from_checked(transition_inputs).into();
     replace_transition_in_bundle(witness_bundle, old_opid, transition.clone());
+    update_anchor(witness_bundle, None);
     let opid = transition.id();
     let mut input_map = witness_bundle.bundle.input_map.clone().release();
     input_map.insert(fst_input, transition.id());
     witness_bundle.bundle.input_map = NonEmptyOrdMap::from_checked(input_map);
     consignment.bundles = LargeVec::from_checked(bundles);
+    let consignment_resolver = OfflineResolver {
+        consignment: &consignment,
+    };
     let res = consignment
+        .clone()
         .validate(
-            &resolver,
+            &consignment_resolver,
             ChainNet::BitcoinRegtest,
             None,
             trusted_typesystem.clone(),
@@ -1191,10 +1227,10 @@ fn validate_consignment_commitments_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::NoPrevOut(opid, fst_input))
+        ValidationError::InvalidConsignment(Failure::NoPrevState(opid, fst_input))
     );
 
-    // ConfidentialSeal: one of the transitions includes blinded assignments
+    // NoPrevState: one of the transitions includes blinded assignments
     let mut consignment = base_consignment.clone();
     let spent_transitions = consignment
         .bundles
@@ -1246,6 +1282,12 @@ fn validate_consignment_commitments_fail() {
         .insert(AssignmentType::ASSET, assignments)
         .unwrap();
     new_bundle.bundle.known_transitions = transitions;
+    let child_opid = *bundles
+        .iter()
+        .flat_map(|wb| wb.bundle.input_map.iter())
+        .find(|(inp, _)| opout == **inp)
+        .map(|(_, opid)| opid)
+        .unwrap();
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
         .validate(
@@ -1258,10 +1300,10 @@ fn validate_consignment_commitments_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::ConfidentialSeal(opout))
+        ValidationError::InvalidConsignment(Failure::NoPrevState(child_opid, opout))
     );
 
-    // ExtraKnownTransition: replace known_transition referenced in input map
+    // InputMapTransitionMismatch: replace known_transition referenced in input map
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let new_bundle = bundles.last_mut().unwrap();
@@ -1273,6 +1315,8 @@ fn validate_consignment_commitments_fail() {
         .transition
         .clone();
     transition.nonce -= 1;
+    let opid = transition.id();
+    let fst_input = *transition.inputs.first().unwrap();
     new_bundle.bundle.known_transitions =
         NonEmptyVec::from_checked(vec![KnownTransition::new(transition.id(), transition)]);
     let bundle_id = new_bundle.bundle().bundle_id();
@@ -1288,10 +1332,12 @@ fn validate_consignment_commitments_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::ExtraKnownTransition(bundle_id))
+        ValidationError::InvalidConsignment(Failure::InputMapTransitionMismatch(
+            bundle_id, opid, fst_input
+        ))
     );
 
-    // MissingInputMapTransition
+    // InputMapTransitionMismatch
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let witness_bundle = bundles.last_mut().unwrap();
@@ -1303,17 +1349,22 @@ fn validate_consignment_commitments_fail() {
         .transition
         .clone();
     let old_opid = transition.id();
-    let fst_input = *transition.inputs.as_unconfined().first().unwrap();
-    transition
-        .inputs
-        .push(Opout { no: 9, ..fst_input })
-        .unwrap();
+    let new_input = Opout {
+        no: 9,
+        ..*transition.inputs.as_unconfined().first().unwrap()
+    };
+    transition.inputs.push(new_input).unwrap();
     replace_transition_in_bundle(witness_bundle, old_opid, transition.clone());
+    update_anchor(witness_bundle, None);
     let bundle_id = witness_bundle.bundle.bundle_id();
     consignment.bundles = LargeVec::from_checked(bundles);
+    let consignment_resolver = OfflineResolver {
+        consignment: &consignment,
+    };
     let res = consignment
+        .clone()
         .validate(
-            &resolver,
+            &consignment_resolver,
             ChainNet::BitcoinRegtest,
             None,
             trusted_typesystem.clone(),
@@ -1322,9 +1373,10 @@ fn validate_consignment_commitments_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::MissingInputMapTransition(
+        ValidationError::InvalidConsignment(Failure::InputMapTransitionMismatch(
             bundle_id,
-            fst_input.op
+            transition.id(),
+            new_input
         ))
     );
 
@@ -1374,7 +1426,7 @@ fn validate_consignment_commitments_fail() {
     //update_witness_and_anchor(witness_bundle, contract_id);
     consignment.bundles = LargeVec::from_checked(bundles);
     let consignment_resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -1415,20 +1467,20 @@ fn validate_consignment_commitments_fail() {
         ))
     );
 
-    // SealsInvalid
+    // WitnessMissingInput: remove input from witness transaction
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let new_bundle = bundles.last_mut().unwrap();
     let bundle_id = new_bundle.bundle.bundle_id();
     let mut witness_tx = new_bundle.pub_witness.tx().unwrap().clone();
     let mut inputs = witness_tx.inputs.release().clone();
-    inputs.pop();
+    let missing_outpoint = inputs.pop().unwrap().prev_output;
     witness_tx.inputs = LargeVec::from_checked(inputs);
     let witness_id = witness_tx.txid();
     new_bundle.pub_witness = PubWitness::Tx(witness_tx);
     consignment.bundles = LargeVec::from_checked(bundles);
     let consignment_resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -1440,16 +1492,22 @@ fn validate_consignment_commitments_fail() {
         )
         .unwrap_err();
     dbg!(&res);
-    assert!(matches!(
+    let msg = format!(
+        "the provided witness transaction does not closes seal {}.",
+        missing_outpoint
+    );
+    assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::SealsInvalid(bid, wid, _)) if bid == bundle_id && wid == witness_id
-    ));
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(bundle_id, witness_id, msg))
+    );
 
-    // UnorderedTransition: put last bundle as first
+    // NoPrevState: invert first two bundles
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
-    let opid = bundles[0].bundle.known_transitions[0].opid;
     bundles.swap(0, 1);
+    let known_transition = bundles[0].bundle.known_transitions[0].clone();
+    let opid = known_transition.opid;
+    let opout = *known_transition.transition.inputs.first().unwrap();
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
         .validate(
@@ -1462,7 +1520,7 @@ fn validate_consignment_commitments_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::UnorderedTransition(opid))
+        ValidationError::InvalidConsignment(Failure::NoPrevState(opid, opout))
     );
 
     // DBC-related error cases
@@ -1486,7 +1544,7 @@ fn validate_consignment_commitments_fail() {
 
     consignment.bundles = LargeVec::from_checked(bundles);
     let consignment_resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -1526,7 +1584,7 @@ fn validate_consignment_commitments_fail() {
 
     consignment.bundles = LargeVec::from_checked(bundles);
     let consignment_resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -1567,7 +1625,7 @@ fn validate_consignment_commitments_fail() {
 
     consignment.bundles = LargeVec::from_checked(bundles);
     let consignment_resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2076,7 +2134,7 @@ fn validate_consignment_logic_fail() {
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2115,7 +2173,7 @@ fn validate_consignment_logic_fail() {
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2154,7 +2212,7 @@ fn validate_consignment_logic_fail() {
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2203,7 +2261,7 @@ fn validate_consignment_logic_fail() {
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2261,7 +2319,7 @@ fn validate_consignment_logic_fail() {
     remove_transition_children(&mut bundles, bset![old_opid], None);
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2479,7 +2537,7 @@ fn validate_consignment_ifa() {
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -2549,7 +2607,7 @@ fn validate_consignment_ifa() {
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2604,7 +2662,7 @@ fn validate_consignment_ifa() {
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2647,7 +2705,7 @@ fn validate_consignment_ifa() {
     remove_transition_children(&mut bundles, bset![opid], Some(OS_REPLACE));
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2700,7 +2758,7 @@ fn validate_consignment_ifa() {
         );
         consignment.bundles = LargeVec::from_checked(bundles);
         let resolver = OfflineResolver {
-            consignment: &IndexedConsignment::new(&consignment),
+            consignment: &consignment,
         };
         let res = consignment
             .clone()
@@ -2744,7 +2802,7 @@ fn validate_consignment_ifa() {
         remove_transition_children(&mut bundles, bset![old_opid], None);
         consignment.bundles = LargeVec::from_checked(bundles);
         let resolver = OfflineResolver {
-            consignment: &IndexedConsignment::new(&consignment),
+            consignment: &consignment,
         };
         let res = consignment
             .clone()
@@ -2801,7 +2859,7 @@ fn validate_consignment_ifa() {
         remove_transition_children(&mut bundles, bset![old_opid], None);
         consignment.bundles = LargeVec::from_checked(bundles);
         let resolver = OfflineResolver {
-            consignment: &IndexedConsignment::new(&consignment),
+            consignment: &consignment,
         };
         let res = consignment
             .clone()
@@ -2845,7 +2903,7 @@ fn validate_consignment_ifa() {
     remove_transition_children(&mut bundles, bset![old_opid], None);
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment
         .clone()
@@ -2882,7 +2940,7 @@ fn validate_consignment_ifa() {
         remove_transition_children(&mut bundles, bset![old_opid], None);
         consignment.bundles = LargeVec::from_checked(bundles);
         let resolver = OfflineResolver {
-            consignment: &IndexedConsignment::new(&consignment),
+            consignment: &consignment,
         };
         let res = consignment
             .clone()
@@ -2947,7 +3005,7 @@ fn validate_consignment_ifa() {
         remove_transition_children(&mut bundles, bset![old_opid], None);
         consignment.bundles = LargeVec::from_checked(bundles);
         let resolver = OfflineResolver {
-            consignment: &IndexedConsignment::new(&consignment),
+            consignment: &consignment,
         };
         let res = consignment
             .clone()
@@ -3014,7 +3072,7 @@ fn validate_consignment_ifa() {
         remove_transition_children(&mut bundles, bset![old_opid], None);
         consignment.bundles = LargeVec::from_checked(bundles);
         let resolver = OfflineResolver {
-            consignment: &IndexedConsignment::new(&consignment),
+            consignment: &consignment,
         };
         let res = consignment
             .clone()
@@ -3098,8 +3156,10 @@ fn validate_consignment_typesystem_fail() {
             trusted_typesystem,
         )
         .unwrap_err();
-    dbg!(&res);
-    assert!(matches!(res, ValidationError::InvalidConsignment(_)));
+    assert!(matches!(
+        res,
+        ValidationError::InvalidConsignment(Failure::TypeSystemMismatch(_, _, _))
+    ));
 }
 
 #[cfg(not(feature = "altered"))]
@@ -3142,7 +3202,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -3178,7 +3238,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -3211,7 +3271,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -3241,7 +3301,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -3274,7 +3334,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -3316,7 +3376,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -3357,7 +3417,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -3398,7 +3458,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -3436,7 +3496,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,
@@ -3471,7 +3531,7 @@ fn validate_consignment_tapret_partner() {
 
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
     };
     let res = consignment.clone().validate(
         &resolver,

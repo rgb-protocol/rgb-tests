@@ -1156,7 +1156,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
 
     struct OffchainResolver<'a, 'cons, const TRANSFER: bool> {
         witness_id: Txid,
-        consignment: &'cons IndexedConsignment<'cons, TRANSFER>,
+        consignment: &'cons Consignment<TRANSFER>,
         fallback: &'a AnyResolver,
     }
     impl<const TRANSFER: bool> ResolveWitness for OffchainResolver<'_, '_, TRANSFER> {
@@ -1165,8 +1165,9 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
                 return self.fallback.resolve_witness(witness_id);
             }
             self.consignment
-                .pub_witness(witness_id)
-                .and_then(|p| p.tx().cloned())
+                .bundled_witnesses()
+                .find(|bw| bw.witness_id() == witness_id)
+                .and_then(|p| p.pub_witness.tx().cloned())
                 .map_or_else(
                     || self.fallback.resolve_witness(witness_id),
                     |tx| Ok(WitnessStatus::Resolved(tx, WitnessOrd::Tentative)),
@@ -1179,7 +1180,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
 
     let resolver = OffchainResolver {
         witness_id,
-        consignment: &IndexedConsignment::new(&consignment),
+        consignment: &consignment,
         fallback: &wlt_2.get_resolver(),
     };
 
@@ -1932,7 +1933,7 @@ fn ifa_replace() {
 }
 
 #[cfg(not(feature = "altered"))]
-#[should_panic(expected = "ExtraKnownTransition")]
+#[should_panic(expected = "InputMapTransitionMismatch")]
 #[test]
 fn extra_known_transition() {
     initialize();
@@ -2036,7 +2037,7 @@ fn extra_known_transition() {
 }
 
 #[cfg(not(feature = "altered"))]
-#[should_panic(expected = "MissingInputMapTransition")]
+#[should_panic(expected = "InputMapTransitionMismatch")]
 #[test]
 fn uncommitted_input_opout() {
     initialize();
@@ -2635,7 +2636,7 @@ fn unordered_transitions_within_bundle() {
 }
 
 #[cfg(not(feature = "altered"))]
-#[should_panic(expected = "MissingInputMapTransition")]
+#[should_panic(expected = "InputMapTransitionMismatch")]
 #[test]
 fn transition_spending_uncommitted_opout() {
     initialize();

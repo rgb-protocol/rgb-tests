@@ -135,8 +135,7 @@ pub use rgb_altered::{
 };
 pub use rgbstd::{
     containers::{
-        BuilderSeal, ConsignmentExt, Fascia, FileContent, IndexedConsignment, Kit, Transfer,
-        ValidKit,
+        BuilderSeal, Consignment, ConsignmentExt, Fascia, FileContent, Kit, Transfer, ValidKit,
     },
     contract::{
         ContractBuilder, ContractData, DataAllocation, FilterExclude, FungibleAllocation,
