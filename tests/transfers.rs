@@ -1674,6 +1674,45 @@ fn ifa_inflation() {
 
 #[cfg(not(feature = "altered"))]
 #[test]
+fn ifa_zero_issuance_with_inflation() {
+    initialize();
+
+    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+
+    // issue zero assets
+    let issued_supply = 0;
+    let inflation_supply = 1000;
+    let inflation_outpoint = wlt_1.get_utxo(None);
+    let contract_id = wlt_1.issue_ifa(
+        issued_supply,
+        None,
+        vec![],
+        vec![(inflation_outpoint, inflation_supply)],
+    );
+    wlt_1.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
+
+    // inflate the asset
+    wlt_1.inflate_ifa(
+        contract_id,
+        vec![inflation_outpoint],
+        vec![inflation_supply],
+    );
+    wlt_1.check_allocations(contract_id, AssetSchema::Ifa, vec![inflation_supply], false);
+
+    // send inflated asset
+    wlt_1.send_ifa(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        inflation_supply,
+    );
+    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![inflation_supply], false);
+    wlt_1.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
 fn ifa_move_inflation_right() {
     initialize();
 

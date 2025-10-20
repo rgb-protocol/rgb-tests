@@ -375,6 +375,16 @@ impl AssetInfo {
         self.asset_schema().types()
     }
 
+    pub fn issued_amt(&self) -> u64 {
+        match self {
+            Self::Nia { issue_amounts, .. }
+            | Self::Cfa { issue_amounts, .. }
+            | Self::Pfa { issue_amounts, .. }
+            | Self::Ifa { issue_amounts, .. } => issue_amounts.iter().sum(),
+            Self::Uda { .. } => 1,
+        }
+    }
+
     pub fn default_cfa(issue_amounts: Vec<u64>) -> Self {
         AssetInfo::cfa("CFA asset name", 0, None, "CFA terms", None, issue_amounts)
     }
@@ -1166,7 +1176,9 @@ impl TestWallet {
         created_at: Option<i64>,
         blinding: Option<u64>,
     ) -> ContractId {
-        let outpoints = if outpoints.is_empty() {
+        let outpoints = if asset_info.issued_amt() == 0 {
+            vec![]
+        } else if outpoints.is_empty() {
             vec![self.get_utxo(None)]
         } else {
             outpoints
