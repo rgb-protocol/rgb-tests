@@ -11,6 +11,7 @@ enum MockResolvePubWitness {
 #[derive(Clone)]
 struct MockResolver {
     pub_witnesses: HashMap<Txid, MockResolvePubWitness>,
+    check_chain_net_err: Option<WitnessResolverError>,
 }
 
 impl ResolveWitness for MockResolver {
@@ -26,7 +27,7 @@ impl ResolveWitness for MockResolver {
     }
 
     fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
-        Ok(())
+        self.check_chain_net_err.clone().map_or(Ok(()), Err)
     }
 }
 impl MockResolver {
@@ -84,6 +85,7 @@ impl Scenario {
                     )
                 })
                 .collect(),
+            check_chain_net_err: None,
         }
     }
 }
@@ -602,7 +604,7 @@ fn validate_consignment_bundles_fail() {
 
 #[cfg(not(feature = "altered"))]
 #[test]
-fn validate_consignment_resolver_error() {
+fn validate_resolver_errors() {
     let scenario = Scenario::A;
     let base_resolver = scenario.resolver();
     let consignment = get_consignment_from_json("attack_resolver_error");
@@ -610,38 +612,15 @@ fn validate_consignment_resolver_error() {
     let txid =
         Txid::from_str("b411d8dd37353d243a527739fdc39cca22dbfe4fe92517ce16a33563803c5ad2").unwrap();
 
-    struct ConsignmentResolver<'a, 'cons, const TRANSFER: bool> {
-        consignment: &'cons IndexedConsignment<'cons, TRANSFER>,
-        fallback: &'a MockResolver,
-    }
-    impl<const TRANSFER: bool> ResolveWitness for ConsignmentResolver<'_, '_, TRANSFER> {
-        fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
-            self.consignment
-                .pub_witness(witness_id)
-                .and_then(|p| p.tx().cloned())
-                .map_or_else(
-                    || self.fallback.resolve_witness(witness_id),
-                    |tx| Ok(WitnessStatus::Resolved(tx, WitnessOrd::Tentative)),
-                )
-        }
-        fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
-            Ok(())
-        }
-    }
-
     // resolve_pub_witness: ResolverIssue
     let mut resolver = base_resolver.clone();
     let resolver_error = WitnessResolverError::ResolverIssue(Some(txid), s!("connection error"));
     *resolver.pub_witnesses.get_mut(&txid).unwrap() =
         MockResolvePubWitness::Error(resolver_error.clone());
-    let consignment_resolver = ConsignmentResolver {
-        consignment: &IndexedConsignment::new(&consignment),
-        fallback: &resolver,
-    };
     let res = consignment
         .clone()
         .validate(
-            &consignment_resolver,
+            &resolver,
             ChainNet::BitcoinRegtest,
             None,
             trusted_typesystem.clone(),
@@ -658,14 +637,10 @@ fn validate_consignment_resolver_error() {
     };
     *resolver.pub_witnesses.get_mut(&txid).unwrap() =
         MockResolvePubWitness::Error(resolver_error.clone());
-    let consignment_resolver = ConsignmentResolver {
-        consignment: &IndexedConsignment::new(&consignment),
-        fallback: &resolver,
-    };
     let res = consignment
         .clone()
         .validate(
-            &consignment_resolver,
+            &resolver,
             ChainNet::BitcoinRegtest,
             None,
             trusted_typesystem.clone(),
@@ -679,14 +654,10 @@ fn validate_consignment_resolver_error() {
     let resolver_error = WitnessResolverError::InvalidResolverData;
     *resolver.pub_witnesses.get_mut(&txid).unwrap() =
         MockResolvePubWitness::Error(resolver_error.clone());
-    let consignment_resolver = ConsignmentResolver {
-        consignment: &IndexedConsignment::new(&consignment),
-        fallback: &resolver,
-    };
     let res = consignment
         .clone()
         .validate(
-            &consignment_resolver,
+            &resolver,
             ChainNet::BitcoinRegtest,
             None,
             trusted_typesystem.clone(),
@@ -700,14 +671,77 @@ fn validate_consignment_resolver_error() {
     let resolver_error = WitnessResolverError::WrongChainNet;
     *resolver.pub_witnesses.get_mut(&txid).unwrap() =
         MockResolvePubWitness::Error(resolver_error.clone());
-    let consignment_resolver = ConsignmentResolver {
-        consignment: &IndexedConsignment::new(&consignment),
-        fallback: &resolver,
-    };
     let res = consignment
         .clone()
         .validate(
-            &consignment_resolver,
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(res, ValidationError::ResolverError(resolver_error));
+
+    // check_chain_net: ResolverIssue
+    let mut resolver = base_resolver.clone();
+    let resolver_error = WitnessResolverError::ResolverIssue(Some(txid), s!("connection error"));
+    resolver.check_chain_net_err = Some(resolver_error.clone());
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(res, ValidationError::ResolverError(resolver_error));
+
+    // check_chain_net: IdMismatch
+    let mut resolver = base_resolver.clone();
+    let resolver_error = WitnessResolverError::IdMismatch {
+        actual: Txid::strict_dumb(),
+        expected: txid,
+    };
+    resolver.check_chain_net_err = Some(resolver_error.clone());
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(res, ValidationError::ResolverError(resolver_error));
+
+    // check_chain_net: InvalidResolverData
+    let mut resolver = base_resolver.clone();
+    let resolver_error = WitnessResolverError::InvalidResolverData;
+    resolver.check_chain_net_err = Some(resolver_error.clone());
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
+            ChainNet::BitcoinRegtest,
+            None,
+            trusted_typesystem.clone(),
+        )
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(res, ValidationError::ResolverError(resolver_error));
+
+    // check_chain_net: WrongChainNet
+    let mut resolver = base_resolver.clone();
+    let resolver_error = WitnessResolverError::WrongChainNet;
+    resolver.check_chain_net_err = Some(resolver_error.clone());
+    let res = consignment
+        .clone()
+        .validate(
+            &resolver,
             ChainNet::BitcoinRegtest,
             None,
             trusted_typesystem,
