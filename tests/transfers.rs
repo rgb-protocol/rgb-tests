@@ -1035,6 +1035,7 @@ fn collaborative_transfer() {
 
     let utxo_0 = wlt_1.get_utxo(Some(sats));
     let contract_id = wlt_1.issue_nia(600, Some(&utxo_0));
+    let schema_id = wlt_1.schema_id(contract_id);
     let (_, tx) = wlt_1.send(
         &mut wlt_2,
         TransferType::Witness,
@@ -1091,12 +1092,9 @@ fn collaborative_transfer() {
         change_vout: None,
         change_terminal: None,
     };
-    let (beneficiaries_1, _, _) =
-        wlt_1.color_psbt_init(&mut psbt, &mut meta, coloring_info_1, None);
-
-    let (fascia, beneficiaries_2, _, _) =
+    wlt_1.color_psbt_init(&mut psbt, &mut meta, coloring_info_1, None);
+    let (fascia, beneficiaries, _, _) =
         wlt_2.color_psbt(&mut psbt, &mut meta, coloring_info_2, None);
-
     wlt_1.sign_finalize(&mut psbt);
     let tx = wlt_2.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&tx);
@@ -1104,15 +1102,16 @@ fn collaborative_transfer() {
     wlt_1.consume_fascia(fascia.clone(), tx.txid());
     wlt_2.consume_fascia(fascia, tx.txid());
 
-    let consignments_1 = wlt_1.create_consignments(beneficiaries_1, tx.txid());
-    let consignments_2 = wlt_2.create_consignments(beneficiaries_2, tx.txid());
+    let consignments = wlt_1.create_consignments(beneficiaries.clone(), tx.txid());
+    assert_eq!(
+        consignments,
+        wlt_2.create_consignments(beneficiaries, tx.txid())
+    );
 
-    println!("Send the whole asset amount back to wlt_1 to check new allocations are spendable");
-    for consignments in [consignments_1, consignments_2] {
-        for consignment in consignments.into_values() {
-            wlt_3.accept_transfer(consignment, None);
-        }
+    for consignment in consignments.into_values() {
+        wlt_3.accept_transfer(consignment, None);
     }
+    wlt_3.check_allocations(contract_id, schema_id, vec![200, 400], true);
     wlt_3.send(
         &mut wlt_1,
         TransferType::Witness,
