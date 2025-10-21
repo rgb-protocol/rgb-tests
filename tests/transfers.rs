@@ -2411,14 +2411,6 @@ fn accept_bundle_missing_transitions() {
     wlt_1.mine_tx(&tx.txid(), false);
     wlt_1.accept_transfer(consignment.clone(), None);
     wlt_1.sync();
-    let omit_wid = tx.txid();
-    let omit_bid = consignment
-        .bundles
-        .iter()
-        .find(|wb| wb.witness_id() == omit_wid)
-        .unwrap()
-        .bundle
-        .bundle_id();
 
     // retrieve the two opouts on utxo
     let allocations = wlt_1
@@ -2500,93 +2492,34 @@ fn accept_bundle_missing_transitions() {
     wlt_2.sync();
 
     let mut beneficiaries = AssetBeneficiariesMap::new();
-    beneficiaries.insert(contract_id, vec![seal_1, seal_2]);
-    let consignment = wlt_1
+    beneficiaries.insert(contract_id, vec![seal_1]);
+    let consignment_1 = wlt_1
         .create_consignments(beneficiaries, witness_id)
         .into_values()
         .next()
         .unwrap();
-
-    // wlt_2 accepts consignment with transition to wlt_3 concealed
-    let mut consignment_1 = consignment.clone();
-    let mut new_bundle = consignment_1
+    assert!(consignment_1
         .bundles
         .iter()
-        .find(|b| b.bundle.known_transitions.len() == 2)
-        .unwrap()
-        .clone();
-    let bundle_id = new_bundle.bundle.bundle_id();
-    new_bundle.bundle.known_transitions = Confined::from_checked(
-        new_bundle
-            .bundle
-            .known_transitions
-            .to_unconfined()
-            .into_iter()
-            .filter(|kt| kt.opid != opid_2)
-            .collect(),
-    );
-    consignment_1.bundles = LargeVec::from_iter_checked(
-        consignment
-            .bundled_witnesses()
-            .filter(|wb| wb.witness_id() != omit_wid)
-            .cloned()
-            .map(|wb| {
-                if wb.witness_id() == witness_id {
-                    new_bundle.clone()
-                } else {
-                    wb
-                }
-            }),
-    );
-    consignment_1.terminals.remove(&bundle_id).unwrap();
-    consignment_1.terminals.remove(&omit_bid).unwrap();
-    consignment_1
-        .terminals
-        .insert(bundle_id, NonEmptyOrdSet::with(secret_seal_1).into())
-        .unwrap();
-    // wlt_2 accepts bundle with opid_1 revealed and opid_2 concealed
+        .all(|wb| !wb.bundle.known_transitions_opids().contains(&opid_2)));
+    //wlt_2 accepts bundle with opid_1 revealed and opid_2 concealed
     wlt_2.accept_transfer(consignment_1, None);
 
-    let mut consignment_2 = consignment.clone();
-    let mut new_bundle = consignment_2
+    let mut beneficiaries = AssetBeneficiariesMap::new();
+    beneficiaries.insert(contract_id, vec![seal_2]);
+    let consignment_2 = wlt_1
+        .create_consignments(beneficiaries, witness_id)
+        .into_values()
+        .next()
+        .unwrap();
+    assert!(consignment_2
         .bundles
         .iter()
-        .find(|b| b.bundle.known_transitions.len() == 2)
-        .unwrap()
-        .clone();
-    let bundle_id = new_bundle.bundle.bundle_id();
-    new_bundle.bundle.known_transitions = Confined::from_checked(
-        new_bundle
-            .bundle
-            .known_transitions
-            .to_unconfined()
-            .into_iter()
-            .filter(|kt| kt.opid != opid_1)
-            .collect(),
-    );
-    consignment_2.bundles = LargeVec::from_iter_checked(
-        consignment
-            .bundled_witnesses()
-            .filter(|wb| wb.witness_id() != omit_wid)
-            .cloned()
-            .map(|wb| {
-                if wb.witness_id() == witness_id {
-                    new_bundle.clone()
-                } else {
-                    wb
-                }
-            }),
-    );
-    consignment_2.terminals.remove(&bundle_id).unwrap();
-    consignment_2.terminals.remove(&omit_bid).unwrap();
-    consignment_2
-        .terminals
-        .insert(bundle_id, NonEmptyOrdSet::with(secret_seal_2).into())
-        .unwrap();
-    wlt_3.accept_transfer(consignment, None);
+        .all(|wb| !wb.bundle.known_transitions_opids().contains(&opid_1)));
+    // wlt_3 accepts the same bundle with opid_1 concealed and opid_2 revealed
+    wlt_3.accept_transfer(consignment_2, None);
 
-    // wlt_2 accepts the same bundle with opid_1 concealed and opid_2 revealed
-    let (consignment, _) = wlt_3.send(
+    let _ = wlt_3.send(
         &mut wlt_2,
         InvoiceType::Blinded(None),
         contract_id,
@@ -2594,7 +2527,6 @@ fn accept_bundle_missing_transitions() {
         0,
         None,
     );
-    println!("{consignment:?}");
 
     // wlt_2 can spend allocation from both opid_1 and opid_2
     wlt_2.check_allocations(contract_id, asset_schema, vec![amt_1, amt_2], false);
