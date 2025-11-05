@@ -1,18 +1,18 @@
 services:
   bitcoind_1:
-    image: registry.gitlab.com/hashbeam/docker/bitcoind:28.1
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:30.0
     profiles: [electrum]
     command: "-fallbackfee=0.0002"
   bitcoind_2:
-    image: registry.gitlab.com/hashbeam/docker/bitcoind:28.1
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:30.0
     profiles: [electrum]
     command: "-fallbackfee=0.0002"
   bitcoind_3:
-    image: registry.gitlab.com/hashbeam/docker/bitcoind:28.1
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:30.0
     profiles: [electrum]
     command: "-fallbackfee=0.0002"
   electrs_1:
-    image: registry.gitlab.com/hashbeam/docker/electrs:0.10.9
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.10.10
     profiles: [electrum]
     environment:
       BTCHOST: bitcoind_1
@@ -21,7 +21,7 @@ services:
     depends_on:
       - bitcoind_1
   electrs_2:
-    image: registry.gitlab.com/hashbeam/docker/electrs:0.10.9
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.10.10
     profiles: [electrum]
     environment:
       BTCHOST: bitcoind_2
@@ -30,7 +30,7 @@ services:
     depends_on:
       - bitcoind_2
   electrs_3:
-    image: registry.gitlab.com/hashbeam/docker/electrs:0.10.9
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.10.10
     profiles: [electrum]
     environment:
       BTCHOST: bitcoind_3
