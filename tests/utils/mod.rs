@@ -57,12 +57,13 @@ pub use amplify::{
 };
 use bitcoin_hashes::{sha256, Hash};
 pub use bp::{
-    dbc::tapret::{TapretCommitment, TapretProof},
+    dbc::tapret::{TapretCommitment, TapretNodePartner, TapretProof, TapretRightBranch},
     seals::txout::TxPtr,
     seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
     secp256k1::{Message, Secp256k1, SecretKey},
-    CompressedPk, ConsensusDecode, InternalPk, LockTime, Outpoint, Sats, ScriptPubkey, SeqNo, Tx,
-    TxVer, Txid, Vout,
+    CompressedPk, ConsensusDecode, InternalPk, IntoTapHash, LeafScript, LeafVer, LockTime,
+    Outpoint, Sats, ScriptPubkey, SeqNo, TapBranchHash, TapNodeHash, TapScript, Tx, TxVer, Txid,
+    Vout,
 };
 pub use bpstd::{
     h, signers::TestnetSigner, Address, DerivationPath, DerivationSeg, Derive, DerivedAddr,
@@ -74,7 +75,7 @@ pub use bpwallet::{
     Wallet, WalletUtxo,
 };
 pub use chrono::Utc;
-pub use commit_verify::mpc;
+pub use commit_verify::{mpc, CommitVerify};
 pub use descriptors::Wpkh;
 pub use electrum::{Client as ElectrumClient, ElectrumApi, Param};
 pub use file_format::FileFormat;

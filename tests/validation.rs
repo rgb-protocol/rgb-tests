@@ -3503,11 +3503,6 @@ enum Case {
 }
 
 fn gen_tapret_values(case: Case) -> (Value, Value) {
-    use bp::{
-        dbc::tapret::{TapretNodePartner, TapretRightBranch},
-        IntoTapHash, LeafScript, LeafVer, TapBranchHash, TapNodeHash, TapScript,
-    };
-    use commit_verify::CommitVerify;
     let scenario = Scenario::D;
     let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let wbundle = consignment.bundles.last().unwrap().clone();
