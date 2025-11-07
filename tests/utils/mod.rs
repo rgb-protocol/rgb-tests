@@ -99,8 +99,9 @@ pub use rgb::{
     persistence::{MemContract, MemContractState, Stock},
     stl::{rgb_contract_stl, ContractTerms, RejectListUrl, StandardTypes},
     validation::{
-        DbcProof, Failure, ResolveWitness, Scripts, ValidationError, Validator, Validity, Warning,
-        WitnessOrdProvider, WitnessResolverError, WitnessStatus,
+        DbcProof, Failure, OpoutsDagData, ResolveWitness, Scripts, Status, ValidationConfig,
+        ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError,
+        WitnessStatus,
     },
     vm::{ContractStateAccess, GlobalsIter, WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
@@ -122,8 +123,9 @@ pub use rgb_altered::{
     persistence::{MemContract, MemContractState, Stock},
     stl::{rgb_contract_stl, ContractTerms, RejectListUrl, StandardTypes},
     validation::{
-        DbcProof, Failure, ResolveWitness, Scripts, Validator, Validity, Warning,
-        WitnessOrdProvider, WitnessResolverError, WitnessStatus,
+        DbcProof, Failure, OpoutsDagData, ResolveWitness, Scripts, Status, ValidationConfig,
+        ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError,
+        WitnessStatus,
     },
     vm::{ContractStateAccess, GlobalsIter, WitnessOrd, WitnessPos},
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,

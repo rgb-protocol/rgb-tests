@@ -496,14 +496,12 @@ fn validate_consignment_success() {
         let resolver = scenario.resolver();
         let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
         let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
-        let res = consignment
-            .validate(
-                &resolver,
-                ChainNet::BitcoinRegtest,
-                None,
-                trusted_typesystem,
-            )
-            .unwrap();
+        let validation_config = ValidationConfig {
+            chain_net: ChainNet::BitcoinRegtest,
+            trusted_typesystem,
+            ..Default::default()
+        };
+        let res = consignment.validate(&resolver, &validation_config).unwrap();
         let validation_status = res.validation_status();
         dbg!(&validation_status);
         assert!(validation_status.warnings.is_empty());
@@ -521,13 +519,13 @@ fn validate_consignment_chain_fail() {
     // genesis chainNet: change from bitcoinRegtest to liquidTestnet
     let consignment = get_consignment_from_json("attack_chain");
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -549,13 +547,13 @@ fn validate_consignment_genesis_fail() {
     let expected = consignment.genesis.schema_id;
     let actual = consignment.schema_id();
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -565,14 +563,8 @@ fn validate_consignment_genesis_fail() {
 
     // genesis chainNet: change from bitcoinRegtest to bitcoinMainnet
     let consignment = get_consignment_from_json("attack_genesis_testnet");
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -606,13 +598,13 @@ fn validate_consignment_bundles_fail() {
     // bundles first in time pubWitness inputs[0] sequence: change from 0 to 1
     let consignment = get_consignment_from_json("attack_bundles_pubWitness_data_input_sequence");
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert!(matches!(
@@ -628,6 +620,11 @@ fn validate_resolver_errors() {
     let base_resolver = scenario.resolver();
     let consignment = get_consignment_from_json("attack_resolver_error");
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
     let txid =
         Txid::from_str("b411d8dd37353d243a527739fdc39cca22dbfe4fe92517ce16a33563803c5ad2").unwrap();
 
@@ -638,12 +635,7 @@ fn validate_resolver_errors() {
         MockResolvePubWitness::Error(resolver_error.clone());
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(res, ValidationError::ResolverError(resolver_error));
@@ -658,12 +650,7 @@ fn validate_resolver_errors() {
         MockResolvePubWitness::Error(resolver_error.clone());
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(res, ValidationError::ResolverError(resolver_error));
@@ -675,12 +662,7 @@ fn validate_resolver_errors() {
         MockResolvePubWitness::Error(resolver_error.clone());
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(res, ValidationError::ResolverError(resolver_error));
@@ -692,12 +674,7 @@ fn validate_resolver_errors() {
         MockResolvePubWitness::Error(resolver_error.clone());
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(res, ValidationError::ResolverError(resolver_error));
@@ -708,12 +685,7 @@ fn validate_resolver_errors() {
     resolver.check_chain_net_err = Some(resolver_error.clone());
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(res, ValidationError::ResolverError(resolver_error));
@@ -727,12 +699,7 @@ fn validate_resolver_errors() {
     resolver.check_chain_net_err = Some(resolver_error.clone());
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(res, ValidationError::ResolverError(resolver_error));
@@ -743,12 +710,7 @@ fn validate_resolver_errors() {
     resolver.check_chain_net_err = Some(resolver_error.clone());
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(res, ValidationError::ResolverError(resolver_error));
@@ -759,12 +721,7 @@ fn validate_resolver_errors() {
     resolver.check_chain_net_err = Some(resolver_error.clone());
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(res, ValidationError::ResolverError(resolver_error));
@@ -777,6 +734,11 @@ fn validate_consignment_unknown_tx() {
     let base_resolver = scenario.resolver();
     let consignment = get_consignment_from_json("attack_resolver_error");
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
     let txid =
         Txid::from_str("b411d8dd37353d243a527739fdc39cca22dbfe4fe92517ce16a33563803c5ad2").unwrap();
     let wbundle = consignment
@@ -791,12 +753,7 @@ fn validate_consignment_unknown_tx() {
         MockResolvePubWitness::Success(WitnessStatus::Unresolved);
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -813,6 +770,11 @@ fn validate_consignment_schema_fail() {
 
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
     let transition_type = base_consignment.schema.transitions.keys().last().unwrap();
 
     // SchemaOpMetaTypeUnknown: schema transition has unknown metatype
@@ -826,12 +788,7 @@ fn validate_consignment_schema_fail() {
         .transition_schema
         .metadata = TinyOrdSet::from_checked(bset![meta_type]);
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -852,12 +809,7 @@ fn validate_consignment_schema_fail() {
         .transition_schema
         .inputs = TinyOrdMap::new();
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -880,12 +832,7 @@ fn validate_consignment_schema_fail() {
         global_state_type => Occurrences::Once
     });
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -909,12 +856,7 @@ fn validate_consignment_schema_fail() {
         assignment_type => Occurrences::Once
     });
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -934,12 +876,7 @@ fn validate_consignment_schema_fail() {
         name: fname!("foo")
     }});
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -964,12 +901,7 @@ fn validate_consignment_schema_fail() {
     );
     consignment.schema.global_types = TinyOrdMap::from_checked(global_types);
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -995,12 +927,7 @@ fn validate_consignment_schema_fail() {
     );
     consignment.schema.owned_types = TinyOrdMap::from_checked(owned_types);
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1020,6 +947,11 @@ fn validate_consignment_commitments_fail() {
 
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
 
     // NoPrevState: duplicate transition within a bundle, it'll try to spend inputs twice
     let mut consignment = base_consignment.clone();
@@ -1040,12 +972,7 @@ fn validate_consignment_commitments_fail() {
         .unwrap();
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1076,12 +1003,7 @@ fn validate_consignment_commitments_fail() {
     let bundle_id = new_bundle.bundle().bundle_id();
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1132,12 +1054,7 @@ fn validate_consignment_commitments_fail() {
         .map(|(opout, opid)| (*opout, *opid))
         .unwrap();
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1175,12 +1092,7 @@ fn validate_consignment_commitments_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &consignment_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&consignment_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1217,12 +1129,7 @@ fn validate_consignment_commitments_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &consignment_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&consignment_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1290,12 +1197,7 @@ fn validate_consignment_commitments_fail() {
         .unwrap();
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1322,12 +1224,7 @@ fn validate_consignment_commitments_fail() {
     let bundle_id = new_bundle.bundle().bundle_id();
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1363,12 +1260,7 @@ fn validate_consignment_commitments_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &consignment_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&consignment_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1400,12 +1292,7 @@ fn validate_consignment_commitments_fail() {
     let consignment: Transfer =
         serde_json::from_str(&serde_json::to_string(&consignment).unwrap()).unwrap();
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert!(matches!(
@@ -1430,12 +1317,7 @@ fn validate_consignment_commitments_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &consignment_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&consignment_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1451,12 +1333,7 @@ fn validate_consignment_commitments_fail() {
     new_bundle.anchor.dbc_proof = DbcProof::Tapret(TapretProof::strict_dumb());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1484,12 +1361,7 @@ fn validate_consignment_commitments_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &consignment_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&consignment_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     let msg = format!(
@@ -1510,12 +1382,7 @@ fn validate_consignment_commitments_fail() {
     let opout = *known_transition.transition.inputs.first().unwrap();
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1548,12 +1415,7 @@ fn validate_consignment_commitments_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &consignment_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&consignment_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     let expected_msg = s!("commitment doesn't match the message.");
@@ -1588,12 +1450,7 @@ fn validate_consignment_commitments_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &consignment_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&consignment_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     let expected_msg =
@@ -1629,12 +1486,7 @@ fn validate_consignment_commitments_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &consignment_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&consignment_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     let expected_msg =
@@ -1657,6 +1509,11 @@ fn validate_consignment_logic_fail() {
 
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
 
     // SchemaMismatch: replace consignment.schema with a compatible schema with different id
     let mut consignment = base_consignment.clone();
@@ -1666,12 +1523,7 @@ fn validate_consignment_logic_fail() {
     let alt_schema_id = alt_schema.schema_id();
     consignment.schema = alt_schema;
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1701,12 +1553,7 @@ fn validate_consignment_logic_fail() {
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1739,12 +1586,7 @@ fn validate_consignment_logic_fail() {
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1777,12 +1619,7 @@ fn validate_consignment_logic_fail() {
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1815,12 +1652,7 @@ fn validate_consignment_logic_fail() {
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1850,12 +1682,7 @@ fn validate_consignment_logic_fail() {
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1903,12 +1730,7 @@ fn validate_consignment_logic_fail() {
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -1961,12 +1783,7 @@ fn validate_consignment_logic_fail() {
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2000,12 +1817,7 @@ fn validate_consignment_logic_fail() {
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2045,12 +1857,7 @@ fn validate_consignment_logic_fail() {
         resolver.with_new_transaction(witness_bundle.pub_witness.tx().unwrap().clone());
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2075,12 +1882,9 @@ fn validate_consignment_logic_fail() {
     let witness_id = witness_tx.txid();
     // transaction is added as tentative
     let alt_resolver = resolver.with_new_transaction(witness_tx);
-    let res = consignment.validate(
-        &alt_resolver,
-        ChainNet::BitcoinRegtest,
-        Some(NonZeroU32::new(1000).unwrap()),
-        trusted_typesystem.clone(),
-    );
+    let mut validation_config_mod = validation_config.clone();
+    validation_config_mod.safe_height = Some(NonZeroU32::new(1000).unwrap());
+    let res = consignment.validate(&alt_resolver, &validation_config_mod);
     let warnings = res.unwrap().validation_status().warnings.clone();
     assert_eq!(warnings.len(), 1);
     assert_eq!(
@@ -2092,6 +1896,11 @@ fn validate_consignment_logic_fail() {
     let scenario = Scenario::C;
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
 
     // find a "inflation" transition
     let mut old_txid = None;
@@ -2138,12 +1947,7 @@ fn validate_consignment_logic_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2177,12 +1981,7 @@ fn validate_consignment_logic_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     let sem_id = StandardTypes::with(rgb_contract_stl()).get("RGBContract.Amount");
@@ -2216,12 +2015,7 @@ fn validate_consignment_logic_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2265,12 +2059,7 @@ fn validate_consignment_logic_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     let sem_id = StandardTypes::with(rgb_contract_stl()).get("RGBContract.Amount");
@@ -2323,12 +2112,7 @@ fn validate_consignment_logic_fail() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2348,6 +2132,11 @@ fn validate_consignment_remove_scripts_code() {
 
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
 
     // ScriptFailure: e.g. one can't do simple inflation
     let mut consignment = base_consignment.clone();
@@ -2393,12 +2182,7 @@ fn validate_consignment_remove_scripts_code() {
     lib.code = none!();
     consignment.scripts = Confined::<BTreeSet<_>, 0, 1024>::from_checked(bset![lib]);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert!(matches!(
@@ -2415,6 +2199,11 @@ fn validate_consignment_unmatching_transition_id() {
 
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
 
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
@@ -2463,12 +2252,7 @@ fn validate_consignment_unmatching_transition_id() {
     bundles.push(other_wbundle);
     consignment.bundles = LargeVec::from_checked(bundles);
     let res = consignment
-        .validate(
-            &alt_resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&alt_resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2483,6 +2267,11 @@ fn validate_consignment_ifa() {
     let scenario = Scenario::C;
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
 
     // find a "transfer" transition that moves a "replace right" allocation
     let spent_replace_opouts = base_consignment
@@ -2539,12 +2328,7 @@ fn validate_consignment_ifa() {
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     assert!(res.is_ok());
 
     // Error: replace rights cannot be burned via transfer operation (2 in, 1 out)
@@ -2611,12 +2395,7 @@ fn validate_consignment_ifa() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2666,12 +2445,7 @@ fn validate_consignment_ifa() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2709,12 +2483,7 @@ fn validate_consignment_ifa() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2762,12 +2531,7 @@ fn validate_consignment_ifa() {
         };
         let res = consignment
             .clone()
-            .validate(
-                &resolver,
-                ChainNet::BitcoinRegtest,
-                None,
-                trusted_typesystem.clone(),
-            )
+            .validate(&resolver, &validation_config)
             .unwrap_err();
         dbg!(&res);
         assert_eq!(
@@ -2806,12 +2570,7 @@ fn validate_consignment_ifa() {
         };
         let res = consignment
             .clone()
-            .validate(
-                &resolver,
-                ChainNet::BitcoinRegtest,
-                None,
-                trusted_typesystem.clone(),
-            )
+            .validate(&resolver, &validation_config)
             .unwrap_err();
         dbg!(&res);
         assert_eq!(
@@ -2863,12 +2622,7 @@ fn validate_consignment_ifa() {
         };
         let res = consignment
             .clone()
-            .validate(
-                &resolver,
-                ChainNet::BitcoinRegtest,
-                None,
-                trusted_typesystem.clone(),
-            )
+            .validate(&resolver, &validation_config)
             .unwrap_err();
         dbg!(&res);
         let mismatch = OccurrencesMismatch {
@@ -2907,12 +2661,7 @@ fn validate_consignment_ifa() {
     };
     let res = consignment
         .clone()
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem.clone(),
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2944,12 +2693,7 @@ fn validate_consignment_ifa() {
         };
         let res = consignment
             .clone()
-            .validate(
-                &resolver,
-                ChainNet::BitcoinRegtest,
-                None,
-                trusted_typesystem.clone(),
-            )
+            .validate(&resolver, &validation_config)
             .unwrap_err();
         dbg!(&res);
         let mismatch = OccurrencesMismatch {
@@ -3009,12 +2753,7 @@ fn validate_consignment_ifa() {
         };
         let res = consignment
             .clone()
-            .validate(
-                &resolver,
-                ChainNet::BitcoinRegtest,
-                None,
-                trusted_typesystem.clone(),
-            )
+            .validate(&resolver, &validation_config)
             .unwrap_err();
         dbg!(&res);
         let errno = match assignment_type {
@@ -3076,12 +2815,7 @@ fn validate_consignment_ifa() {
         };
         let res = consignment
             .clone()
-            .validate(
-                &resolver,
-                ChainNet::BitcoinRegtest,
-                None,
-                trusted_typesystem.clone(),
-            )
+            .validate(&resolver, &validation_config)
             .unwrap_err();
         dbg!(&res);
         assert_eq!(
@@ -3148,13 +2882,13 @@ fn validate_consignment_typesystem_fail() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
     let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
     let res = consignment
-        .validate(
-            &resolver,
-            ChainNet::BitcoinRegtest,
-            None,
-            trusted_typesystem,
-        )
+        .validate(&resolver, &validation_config)
         .unwrap_err();
     assert!(matches!(
         res,
@@ -3169,6 +2903,15 @@ fn validate_consignment_tapret_partner() {
     let cons_path = format!("tests/fixtures/consignment_{scenario}.json");
     let file = std::fs::File::open(cons_path).unwrap();
     let base_consignment: Value = serde_json::from_reader(file).unwrap();
+    let base_transfer =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&base_consignment).unwrap())
+            .unwrap();
+    let trusted_typesystem = AssetSchema::from(base_transfer.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
     let wbundle_idx = 1;
     let bundle_path = vec![Step::Key(s!("bundles")), Step::Idx(wbundle_idx)];
     let partner_node_path = vec![
@@ -3199,17 +2942,10 @@ fn validate_consignment_tapret_partner() {
     let consignment =
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
-
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     assert!(matches!(
         res.unwrap_err(),
         ValidationError::InvalidConsignment(Failure::SealsInvalid(_, _, _))
@@ -3236,16 +2972,10 @@ fn validate_consignment_tapret_partner() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
 
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     res.unwrap();
 
     // SUCCESS (PartnerNode::RightBranch)
@@ -3269,16 +2999,10 @@ fn validate_consignment_tapret_partner() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
 
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     res.unwrap();
 
     // SUCCESS (PartnerNode::LeftNode)
@@ -3299,16 +3023,10 @@ fn validate_consignment_tapret_partner() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
 
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     res.unwrap();
 
     // ERROR (PartnerNode::RightLeaf looks like a commitment)
@@ -3332,16 +3050,10 @@ fn validate_consignment_tapret_partner() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
 
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     let wbundle = consignment.bundles[wbundle_idx].clone();
     assert_eq!(
         res.unwrap_err(),
@@ -3374,16 +3086,10 @@ fn validate_consignment_tapret_partner() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
 
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     let wbundle = consignment.bundles[wbundle_idx].clone();
     assert_eq!(
         res.unwrap_err(),
@@ -3415,16 +3121,10 @@ fn validate_consignment_tapret_partner() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
 
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     let wbundle = consignment.bundles[wbundle_idx].clone();
     assert_eq!(
         res.unwrap_err(),
@@ -3456,16 +3156,10 @@ fn validate_consignment_tapret_partner() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
 
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     let wbundle = consignment.bundles[wbundle_idx].clone();
     assert_eq!(
         res.unwrap_err(),
@@ -3494,16 +3188,10 @@ fn validate_consignment_tapret_partner() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
 
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     let wbundle = consignment.bundles[wbundle_idx].clone();
     assert_eq!(
         res.unwrap_err(),
@@ -3529,16 +3217,10 @@ fn validate_consignment_tapret_partner() {
         serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
             .unwrap();
 
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
     let resolver = OfflineResolver {
         consignment: &consignment,
     };
-    let res = consignment.clone().validate(
-        &resolver,
-        ChainNet::BitcoinRegtest,
-        None,
-        trusted_typesystem.clone(),
-    );
+    let res = consignment.clone().validate(&resolver, &validation_config);
     let wbundle = consignment.bundles[wbundle_idx].clone();
     assert_eq!(
         res.unwrap_err(),

@@ -1193,9 +1193,14 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
     wlt_2.mine_tx(&tx.txid(), false);
 
     // consignment validation fails because it notices an unbroadcasted TX in the history
-    let type_system = AssetSchema::from(consignment.schema_id()).types();
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: wlt_3.chain_net(),
+        trusted_typesystem,
+        ..Default::default()
+    };
     let res = consignment
-        .validate(&wlt_3.get_resolver(), wlt_3.chain_net(), None, type_system)
+        .validate(&wlt_3.get_resolver(), &validation_config)
         .unwrap_err();
     assert!(matches!(
         res,
@@ -1880,9 +1885,9 @@ fn ifa_replace() {
 
     // history that will be excluded after replace
     let mut txs_before_replace = HashSet::<Txid>::new();
-    let (_, tx, _) = wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, amount);
+    let (_, tx) = wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, amount);
     txs_before_replace.insert(tx.txid());
-    let (_, tx, _) = wlt_2.send_ifa(&mut wlt_1, TransferType::Blinded, contract_id, amount);
+    let (_, tx) = wlt_2.send_ifa(&mut wlt_1, TransferType::Blinded, contract_id, amount);
     txs_before_replace.insert(tx.txid());
     wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
 
@@ -1898,8 +1903,7 @@ fn ifa_replace() {
     wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amount], false);
 
     // send assets and check that excluded history does not appear in the consignment
-    let (consignment, _, _) =
-        wlt_2.send_ifa(&mut wlt_3, TransferType::Blinded, contract_id, amount);
+    let (consignment, _) = wlt_2.send_ifa(&mut wlt_3, TransferType::Blinded, contract_id, amount);
     assert_eq!(consignment.bundles.len(), 4);
     let spent_witnesses = consignment
         .bundles
@@ -3430,15 +3434,16 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
             wlt_2.mine_tx(&tx_2.txid(), false);
             // receiver checks if it's safe to receive allocations
             let safe_height = height_pre_transfer; // min 1 confirmation
-            let type_system = AssetSchema::from(consignment.schema_id()).types();
+            let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+            let validation_config = ValidationConfig {
+                chain_net: wlt_1.chain_net(),
+                safe_height: Some(NonZeroU32::new(safe_height).unwrap()),
+                trusted_typesystem,
+                ..Default::default()
+            };
             let validated_consignment = consignment
                 .clone()
-                .validate(
-                    &wlt_1.get_resolver(),
-                    wlt_1.chain_net(),
-                    Some(NonZeroU32::new(safe_height).unwrap()),
-                    type_system,
-                )
+                .validate(&wlt_1.get_resolver(), &validation_config)
                 .unwrap();
             let validation_status = validated_consignment.clone().into_validation_status();
             assert_eq!(validation_status.warnings.len(), 1);

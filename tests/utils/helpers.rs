@@ -1458,11 +1458,7 @@ impl TestWallet {
         (consignment, tx, psbt, psbt_meta)
     }
 
-    pub fn accept_transfer(
-        &mut self,
-        consignment: Transfer,
-        report: Option<&Report>,
-    ) -> BTreeSet<Opout> {
+    pub fn accept_transfer(&mut self, consignment: Transfer, report: Option<&Report>) -> Status {
         let resolver = self.get_resolver();
         self.accept_transfer_custom(consignment, report, &resolver, bset![])
     }
@@ -1473,17 +1469,20 @@ impl TestWallet {
         report: Option<&Report>,
         resolver: &impl ResolveWitness,
         trusted_op_seals: BTreeSet<OpId>,
-    ) -> BTreeSet<Opout> {
+    ) -> Status {
         self.sync();
         let validate_start = Instant::now();
         let validated_consignment = consignment
             .clone()
-            .validate_with_opids(
+            .validate(
                 &resolver,
-                self.chain_net(),
-                None,
-                AssetSchema::from(consignment.schema_id()).types(),
-                trusted_op_seals,
+                &ValidationConfig {
+                    chain_net: self.chain_net(),
+                    trusted_typesystem: AssetSchema::from(consignment.schema_id()).types(),
+                    trusted_op_seals,
+                    build_opouts_dag: true,
+                    ..Default::default()
+                },
             )
             .unwrap();
         let validate_duration = validate_start.elapsed();
@@ -1503,7 +1502,7 @@ impl TestWallet {
         if let Some(report) = report {
             report.write_duration(accept_duration);
         }
-        validated_consignment.input_opouts().clone()
+        validation_status
     }
 
     pub fn add_tapret_tweak(&mut self, terminal: Terminal, tapret_commitment: TapretCommitment) {
@@ -1810,7 +1809,7 @@ impl TestWallet {
         invoice_type: impl Into<InvoiceType>,
         contract_id: ContractId,
         amount: u64,
-    ) -> (Transfer, Tx, BTreeSet<Opout>) {
+    ) -> (Transfer, Tx) {
         let schema_id = self.schema_id(contract_id);
         let invoice = recv_wlt.invoice(contract_id, schema_id, amount, invoice_type.into());
         self.send_ifa_to_invoice(recv_wlt, invoice)
@@ -1820,18 +1819,18 @@ impl TestWallet {
         &mut self,
         recv_wlt: &mut TestWallet,
         invoice: RgbInvoice,
-    ) -> (Transfer, Tx, BTreeSet<Opout>) {
+    ) -> (Transfer, Tx) {
         let (consignment, tx, _, _) = self.pay_full(invoice, None, None, true, None);
         self.mine_tx(&tx.txid(), false);
         let trusted_op_seals = consignment.replace_transitions_input_ops();
-        let input_opouts = recv_wlt.accept_transfer_custom(
+        recv_wlt.accept_transfer_custom(
             consignment.clone(),
             None,
             &recv_wlt.get_resolver(),
             trusted_op_seals,
         );
         self.sync();
-        (consignment, tx, input_opouts)
+        (consignment, tx)
     }
 
     pub fn inflate_ifa(
@@ -1923,12 +1922,13 @@ impl TestWallet {
         for consignment in consignment_map.values() {
             consignment
                 .clone()
-                .validate_with_opids(
+                .validate(
                     &self.get_resolver(),
-                    self.chain_net(),
-                    None,
-                    AssetSchema::from(consignment.schema_id()).types(),
-                    bset![],
+                    &ValidationConfig {
+                        chain_net: self.chain_net(),
+                        trusted_typesystem: AssetSchema::from(consignment.schema_id()).types(),
+                        ..Default::default()
+                    },
                 )
                 .unwrap();
         }
@@ -2012,12 +2012,14 @@ impl TestWallet {
             let trusted_op_seals = consignment.replace_transitions_input_ops();
             let validated_consignment = consignment
                 .clone()
-                .validate_with_opids(
+                .validate(
                     &self.get_resolver(),
-                    self.chain_net(),
-                    None,
-                    AssetSchema::from(consignment.schema_id()).types(),
-                    trusted_op_seals,
+                    &ValidationConfig {
+                        chain_net: self.chain_net(),
+                        trusted_typesystem: AssetSchema::from(consignment.schema_id()).types(),
+                        trusted_op_seals,
+                        ..Default::default()
+                    },
                 )
                 .unwrap();
             let resolver = right_owner.get_resolver();
