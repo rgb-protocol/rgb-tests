@@ -2978,6 +2978,53 @@ fn validate_consignment_tapret_partner() {
     let res = consignment.clone().validate(&resolver, &validation_config);
     res.unwrap();
 
+    // SUCCESS (PartnerNode::RightLeaf with future version)
+    let test_case = Case::RightLeafFutureVersion;
+    let partner_node = json!({
+        "rightLeaf":{
+            "version": {"future": 4},
+            "script":"6a20fdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd"
+        }
+    });
+    let spk = json!("512093555abb65cf37fded4403dfa3e2e6204ad0c5f60b6b20323367dee089576a45");
+    assert_eq!(
+        gen_tapret_values(test_case),
+        (partner_node.clone(), spk.clone())
+    );
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    *get_entry_at_path_mut(bundle_val, &spk_path) = spk;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+
+    let resolver = OfflineResolver {
+        consignment: &consignment,
+    };
+    let res = consignment.clone().validate(&resolver, &validation_config);
+    res.unwrap();
+
+    // ERROR deserialization (PartnerNode::RightLeaf with odd version)
+    let partner_node = json!({
+        "rightLeaf":{
+            "version": {"future": 5},
+            "script":"6a20fdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd"
+        }
+    });
+    let mut json_consignment = base_consignment.clone();
+    let bundle_val = get_entry_at_path_mut(&mut json_consignment, &bundle_path);
+    *get_entry_at_path_mut(bundle_val, &partner_node_path) = partner_node;
+    let consignment =
+        serde_json::from_str::<Transfer>(&serde_json::to_string(&json_consignment).unwrap())
+            .unwrap();
+    let res = Transfer::from_strict_serialized(
+        consignment
+            .to_strict_serialized::<{ usize::MAX }>()
+            .unwrap(),
+    );
+    res.unwrap_err();
+
     // SUCCESS (PartnerNode::RightBranch)
     let test_case = Case::SuccessRightBranch;
     let partner_node = json!({
@@ -3242,6 +3289,7 @@ enum Case {
     UnorderedRightLeaf,
     UnorderedRightBranch,
     UnorderedLeftNode,
+    RightLeafFutureVersion,
 }
 
 fn gen_tapret_values(case: Case) -> (Value, Value) {
@@ -3317,6 +3365,10 @@ fn gen_tapret_values(case: Case) -> (Value, Value) {
                 .tap_leaf_hash()
                 .into_tap_hash(),
             )),
+            Case::RightLeafFutureVersion => TapretNodePartner::RightLeaf(LeafScript::new(
+                LeafVer::from_consensus_u8(4).unwrap(),
+                ScriptPubkey::op_return(&[val; 32]).into(),
+            )),
         };
 
         if match case {
@@ -3324,7 +3376,8 @@ fn gen_tapret_values(case: Case) -> (Value, Value) {
             | Case::SuccessRightBranch
             | Case::ErrorRightLeaf
             | Case::ErrorRightBranch
-            | Case::UnorderedLeftNode => partner.tap_node_hash() > commitment_hash,
+            | Case::UnorderedLeftNode
+            | Case::RightLeafFutureVersion => partner.tap_node_hash() > commitment_hash,
             Case::SuccessLeftNode | Case::UnorderedRightLeaf | Case::UnorderedRightBranch => {
                 partner.tap_node_hash() < commitment_hash
             }

@@ -41,6 +41,7 @@ pub use std::{
     sync::Arc,
     sync::{Mutex, Once, OnceLock, RwLock},
     time::{Duration, Instant},
+    usize,
 };
 
 pub use amplify::{
