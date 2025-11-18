@@ -1768,4 +1768,5 @@ fn random_transfers() {
         println!("  - mem samples {}", fpath_mem.to_string_lossy());
         println!("\ndhat report:") // printed automatically when dropped
     }
+    println!("\nLOAD_ID: {test_params_str}");
 }

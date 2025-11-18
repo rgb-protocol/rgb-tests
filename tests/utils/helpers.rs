@@ -823,9 +823,7 @@ pub fn get_wallet_internal(
     std::fs::create_dir_all(&wallet_dir).unwrap();
     let name = "bp_wallet_name";
     let bp_dir = wallet_dir.join(name);
-    let bp_wallet_provider = FsTextStore::new(bp_dir).unwrap();
-    let stock_provider = FsBinStore::new(wallet_dir.clone()).unwrap();
-    let (bp_wallet, stock) = if let Some(dt) = descriptor_type {
+    let mut wallet = if let Some(dt) = descriptor_type {
         // new wallet
         let xpub_account = match wallet_account {
             WalletAccount::Private(ref xpriv_account) => xpriv_account.to_xpub_account(),
@@ -852,18 +850,17 @@ pub fn get_wallet_internal(
             DescriptorType::Tr => RgbDescr::TapretKey(TapretKey::from(xpub_derivable)),
         };
         let mut bp_wallet = Wallet::new_layer1(descriptor.clone(), network);
+        let bp_wallet_provider = FsTextStore::new(bp_dir).unwrap();
         bp_wallet.make_persistent(bp_wallet_provider, true).unwrap();
         bp_wallet.set_name(name.to_string());
         let mut stock = Stock::in_memory();
+        let stock_provider = FsBinStore::new(wallet_dir.clone()).unwrap();
         stock.make_persistent(stock_provider, true).unwrap();
-        (bp_wallet, stock)
+        RgbWallet::new(stock, bp_wallet)
     } else {
         // load wallet
-        let stock = Stock::load(stock_provider.clone(), true).unwrap();
-        let bp_wallet = Wallet::load(bp_wallet_provider.clone(), true).unwrap();
-        (bp_wallet, stock)
+        RgbWallet::load(wallet_dir.clone(), bp_dir, true).unwrap()
     };
-    let mut wallet = RgbWallet::new(stock, bp_wallet);
     println!(
         "wallet dir: {wallet_dir:?} ({})",
         if wallet.wallet().is_taproot() {
