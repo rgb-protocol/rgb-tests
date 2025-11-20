@@ -624,9 +624,11 @@ fn accept_0conf() {
         .filter(|fa| fa.seal.txid() == Some(txid))
         .collect();
     assert_eq!(allocations.len(), 1);
-    assert!(allocations
-        .iter()
-        .any(|fa| fa.state == Amount::from(wlt_1_change_amt)));
+    assert!(
+        allocations
+            .iter()
+            .any(|fa| fa.state == Amount::from(wlt_1_change_amt))
+    );
 
     // after mining, wlt_1 doesn't need to get tentative allocations to see the change
     mine(false);
@@ -2503,10 +2505,12 @@ fn accept_bundle_missing_transitions() {
         .into_values()
         .next()
         .unwrap();
-    assert!(consignment_1
-        .bundles
-        .iter()
-        .all(|wb| !wb.bundle.known_transitions_opids().contains(&opid_2)));
+    assert!(
+        consignment_1
+            .bundles
+            .iter()
+            .all(|wb| !wb.bundle.known_transitions_opids().contains(&opid_2))
+    );
     //wlt_2 accepts bundle with opid_1 revealed and opid_2 concealed
     wlt_2.accept_transfer(consignment_1, None);
 
@@ -2517,10 +2521,12 @@ fn accept_bundle_missing_transitions() {
         .into_values()
         .next()
         .unwrap();
-    assert!(consignment_2
-        .bundles
-        .iter()
-        .all(|wb| !wb.bundle.known_transitions_opids().contains(&opid_1)));
+    assert!(
+        consignment_2
+            .bundles
+            .iter()
+            .all(|wb| !wb.bundle.known_transitions_opids().contains(&opid_1))
+    );
     // wlt_3 accepts the same bundle with opid_1 concealed and opid_2 revealed
     wlt_3.accept_transfer(consignment_2, None);
 

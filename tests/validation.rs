@@ -265,7 +265,7 @@ fn remove_transition_children(
             .bundle
             .input_map
             .keys()
-            .filter(|o| assignment_type.map_or(true, |t| t == o.ty))
+            .filter(|o| assignment_type.is_none_or(|t| t == o.ty))
             .any(|o| affected_opids.contains(&o.op));
         if delete {
             // overkill, removing whole bundle for just one transition

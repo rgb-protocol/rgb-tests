@@ -111,7 +111,9 @@ fn random_transfers() {
     let default_load_file = s!("");
     let load_id: String = std::env::var("LOAD_ID").unwrap_or(default_load_file);
     if !load_id.is_empty() {
-        std::env::set_var("SKIP_INIT", s!("1"));
+        unsafe {
+            std::env::set_var("SKIP_INIT", s!("1"));
+        }
     }
 
     initialize();
@@ -252,10 +254,8 @@ fn random_transfers() {
                 let rx_diff = after.rx_bytes - before.rx_bytes;
                 let tx_diff = after.tx_bytes - before.tx_bytes;
                 if rx_diff > 0 || tx_diff > 0 {
-                    if write {
-                        if let Some(f) = file.take() {
-                            write_row(&[rx_diff, tx_diff], f);
-                        }
+                    if write && let Some(f) = file.take() {
+                        write_row(&[rx_diff, tx_diff], f);
                     }
                     if print {
                         println!(
@@ -437,10 +437,10 @@ fn random_transfers() {
     ) -> DiskStats {
         let mut stats: DiskStats = HashMap::new();
         for (dev, after) in end {
-            if let Some(d) = device {
-                if dev != d {
-                    continue; // process only the provided device
-                }
+            if let Some(d) = device
+                && dev != d
+            {
+                continue; // process only the provided device
             }
             let before = start.get(dev).unwrap();
             let read_diff = after.read_bytes - before.read_bytes;
@@ -896,7 +896,7 @@ fn random_transfers() {
         // compute input BTC amount
         let mut input_sats = 0;
         for (outpoint, ..) in &input_outpoints {
-            let sats = utxos.iter().find(|u| u.0 == outpoint).unwrap().1 .0;
+            let sats = utxos.iter().find(|u| u.0 == outpoint).unwrap().1.0;
             input_sats += sats.sats();
         }
         // add more inputs to cover the BTC required amount, if needed
@@ -1034,10 +1034,14 @@ fn random_transfers() {
         // load test params from ID
         println!("\nloading test parameters");
         let mut test_params = load_id.split('-');
-        std::env::set_var("SEED", test_params.next().unwrap());
+        unsafe {
+            std::env::set_var("SEED", test_params.next().unwrap());
+        }
         default_loops = test_params.next().unwrap().to_string();
-        std::env::set_var("ASSETS", test_params.next().unwrap());
-        std::env::set_var("WALLETS", test_params.next().unwrap());
+        unsafe {
+            std::env::set_var("ASSETS", test_params.next().unwrap());
+            std::env::set_var("WALLETS", test_params.next().unwrap());
+        }
     }
 
     // test parameters
@@ -1692,7 +1696,9 @@ fn random_transfers() {
                     wallets
                         .get_mut(send_idx)
                         .debug_logs(*cid, AllocationFilter::WalletAll);
-                    panic!("actual balance ({actual_balance}) is not the expected one {expected_balance}");
+                    panic!(
+                        "actual balance ({actual_balance}) is not the expected one {expected_balance}"
+                    );
                 }
             }
         }

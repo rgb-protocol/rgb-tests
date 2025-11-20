@@ -6,8 +6,8 @@ authors = [
     "Dr Maxim Orlovsky <orlovsky@lnp-bp.org>",
     "Nicola Busanello <nicola.busanello@gmail.com>",
 ]
-edition = "2021"
-rust-version = "1.81.0"
+edition = "2024"
+rust-version = "1.88.0"
 repository = "https://github.com/rgb-protocol/rgb-tests"
 homepage = "https://github.com/rgb-protocol/rgb-tests"
 license = "Apache-2.0"
@@ -34,7 +34,6 @@ strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 sysinfo = "0.37"
 time = "0.3.34"
-url = "=2.5.2" # temporary pin for rustc 1.81.0
 
 # RGB-related deps
 ## bp-core

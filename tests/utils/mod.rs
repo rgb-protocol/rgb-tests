@@ -34,18 +34,17 @@ pub use std::{
     io::Write,
     num::NonZeroU32,
     os::unix::process::CommandExt,
-    path::{PathBuf, MAIN_SEPARATOR},
+    path::{MAIN_SEPARATOR, PathBuf},
     process::{Command, Stdio},
     str::FromStr,
-    sync::atomic::{AtomicBool, Ordering},
     sync::Arc,
+    sync::atomic::{AtomicBool, Ordering},
     sync::{Mutex, Once, OnceLock, RwLock},
     time::{Duration, Instant},
-    usize,
 };
 
 pub use amplify::{
-    bmap, bset,
+    ByteArray, Bytes64, From, Wrapper, bmap, bset,
     confinement::{
         Collection, Confined, LargeVec, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallOrdMap,
         TinyOrdMap, TinyOrdSet, U16,
@@ -53,29 +52,29 @@ pub use amplify::{
     hex::FromHex,
     map, none,
     num::u24,
-    s, set, ByteArray, Bytes64, From, Wrapper,
+    s, set,
 };
-use bitcoin_hashes::{sha256, Hash};
+use bitcoin_hashes::{Hash, sha256};
 pub use bp::{
+    CompressedPk, ConsensusDecode, InternalPk, IntoTapHash, LeafScript, LeafVer, LockTime,
+    Outpoint, Sats, ScriptPubkey, SeqNo, TapBranchHash, TapNodeHash, TapScript, Tx, TxVer, Txid,
+    Vout,
     dbc::tapret::{TapretCommitment, TapretNodePartner, TapretProof, TapretRightBranch},
     seals::txout::TxPtr,
     seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
     secp256k1::{Message, Secp256k1, SecretKey},
-    CompressedPk, ConsensusDecode, InternalPk, IntoTapHash, LeafScript, LeafVer, LockTime,
-    Outpoint, Sats, ScriptPubkey, SeqNo, TapBranchHash, TapNodeHash, TapScript, Tx, TxVer, Txid,
-    Vout,
 };
 pub use bpstd::{
-    h, signers::TestnetSigner, Address, DerivationPath, DerivationSeg, Derive, DerivedAddr,
-    Descriptor, HardenedIndex, IdxBase, Keychain, Network, NormalIndex, Terminal, XkeyOrigin,
-    Xpriv, XprivAccount, Xpub, XpubAccount, XpubDerivable, XpubFp,
+    Address, DerivationPath, DerivationSeg, Derive, DerivedAddr, Descriptor, HardenedIndex,
+    IdxBase, Keychain, Network, NormalIndex, Terminal, XkeyOrigin, Xpriv, XprivAccount, Xpub,
+    XpubAccount, XpubDerivable, XpubFp, h, signers::TestnetSigner,
 };
 pub use bpwallet::{
-    fs::FsTextStore, indexers::esplora::Client as EsploraClient, AnyIndexer, Indexer as BpIndexer,
-    Wallet, WalletUtxo,
+    AnyIndexer, Indexer as BpIndexer, Wallet, WalletUtxo, fs::FsTextStore,
+    indexers::esplora::Client as EsploraClient,
 };
 pub use chrono::Utc;
-pub use commit_verify::{mpc, CommitVerify};
+pub use commit_verify::{CommitVerify, mpc};
 pub use descriptors::Wpkh;
 pub use electrum::{Client as ElectrumClient, ElectrumApi, Param};
 pub use file_format::FileFormat;
@@ -87,9 +86,15 @@ pub use psbt::{
     PsbtMeta, PsbtVer, Utxo,
 };
 pub use psrgbt::{OpoutAndOpids, ProprietaryKeyRgb, RgbExt, RgbPsbt, TxParams};
-pub use rand::{rngs::StdRng, seq::SliceRandom, Rng, RngCore, SeedableRng};
+pub use rand::{Rng, RngCore, SeedableRng, rngs::StdRng, seq::SliceRandom};
 #[cfg(not(feature = "altered"))]
 pub use rgb::{
+    Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
+    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
+    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
+    RevealedData, RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey,
+    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
+    WalletProvider,
     assignments::AssignVec,
     containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{
@@ -98,22 +103,22 @@ pub use rgb::{
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::{rgb_contract_stl, ContractTerms, RejectListUrl, StandardTypes},
+    stl::{ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl},
     validation::{
         DbcProof, Failure, OpoutsDagData, ResolveWitness, Scripts, Status, ValidationConfig,
         ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError,
         WitnessStatus,
     },
     vm::{ContractStateAccess, GlobalsIter, WitnessOrd, WitnessPos},
-    Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
-    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
-    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
-    RevealedData, RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey,
-    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
-    WalletProvider,
 };
 #[cfg(feature = "altered")]
 pub use rgb_altered::{
+    Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
+    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
+    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
+    RevealedData, RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey,
+    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
+    WalletProvider,
     assignments::AssignVec,
     containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{
@@ -122,21 +127,18 @@ pub use rgb_altered::{
     info::ContractInfo,
     invoice::Pay2Vout,
     persistence::{MemContract, MemContractState, Stock},
-    stl::{rgb_contract_stl, ContractTerms, RejectListUrl, StandardTypes},
+    stl::{ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl},
     validation::{
         DbcProof, Failure, OpoutsDagData, ResolveWitness, Scripts, Status, ValidationConfig,
         ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError,
         WitnessStatus,
     },
     vm::{ContractStateAccess, GlobalsIter, WitnessOrd, WitnessPos},
-    Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
-    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
-    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
-    RevealedData, RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey,
-    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
-    WalletProvider,
 };
 pub use rgbstd::{
+    Allocation, Amount, ChainNet, ContractId, GlobalStateType, KnownState, Layer1, Operation,
+    OutputAssignment, OutputSeal, OwnedFraction, Precision, Schema, SecretSeal, TokenIndex,
+    TxoSeal,
     containers::{
         BuilderSeal, Consignment, ConsignmentExt, Fascia, FileContent, Kit, Transfer, ValidKit,
     },
@@ -146,31 +148,28 @@ pub use rgbstd::{
     },
     indexers::AnyResolver,
     invoice::{Beneficiary, RgbInvoice, RgbInvoiceBuilder, XChainNet},
-    persistence::{fs::FsBinStore, ContractStateRead, StashReadProvider},
+    persistence::{ContractStateRead, StashReadProvider, fs::FsBinStore},
     schema::SchemaId,
     stl::{
         AssetSpec, Attachment, Details, EmbeddedMedia, MediaType, Name, ProofOfReserves,
         RicardianContract, Ticker, TokenData,
     },
-    Allocation, Amount, ChainNet, ContractId, GlobalStateType, KnownState, Layer1, Operation,
-    OutputAssignment, OutputSeal, OwnedFraction, Precision, Schema, SecretSeal, TokenIndex,
-    TxoSeal,
 };
 pub use rstest::rstest;
 pub use schemata::{
-    CollectibleFungibleAsset, IfaWrapper, InflatableFungibleAsset, NonInflatableAsset,
-    PermissionedFungibleAsset, UniqueDigitalAsset, CFA_SCHEMA_ID, ERRNO_INFLATION_MISMATCH,
-    ERRNO_ISSUED_MISMATCH, ERRNO_NON_EQUAL_IN_OUT, ERRNO_REPLACE_HIDDEN_BURN,
-    ERRNO_REPLACE_NO_INPUT, GS_ISSUED_SUPPLY, IFA_SCHEMA_ID, MS_ALLOWED_INFLATION, NIA_SCHEMA_ID,
-    OS_ASSET, OS_INFLATION, OS_REPLACE, PFA_SCHEMA_ID, TS_BURN, TS_INFLATION, TS_REPLACE,
-    TS_TRANSFER, UDA_SCHEMA_ID,
+    CFA_SCHEMA_ID, CollectibleFungibleAsset, ERRNO_INFLATION_MISMATCH, ERRNO_ISSUED_MISMATCH,
+    ERRNO_NON_EQUAL_IN_OUT, ERRNO_REPLACE_HIDDEN_BURN, ERRNO_REPLACE_NO_INPUT, GS_ISSUED_SUPPLY,
+    IFA_SCHEMA_ID, IfaWrapper, InflatableFungibleAsset, MS_ALLOWED_INFLATION, NIA_SCHEMA_ID,
+    NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_REPLACE, PFA_SCHEMA_ID,
+    PermissionedFungibleAsset, TS_BURN, TS_INFLATION, TS_REPLACE, TS_TRANSFER, UDA_SCHEMA_ID,
+    UniqueDigitalAsset,
 };
 pub use serde::{Deserialize, Serialize};
-pub use serde_json::{json, Value};
+pub use serde_json::{Value, json};
 pub use serial_test::serial;
 pub use signal_hook::consts::{SIGINT, SIGTERM};
 pub use signal_hook::flag::register;
-pub use strict_encoding::{fname, tn, FieldName, StrictSerialize, TypeName};
+pub use strict_encoding::{FieldName, StrictSerialize, TypeName, fname, tn};
 pub use strict_types::{SemId, StrictDeserialize, StrictDumb, StrictVal, TypeSystem};
 pub use strum::IntoEnumIterator;
 pub use strum_macros::EnumIter;

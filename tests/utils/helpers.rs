@@ -210,12 +210,11 @@ impl ColoringInfo {
         // this assumes PSBT outputs have been added with the same order of the ColoringInfo one
         for asset_coloring_info in self.asset_info_map.values() {
             for asset_assignment in &asset_coloring_info.assignments {
-                if let AssetDestination::Witness(ref witness_info) = asset_assignment.destination {
-                    if witness_info.tap_internal_key.is_some()
-                        && witness_info.script_pubkey().is_p2tr()
-                    {
-                        return Some(witness_info.clone());
-                    }
+                if let AssetDestination::Witness(ref witness_info) = asset_assignment.destination
+                    && witness_info.tap_internal_key.is_some()
+                    && witness_info.script_pubkey().is_p2tr()
+                {
+                    return Some(witness_info.clone());
                 }
             }
         }
@@ -2120,8 +2119,7 @@ impl TestWallet {
             .history(*contract_id)
             .into_iter()
             .find(|co| {
-                co.direction == direction
-                    && co.witness.map_or(true, |w| Some(w.id) == txid.copied())
+                co.direction == direction && co.witness.is_none_or(|w| Some(w.id) == txid.copied())
             })
             .unwrap();
         assert!(matches!(operation.state, AllocatedState::Amount(amt) if amt.as_u64() == amount));
@@ -2787,10 +2785,10 @@ impl TestWallet {
         let txid = tx.txid();
         self.consume_fascia(fascia.clone(), txid);
         let consignment_map = self.create_consignments(rgb_beneficiaries, txid);
-        if !blinded_to_self.is_empty() {
-            if let Some(revealed_fascia) = self.reveal_fascia(fascia.clone(), &blinded_to_self) {
-                self.consume_fascia(revealed_fascia, txid);
-            }
+        if !blinded_to_self.is_empty()
+            && let Some(revealed_fascia) = self.reveal_fascia(fascia.clone(), &blinded_to_self)
+        {
+            self.consume_fascia(revealed_fascia, txid);
         }
 
         (consignment_map, tx, psbt_meta, tweak_info)
