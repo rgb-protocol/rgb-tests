@@ -16,7 +16,7 @@ fn issue_nia(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = get_wallet(&wallet_desc);
+    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
 
     let issued_supply = 999;
     let ticker = "TCKR";
@@ -64,7 +64,7 @@ fn issue_uda(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = get_wallet(&wallet_desc);
+    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
 
     let ticker = "TCKR";
     let name = "asset name";
@@ -148,7 +148,7 @@ fn issue_cfa(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = get_wallet(&wallet_desc);
+    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
 
     let issued_supply = 999;
     let name = "asset name";
@@ -196,7 +196,7 @@ fn issue_ifa(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = get_wallet(&wallet_desc);
+    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
 
     let issued_supply = 999;
     let ticker = "TCKR";
@@ -282,7 +282,7 @@ fn issue_nia_multiple_utxos(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = get_wallet(&wallet_desc);
+    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
 
     let amounts = vec![222, 444, 333];
     let outpoints: Vec<_> = (0..amounts.len())
@@ -316,7 +316,7 @@ fn issue_cfa_multiple_utxos(wallet_desc: DescriptorType) {
 
     initialize();
 
-    let mut wallet = get_wallet(&wallet_desc);
+    let mut wallet = TestWallet::with_descriptor(&wallet_desc);
 
     let amounts = vec![222, 444, 333];
     let outpoints: Vec<_> = (0..amounts.len())
@@ -355,9 +355,9 @@ fn issue_on_different_layers(#[case] scenario: &str) {
     initialize();
 
     let mut wlt_1 = if scenario == "liquid_mainnet_invoice" {
-        get_mainnet_wallet()
+        TestWallet::new_mainnet()
     } else {
-        get_wallet(&DescriptorType::Wpkh)
+        TestWallet::with_descriptor(&DescriptorType::Wpkh)
     };
 
     let issued_amt = 100;
@@ -394,9 +394,9 @@ fn issue_on_different_layers(#[case] scenario: &str) {
     wlt_1.import_contract(&contract, resolver);
 
     let mut wlt_2 = if scenario == "liquid_mainnet_invoice" {
-        get_mainnet_wallet()
+        TestWallet::new_mainnet()
     } else {
-        get_wallet(&DescriptorType::Wpkh)
+        TestWallet::with_descriptor(&DescriptorType::Wpkh)
     };
     let contract_id = contract.contract_id();
     let amt = 60;
@@ -484,7 +484,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
         ),
     };
 
-    let mut wallet = get_wallet(&DescriptorType::Wpkh);
+    let mut wallet = TestWallet::with_descriptor(&DescriptorType::Wpkh);
     let contract_id = wallet.issue_with_info(asset_info, outpoints, created_at, blinding);
 
     assert_eq!(contract_id.to_string(), expected_cid.to_string());
@@ -495,7 +495,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
 fn contract_globals_order() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_amounts = vec![999, 888, 777, 666, 555, 444, 333, 222, 111];
     let tot_inflation = issue_amounts[1..].iter().sum();

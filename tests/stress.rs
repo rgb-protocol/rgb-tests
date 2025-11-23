@@ -48,8 +48,8 @@ fn back_and_forth(
         "send_2_tot",
     ]);
 
-    let mut wlt_1 = get_wallet(&wlt_1_desc);
-    let mut wlt_2 = get_wallet(&wlt_2_desc);
+    let mut wlt_1 = TestWallet::with_descriptor(&wlt_1_desc);
+    let mut wlt_2 = TestWallet::with_descriptor(&wlt_2_desc);
 
     let issued_supply = u64::MAX;
 
@@ -554,7 +554,7 @@ fn random_transfers() {
                     let wallet_dir = PathBuf::from(TEST_DATA_DIR)
                         .join(INTEGRATION_DATA_DIR)
                         .join(fingerprint);
-                    let wallet = get_wallet_internal(
+                    let wallet = TestWallet::new(
                         None,
                         Network::Regtest,
                         wallet_dir,
@@ -1295,7 +1295,7 @@ fn random_transfers() {
             } else {
                 DescriptorType::Tr
             };
-            let (wlt, seed) = get_wallet_and_seed(&descriptor_type, None, true, None);
+            let (wlt, seed) = TestWallet::with_rng(&descriptor_type, None, true, None);
             wallets.add(wlt, seed);
         }
     }

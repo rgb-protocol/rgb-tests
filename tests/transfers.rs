@@ -108,8 +108,8 @@ fn transfer_loop(
 
     initialize();
 
-    let mut wlt_1 = get_wallet(&wlt_1_desc);
-    let mut wlt_2 = get_wallet(&wlt_2_desc);
+    let mut wlt_1 = TestWallet::with_descriptor(&wlt_1_desc);
+    let mut wlt_2 = TestWallet::with_descriptor(&wlt_2_desc);
 
     let issued_supply_1 = 999;
     let issued_supply_2 = 666;
@@ -369,8 +369,8 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
 
     initialize();
 
-    let mut wlt_1 = get_wallet_custom(&DescriptorType::Wpkh, None, false);
-    let mut wlt_2 = get_wallet_custom(&DescriptorType::Wpkh, None, false);
+    let mut wlt_1 = TestWallet::with(&DescriptorType::Wpkh, None, false);
+    let mut wlt_2 = TestWallet::with(&DescriptorType::Wpkh, None, false);
 
     let (contract_id, secret_key) = match asset_schema {
         AssetSchema::Nia => (wlt_1.issue_nia(600, None), None),
@@ -410,8 +410,8 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
 fn rbf_transfer() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 600;
     let contract_id = wlt_1.issue_nia(issue_supply, None);
@@ -464,8 +464,8 @@ fn same_transfer_twice_no_update_witnesses(#[case] transfer_type: TransferType) 
 
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 2000;
     let contract_id = wlt_1.issue_nia(issue_supply, None);
@@ -506,7 +506,7 @@ fn same_transfer_twice_no_update_witnesses(#[case] transfer_type: TransferType) 
     // with TransferType::Blinded this shows 1900+200 as owned, but we issued 2000
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
 
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     // with TransferType::Blinded this works but should fail
     wlt_1.send(
@@ -530,8 +530,8 @@ fn same_transfer_twice_update_witnesses(#[case] transfer_type: TransferType) {
 
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 2000;
     let contract_id = wlt_1.issue_nia(issue_supply, None);
@@ -572,8 +572,8 @@ fn invoice_reuse(#[case] transfer_type: TransferType) {
 
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let asset_info = AssetInfo::default_nia(vec![500, 400]);
     let contract_id = wlt_1.issue_with_info(asset_info, vec![None, None], None, None);
@@ -596,8 +596,8 @@ fn invoice_reuse(#[case] transfer_type: TransferType) {
 fn accept_0conf() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 600;
     let contract_id = wlt_1.issue_nia(issue_supply, None);
@@ -643,8 +643,8 @@ fn accept_0conf() {
 fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
     let pre_funding_height = get_height();
 
     let utxo_1 = wlt_1.get_utxo(Some(10_000));
@@ -937,7 +937,7 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     wlt_1.mine_tx(&txid, false);
     wlt_1.sync();
     wlt_1.update_witnesses(pre_funding_height, vec![txid]);
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
     wlt_1.send(
         &mut wlt_3,
         TransferType::Blinded,
@@ -992,8 +992,8 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
 fn mainnet_wlt_receiving_test_asset(#[case] custom_invoice: bool) {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_mainnet_wallet();
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::new_mainnet();
 
     let contract_id = wlt_1.issue_nia(700, None);
     let schema_id = wlt_1.schema_id(contract_id);
@@ -1018,7 +1018,7 @@ fn mainnet_wlt_receiving_test_asset(#[case] custom_invoice: bool) {
 fn sync_mainnet_wlt() {
     initialize();
 
-    let mut wlt_1 = get_mainnet_wallet();
+    let mut wlt_1 = TestWallet::new_mainnet();
 
     // sometimes this fails with a 'Too many requests' error when using esplora
     wlt_1.sync();
@@ -1029,9 +1029,9 @@ fn sync_mainnet_wlt() {
 fn collaborative_transfer() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let sats = 30_000;
 
@@ -1137,9 +1137,9 @@ fn collaborative_transfer() {
 fn receive_from_unbroadcasted_transfer_to_blinded() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let contract_id = wlt_1.issue_nia(600, None);
     let schema_id = wlt_1.schema_id(contract_id);
@@ -1215,8 +1215,8 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
 fn check_fungible_history() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 600;
 
@@ -1252,7 +1252,7 @@ fn check_fungible_history() {
 fn send_to_oneself() {
     initialize();
 
-    let mut wlt = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 600;
 
@@ -1282,9 +1282,9 @@ fn send_to_oneself() {
 fn tapret_opret_same_utxo() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Tr);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Tr);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let contract_id_1 = wlt_1.issue_nia(600, None);
     let schema_id_1 = wlt_1.schema_id(contract_id_1);
@@ -1334,8 +1334,8 @@ fn tapret_opret_same_utxo() {
 fn multiple_transitions_per_vin() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let contract_id_1 = wlt_1.issue_nia(600, None);
     let schema_id_1 = wlt_1.schema_id(contract_id_1);
@@ -1401,8 +1401,8 @@ fn multiple_transitions_per_vin() {
 fn tapret_commitments_on_beneficiary_output() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Tr);
-    let mut wlt_2 = get_wallet(&DescriptorType::Tr);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Tr);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Tr);
 
     let sats = 3000;
     let issued_amt = 600;
@@ -1509,8 +1509,8 @@ fn tapret_commitments_on_beneficiary_output() {
 fn pfa() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let (secret_key, public_key) = Secp256k1::new().generate_keypair(&mut rand::thread_rng());
     let pubkey = CompressedPk::from_byte_array(public_key.serialize()).unwrap();
@@ -1564,9 +1564,9 @@ fn pfa() {
 fn ifa_inflation() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_supply = 999;
     let inflation_supply = 555;
@@ -1684,8 +1684,8 @@ fn ifa_inflation() {
 fn ifa_zero_issuance_with_inflation() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     // issue zero assets
     let issued_supply = 0;
@@ -1723,8 +1723,8 @@ fn ifa_zero_issuance_with_inflation() {
 fn ifa_move_inflation_right() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_supply = 999;
     let inflation_supply = 555;
@@ -1827,8 +1827,8 @@ fn ifa_move_inflation_right() {
 fn ifa_burn() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let contract_id = wlt_1.issue_ifa(999, None, vec![], vec![]);
 
@@ -1865,9 +1865,9 @@ fn ifa_burn() {
 fn ifa_replace() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let right_utxo = wlt_1.get_utxo(None);
     let amount = 999;
@@ -1944,8 +1944,8 @@ fn ifa_replace() {
 fn extra_known_transition() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 900;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -2048,8 +2048,8 @@ fn extra_known_transition() {
 fn uncommitted_input_opout() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 900;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -2142,8 +2142,8 @@ fn uncommitted_input_opout() {
 fn concealed_known_transition() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 700;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -2289,8 +2289,8 @@ fn concealed_known_transition() {
 fn remove_scripts_code() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 700;
     let utxo = wlt_1.get_utxo(None);
@@ -2377,9 +2377,9 @@ fn remove_scripts_code() {
 fn accept_bundle_missing_transitions() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 700;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -2556,8 +2556,8 @@ fn accept_bundle_missing_transitions() {
 fn unordered_transitions_within_bundle() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let utxo_0 = wlt_1.get_utxo(Some(8000));
     let issued_amt = 666;
@@ -2651,9 +2651,9 @@ fn unordered_transitions_within_bundle() {
 fn transition_spending_uncommitted_opout() {
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_3 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_amt = 700;
     let contract_id = wlt_1.issue_nia(issued_amt, None);
@@ -2794,8 +2794,8 @@ fn multiasset_transfer() {
     initialize();
 
     let wlt_desc = DescriptorType::Tr;
-    let mut wlt_1 = get_wallet(&wlt_desc);
-    let mut wlt_2 = get_wallet(&wlt_desc);
+    let mut wlt_1 = TestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_2 = TestWallet::with_descriptor(&wlt_desc);
 
     let utxo = wlt_1.get_utxo(None);
 
@@ -2883,8 +2883,8 @@ fn extra_after_merge() {
     initialize();
 
     let wlt_desc = DescriptorType::Wpkh;
-    let mut wlt_1 = get_wallet(&wlt_desc);
-    let mut wlt_2 = get_wallet(&wlt_desc);
+    let mut wlt_1 = TestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_2 = TestWallet::with_descriptor(&wlt_desc);
 
     let utxo_1 = wlt_1.get_utxo(None);
     let utxo_2 = wlt_1.get_utxo(None);
@@ -3002,8 +3002,8 @@ fn reorg_history(#[case] history_type: HistoryType, #[case] reorg_type: ReorgTyp
     initialize();
     connect_reorg_nodes();
 
-    let mut wlt_1 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
-    let mut wlt_2 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_1 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_2 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     let contract_id = match history_type {
         HistoryType::Linear | HistoryType::Branching => wlt_1.issue_nia(600, None),
@@ -3196,7 +3196,7 @@ fn reorg_history(#[case] history_type: HistoryType, #[case] reorg_type: ReorgTyp
     wlt_1.switch_to_instance(INSTANCE_2);
     wlt_2.switch_to_instance(INSTANCE_2);
 
-    let mut wlt_3 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_3 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     match history_type {
         HistoryType::Linear => {
@@ -3307,8 +3307,8 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
     initialize();
     connect_reorg_nodes();
 
-    let mut wlt_1 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
-    let mut wlt_2 = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_1 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_2 = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     let contract_id = match history_type {
         HistoryType::Linear | HistoryType::Branching => wlt_1.issue_nia(600, None),
@@ -3509,7 +3509,7 @@ fn revert_genesis(#[case] with_transfers: bool) {
     connect_reorg_nodes();
     disconnect_reorg_nodes();
 
-    let mut wlt = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
 
     let issued_supply = 600;
     let utxo = wlt.get_utxo(None);
@@ -3519,7 +3519,7 @@ fn revert_genesis(#[case] with_transfers: bool) {
     wlt.check_allocations(contract_id, schema_id, vec![issued_supply], false);
 
     if with_transfers {
-        let mut recv_wlt = get_wallet_custom(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+        let mut recv_wlt = TestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
         let amt = 200;
         wlt.send(
             &mut recv_wlt,

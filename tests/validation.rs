@@ -281,8 +281,8 @@ fn remove_transition_children(
 fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
     initialize();
     if let Scenario::D = scenario {
-        let mut wlt_1 = get_wallet(&DescriptorType::Tr);
-        let mut wlt_2 = get_wallet(&DescriptorType::Tr);
+        let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Tr);
+        let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Tr);
 
         let issued_supply = 999;
 
@@ -321,8 +321,8 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
         _ => unreachable!(),
     };
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Wpkh);
-    let mut wlt_2 = get_wallet(&DescriptorType::Wpkh);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = TestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issued_supply_1 = 999;
     let issued_supply_2 = 666;

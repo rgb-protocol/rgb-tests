@@ -811,150 +811,6 @@ pub fn get_builder_seal(outpoint: Outpoint, blinding: Option<u64>) -> BuilderSea
     BuilderSeal::from(blind_seal)
 }
 
-pub fn get_wallet_internal(
-    descriptor_type: Option<&DescriptorType>,
-    network: Network,
-    wallet_dir: PathBuf,
-    wallet_account: WalletAccount,
-    instance: u8,
-    import_kits: bool,
-) -> TestWallet {
-    std::fs::create_dir_all(&wallet_dir).unwrap();
-    let name = "bp_wallet_name";
-    let bp_dir = wallet_dir.join(name);
-    let mut wallet = if let Some(dt) = descriptor_type {
-        // new wallet
-        let xpub_account = match wallet_account {
-            WalletAccount::Private(ref xpriv_account) => xpriv_account.to_xpub_account(),
-            WalletAccount::Public(ref xpub_account) => xpub_account.clone(),
-        };
-        const OPRET_KEYCHAINS: [Keychain; 3] = [
-            Keychain::INNER,
-            Keychain::OUTER,
-            Keychain::with(RgbKeychain::Rgb as u8),
-        ];
-        const TAPRET_KEYCHAINS: [Keychain; 4] = [
-            Keychain::INNER,
-            Keychain::OUTER,
-            Keychain::with(RgbKeychain::Rgb as u8),
-            Keychain::with(RgbKeychain::Tapret as u8),
-        ];
-        let keychains: &[Keychain] = match *dt {
-            DescriptorType::Tr => &TAPRET_KEYCHAINS[..],
-            DescriptorType::Wpkh => &OPRET_KEYCHAINS[..],
-        };
-        let xpub_derivable = XpubDerivable::with(xpub_account.clone(), keychains);
-        let descriptor = match dt {
-            DescriptorType::Wpkh => RgbDescr::Wpkh(Wpkh::from(xpub_derivable)),
-            DescriptorType::Tr => RgbDescr::TapretKey(TapretKey::from(xpub_derivable)),
-        };
-        let mut bp_wallet = Wallet::new_layer1(descriptor.clone(), network);
-        let bp_wallet_provider = FsTextStore::new(bp_dir).unwrap();
-        bp_wallet.make_persistent(bp_wallet_provider, true).unwrap();
-        bp_wallet.set_name(name.to_string());
-        let mut stock = Stock::in_memory();
-        let stock_provider = FsBinStore::new(wallet_dir.clone()).unwrap();
-        stock.make_persistent(stock_provider, true).unwrap();
-        RgbWallet::new(stock, bp_wallet)
-    } else {
-        // load wallet
-        RgbWallet::load(wallet_dir.clone(), bp_dir, true).unwrap()
-    };
-    println!(
-        "wallet dir: {wallet_dir:?} ({})",
-        if wallet.wallet().is_taproot() {
-            "tapret"
-        } else {
-            "opret"
-        }
-    );
-
-    if import_kits {
-        for asset_schema in AssetSchema::iter() {
-            let valid_kit = asset_schema.get_valid_kit();
-            wallet.stock_mut().import_kit(valid_kit).unwrap();
-        }
-    }
-
-    let signer = match wallet_account {
-        WalletAccount::Private(xpriv_account) => Some(TestnetSigner::new(xpriv_account)),
-        WalletAccount::Public(_) => None,
-    };
-
-    let mut wallet = TestWallet {
-        wallet,
-        signer,
-        wallet_dir,
-        instance,
-    };
-
-    wallet.sync();
-
-    wallet
-}
-
-pub fn get_wallet(descriptor_type: &DescriptorType) -> TestWallet {
-    get_wallet_custom(descriptor_type, None, true)
-}
-
-pub fn get_wallet_custom(
-    descriptor_type: &DescriptorType,
-    instance: Option<u8>,
-    import_kits: bool,
-) -> TestWallet {
-    get_wallet_and_seed(descriptor_type, instance, import_kits, None).0
-}
-
-pub fn get_wallet_and_seed(
-    descriptor_type: &DescriptorType,
-    instance: Option<u8>,
-    import_kits: bool,
-    rng: Option<&mut StdRng>,
-) -> (TestWallet, Vec<u8>) {
-    let mut seed = vec![0u8; 128];
-    if let Some(rng) = rng {
-        rng.fill_bytes(&mut seed);
-    } else {
-        rand::thread_rng().fill_bytes(&mut seed);
-    }
-
-    let xpriv_account = XprivAccount::with_seed(true, &seed).derive(h![86, 1, 0]);
-
-    let fingerprint = xpriv_account.account_fp().to_string();
-    let wallet_dir = PathBuf::from(TEST_DATA_DIR)
-        .join(INTEGRATION_DATA_DIR)
-        .join(fingerprint);
-
-    let wallet = get_wallet_internal(
-        Some(descriptor_type),
-        Network::Regtest,
-        wallet_dir,
-        WalletAccount::Private(xpriv_account),
-        instance.unwrap_or(INSTANCE_1),
-        import_kits,
-    );
-    (wallet, seed)
-}
-
-pub fn get_mainnet_wallet() -> TestWallet {
-    let xpub_account = XpubAccount::from_str(
-        "[c32338a7/86h/0h/0h]xpub6CmiK1xc7YwL472qm4zxeURFX8yMCSasioXujBjVMMzA3AKZr6KLQEmkzDge1Ezn2p43ZUysyx6gfajFVVnhtQ1AwbXEHrioLioXXgj2xW5"
-    ).unwrap();
-
-    let wallet_dir = PathBuf::from(TEST_DATA_DIR)
-        .join(INTEGRATION_DATA_DIR)
-        .join("mainnet");
-
-    get_wallet_internal(
-        Some(&DescriptorType::Wpkh),
-        Network::Mainnet,
-        wallet_dir,
-        WalletAccount::Public(xpub_account),
-        INSTANCE_1,
-        true,
-    )
-}
-
 fn get_indexer(indexer_url: &str) -> AnyIndexer {
     match INDEXER.get().unwrap() {
         Indexer::Electrum => {
@@ -1034,6 +890,146 @@ pub fn uda_token_data(
 }
 
 impl TestWallet {
+    pub fn new(
+        descriptor_type: Option<&DescriptorType>,
+        network: Network,
+        wallet_dir: PathBuf,
+        wallet_account: WalletAccount,
+        instance: u8,
+        import_kits: bool,
+    ) -> Self {
+        std::fs::create_dir_all(&wallet_dir).unwrap();
+        let name = "bp_wallet_name";
+        let bp_dir = wallet_dir.join(name);
+        let mut wallet = if let Some(dt) = descriptor_type {
+            // new wallet
+            let xpub_account = match wallet_account {
+                WalletAccount::Private(ref xpriv_account) => xpriv_account.to_xpub_account(),
+                WalletAccount::Public(ref xpub_account) => xpub_account.clone(),
+            };
+            const OPRET_KEYCHAINS: [Keychain; 3] = [
+                Keychain::INNER,
+                Keychain::OUTER,
+                Keychain::with(RgbKeychain::Rgb as u8),
+            ];
+            const TAPRET_KEYCHAINS: [Keychain; 4] = [
+                Keychain::INNER,
+                Keychain::OUTER,
+                Keychain::with(RgbKeychain::Rgb as u8),
+                Keychain::with(RgbKeychain::Tapret as u8),
+            ];
+            let keychains: &[Keychain] = match *dt {
+                DescriptorType::Tr => &TAPRET_KEYCHAINS[..],
+                DescriptorType::Wpkh => &OPRET_KEYCHAINS[..],
+            };
+            let xpub_derivable = XpubDerivable::with(xpub_account.clone(), keychains);
+            let descriptor = match dt {
+                DescriptorType::Wpkh => RgbDescr::Wpkh(Wpkh::from(xpub_derivable)),
+                DescriptorType::Tr => RgbDescr::TapretKey(TapretKey::from(xpub_derivable)),
+            };
+            let mut bp_wallet = Wallet::new_layer1(descriptor.clone(), network);
+            let bp_wallet_provider = FsTextStore::new(bp_dir).unwrap();
+            bp_wallet.make_persistent(bp_wallet_provider, true).unwrap();
+            bp_wallet.set_name(name.to_string());
+            let mut stock = Stock::in_memory();
+            let stock_provider = FsBinStore::new(wallet_dir.clone()).unwrap();
+            stock.make_persistent(stock_provider, true).unwrap();
+            RgbWallet::new(stock, bp_wallet)
+        } else {
+            // load wallet
+            RgbWallet::load(wallet_dir.clone(), bp_dir, true).unwrap()
+        };
+        println!(
+            "wallet dir: {wallet_dir:?} ({})",
+            if wallet.wallet().is_taproot() {
+                "tapret"
+            } else {
+                "opret"
+            }
+        );
+
+        if import_kits {
+            for asset_schema in AssetSchema::iter() {
+                let valid_kit = asset_schema.get_valid_kit();
+                wallet.stock_mut().import_kit(valid_kit).unwrap();
+            }
+        }
+
+        let signer = match wallet_account {
+            WalletAccount::Private(xpriv_account) => Some(TestnetSigner::new(xpriv_account)),
+            WalletAccount::Public(_) => None,
+        };
+
+        let mut wallet = Self {
+            wallet,
+            signer,
+            wallet_dir,
+            instance,
+        };
+
+        wallet.sync();
+
+        wallet
+    }
+
+    pub fn with_descriptor(descriptor_type: &DescriptorType) -> Self {
+        Self::with(descriptor_type, None, true)
+    }
+
+    pub fn with(descriptor_type: &DescriptorType, instance: Option<u8>, import_kits: bool) -> Self {
+        Self::with_rng(descriptor_type, instance, import_kits, None).0
+    }
+
+    pub fn with_rng(
+        descriptor_type: &DescriptorType,
+        instance: Option<u8>,
+        import_kits: bool,
+        rng: Option<&mut StdRng>,
+    ) -> (Self, Vec<u8>) {
+        let mut seed = vec![0u8; 128];
+        if let Some(rng) = rng {
+            rng.fill_bytes(&mut seed);
+        } else {
+            rand::thread_rng().fill_bytes(&mut seed);
+        }
+
+        let xpriv_account = XprivAccount::with_seed(true, &seed).derive(h![86, 1, 0]);
+
+        let fingerprint = xpriv_account.account_fp().to_string();
+        let wallet_dir = PathBuf::from(TEST_DATA_DIR)
+            .join(INTEGRATION_DATA_DIR)
+            .join(fingerprint);
+
+        let wallet = Self::new(
+            Some(descriptor_type),
+            Network::Regtest,
+            wallet_dir,
+            WalletAccount::Private(xpriv_account),
+            instance.unwrap_or(INSTANCE_1),
+            import_kits,
+        );
+        (wallet, seed)
+    }
+
+    pub fn new_mainnet() -> Self {
+        let xpub_account = XpubAccount::from_str(
+            "[c32338a7/86h/0h/0h]xpub6CmiK1xc7YwL472qm4zxeURFX8yMCSasioXujBjVMMzA3AKZr6KLQEmkzDge1Ezn2p43ZUysyx6gfajFVVnhtQ1AwbXEHrioLioXXgj2xW5"
+        ).unwrap();
+
+        let wallet_dir = PathBuf::from(TEST_DATA_DIR)
+            .join(INTEGRATION_DATA_DIR)
+            .join("mainnet");
+
+        Self::new(
+            Some(&DescriptorType::Wpkh),
+            Network::Mainnet,
+            wallet_dir,
+            WalletAccount::Public(xpub_account),
+            INSTANCE_1,
+            true,
+        )
+    }
+
     pub fn network(&self) -> Network {
         self.wallet.wallet().network()
     }

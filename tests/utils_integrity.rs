@@ -24,8 +24,8 @@ fn flexible_change_and_extra(
 
     initialize();
 
-    let mut wlt_1 = get_wallet(&wlt_desc);
-    let mut wlt_2 = get_wallet(&wlt_desc);
+    let mut wlt_1 = TestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_2 = TestWallet::with_descriptor(&wlt_desc);
 
     let utxo = wlt_1.get_utxo(Some(30_000));
     let contract_id_1 = wlt_1.issue_nia(600, Some(&utxo));
@@ -102,8 +102,8 @@ fn flexible_wlt_descriptor_compatibility(
 
     initialize();
 
-    let mut wlt_1 = get_wallet(&descriptor_1);
-    let mut wlt_2 = get_wallet(&descriptor_2);
+    let mut wlt_1 = TestWallet::with_descriptor(&descriptor_1);
+    let mut wlt_2 = TestWallet::with_descriptor(&descriptor_2);
 
     let utxo_1 = wlt_1.get_utxo(None);
     let contract_id = wlt_1.issue_nia(600, Some(&utxo_1));
@@ -202,8 +202,8 @@ fn flexible_multiple_transitions_per_vin() {
     initialize();
 
     let wlt_desc = DescriptorType::Wpkh;
-    let mut wlt_1 = get_wallet(&wlt_desc);
-    let mut wlt_2 = get_wallet(&wlt_desc);
+    let mut wlt_1 = TestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_2 = TestWallet::with_descriptor(&wlt_desc);
 
     let utxo = wlt_1.get_utxo(Some(30_000));
     let contract_id_1 = wlt_1.issue_nia(600, Some(&utxo));
@@ -307,8 +307,8 @@ fn flexible_tapret_no_change(#[case] recv_descriptor: DescriptorType) {
 
     initialize();
 
-    let mut wlt_1 = get_wallet(&DescriptorType::Tr);
-    let mut wlt_2 = get_wallet(&recv_descriptor);
+    let mut wlt_1 = TestWallet::with_descriptor(&DescriptorType::Tr);
+    let mut wlt_2 = TestWallet::with_descriptor(&recv_descriptor);
 
     let utxo = wlt_1.get_utxo(Some(800));
     let issued_amt = 666;
