@@ -13,6 +13,9 @@ pub const UDA_FIXED_INDEX: u32 = 0;
 pub const DEFAULT_FEE_ABS: u64 = 400;
 pub const MEDIA_FPATH: &str = "tests/fixtures/rgb_logo.jpeg";
 pub const REJECT_LIST_URL: &str = "example.xyz/rejectList";
+pub const PURPOSE: u32 = 86;
+pub const COIN_RGB_TESTNET: u32 = 827167;
+pub const ACCOUNT: u32 = 0;
 
 pub const INSTANCE_1: u8 = 1;
 pub const INSTANCE_2: u8 = 2;
@@ -65,7 +68,7 @@ pub use bp::{
     secp256k1::{Message, Secp256k1, SecretKey},
 };
 pub use bpstd::{
-    Address, DerivationPath, DerivationSeg, Derive, DerivedAddr, Descriptor, HardenedIndex,
+    Address, DerivationPath, DerivationSeg, Derive, DerivedAddr, Descriptor, HardenedIndex, Idx,
     IdxBase, Keychain, Network, NormalIndex, Terminal, XkeyOrigin, Xpriv, XprivAccount, Xpub,
     XpubAccount, XpubDerivable, XpubFp, h, signers::TestnetSigner,
 };
@@ -92,9 +95,8 @@ pub use rgb::{
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
     MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
-    RevealedData, RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey,
-    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
-    WalletProvider,
+    RevealedData, RevealedValue, RgbDescr, RgbWallet, StateType, TapretKey, TransferParams,
+    Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState, WalletProvider,
     assignments::AssignVec,
     containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{
@@ -116,9 +118,8 @@ pub use rgb_altered::{
     Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
     GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
     MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, OwnedStateSchema,
-    RevealedData, RevealedValue, RgbDescr, RgbKeychain, RgbWallet, StateType, TapretKey,
-    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
-    WalletProvider,
+    RevealedData, RevealedValue, RgbDescr, RgbWallet, StateType, TapretKey, TransferParams,
+    Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState, WalletProvider,
     assignments::AssignVec,
     containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{

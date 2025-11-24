@@ -549,11 +549,7 @@ fn random_transfers() {
                 .wallets
                 .iter()
                 .map(|(idx, seed)| {
-                    let xpriv_account = XprivAccount::with_seed(true, seed).derive(h![86, 1, 0]);
-                    let fingerprint = xpriv_account.account_fp().to_string();
-                    let wallet_dir = PathBuf::from(TEST_DATA_DIR)
-                        .join(INTEGRATION_DATA_DIR)
-                        .join(fingerprint);
+                    let (xpriv_account, wallet_dir) = TestWallet::gen_keys(seed);
                     let wallet = TestWallet::new(
                         None,
                         Network::Regtest,
@@ -561,6 +557,7 @@ fn random_transfers() {
                         WalletAccount::Private(xpriv_account),
                         INSTANCE_1,
                         false,
+                        vec![Keychain::OUTER, Keychain::INNER],
                     );
                     (*idx, (RefCell::new(wallet), seed.clone()))
                 })

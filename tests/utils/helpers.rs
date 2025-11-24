@@ -897,6 +897,7 @@ impl TestWallet {
         wallet_account: WalletAccount,
         instance: u8,
         import_kits: bool,
+        keychains: Vec<Keychain>,
     ) -> Self {
         std::fs::create_dir_all(&wallet_dir).unwrap();
         let name = "bp_wallet_name";
@@ -907,22 +908,12 @@ impl TestWallet {
                 WalletAccount::Private(ref xpriv_account) => xpriv_account.to_xpub_account(),
                 WalletAccount::Public(ref xpub_account) => xpub_account.clone(),
             };
-            const OPRET_KEYCHAINS: [Keychain; 3] = [
-                Keychain::INNER,
-                Keychain::OUTER,
-                Keychain::with(RgbKeychain::Rgb as u8),
-            ];
-            const TAPRET_KEYCHAINS: [Keychain; 4] = [
-                Keychain::INNER,
-                Keychain::OUTER,
-                Keychain::with(RgbKeychain::Rgb as u8),
-                Keychain::with(RgbKeychain::Tapret as u8),
-            ];
-            let keychains: &[Keychain] = match *dt {
-                DescriptorType::Tr => &TAPRET_KEYCHAINS[..],
-                DescriptorType::Wpkh => &OPRET_KEYCHAINS[..],
-            };
-            let xpub_derivable = XpubDerivable::with(xpub_account.clone(), keychains);
+            let xpub_derivable = XpubDerivable::try_custom(
+                *xpub_account.xpub(),
+                xpub_account.origin().clone(),
+                keychains,
+            )
+            .unwrap();
             let descriptor = match dt {
                 DescriptorType::Wpkh => RgbDescr::Wpkh(Wpkh::from(xpub_derivable)),
                 DescriptorType::Tr => RgbDescr::TapretKey(TapretKey::from(xpub_derivable)),
@@ -980,6 +971,20 @@ impl TestWallet {
         Self::with_rng(descriptor_type, instance, import_kits, None).0
     }
 
+    pub fn gen_keys(seed: &[u8]) -> (XprivAccount, PathBuf) {
+        let xpriv_account = XprivAccount::with_seed(true, seed).derive([
+            HardenedIndex::try_from_child_number(PURPOSE).unwrap(),
+            HardenedIndex::try_from_child_number(COIN_RGB_TESTNET).unwrap(),
+            HardenedIndex::try_from_child_number(ACCOUNT).unwrap(),
+        ]);
+
+        let fingerprint = xpriv_account.account_fp().to_string();
+        let wallet_dir = PathBuf::from(TEST_DATA_DIR)
+            .join(INTEGRATION_DATA_DIR)
+            .join(fingerprint);
+        (xpriv_account, wallet_dir)
+    }
+
     pub fn with_rng(
         descriptor_type: &DescriptorType,
         instance: Option<u8>,
@@ -993,12 +998,7 @@ impl TestWallet {
             rand::thread_rng().fill_bytes(&mut seed);
         }
 
-        let xpriv_account = XprivAccount::with_seed(true, &seed).derive(h![86, 1, 0]);
-
-        let fingerprint = xpriv_account.account_fp().to_string();
-        let wallet_dir = PathBuf::from(TEST_DATA_DIR)
-            .join(INTEGRATION_DATA_DIR)
-            .join(fingerprint);
+        let (xpriv_account, wallet_dir) = Self::gen_keys(&seed);
 
         let wallet = Self::new(
             Some(descriptor_type),
@@ -1007,6 +1007,7 @@ impl TestWallet {
             WalletAccount::Private(xpriv_account),
             instance.unwrap_or(INSTANCE_1),
             import_kits,
+            vec![Keychain::OUTER, Keychain::INNER],
         );
         (wallet, seed)
     }
@@ -1027,6 +1028,7 @@ impl TestWallet {
             WalletAccount::Public(xpub_account),
             INSTANCE_1,
             true,
+            vec![Keychain::from(9)],
         )
     }
 
@@ -1048,8 +1050,8 @@ impl TestWallet {
         self.network().is_testnet()
     }
 
-    pub fn keychain(&self) -> RgbKeychain {
-        RgbKeychain::for_method(self.close_method())
+    pub fn keychain(&self) -> Keychain {
+        self.wallet.wallet().default_keychain()
     }
 
     fn get_next_index(&mut self, keychain: impl Into<Keychain>, shift: bool) -> NormalIndex {
@@ -2265,7 +2267,7 @@ impl TestWallet {
             },
             CloseMethod::TapretFirst => {
                 let (address, tap_internal_key, index) = self.tap_address();
-                let derived_address = DerivedAddr::new(address, self.keychain().into(), index);
+                let derived_address = DerivedAddr::new(address, self.keychain(), index);
                 WitnessInfo {
                     derived_address,
                     tap_internal_key: Some(tap_internal_key),
