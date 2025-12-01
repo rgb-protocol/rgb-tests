@@ -220,6 +220,7 @@ fn issue_ifa(wallet_desc: DescriptorType) {
         vec![issued_supply],
         replace_outpoints.clone(),
         inflation_info.clone(),
+        (None, None),
     );
     let contract_id = wallet.issue_with_info(asset_info, vec![], None, None);
 
@@ -486,7 +487,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
         }
         AssetSchema::Ifa => (
             AssetInfo::default_ifa(vec![999], vec![], vec![]),
-            "rgb:AWmvB3_7-uQGz1eJ-AJyw_UU-8FCIVeo-VM9_KVH-bNoe8sQ",
+            "rgb:9bU9k0zC-vBB3ZXu-VVhh0hp-QY58blH-QLsJpUv-oCiY2k4",
         ),
     };
 

@@ -207,7 +207,7 @@ pub use rgbstd::{
     },
     contract::{
         ContractBuilder, ContractData, DataAllocation, FilterExclude, FungibleAllocation,
-        IssuerWrapper, TransitionBuilder,
+        IssuerWrapper, LinkableSchemaWrapper, TransitionBuilder,
     },
     indexers::AnyResolver,
     invoice::{Beneficiary, RgbInvoice, RgbInvoiceBuilder, XChainNet},
@@ -223,7 +223,7 @@ pub use schemata::{
     CFA_SCHEMA_ID, CollectibleFungibleAsset, ERRNO_INFLATION_MISMATCH, ERRNO_ISSUED_MISMATCH,
     ERRNO_NON_EQUAL_IN_OUT, ERRNO_REPLACE_HIDDEN_BURN, ERRNO_REPLACE_NO_INPUT, GS_ISSUED_SUPPLY,
     IFA_SCHEMA_ID, IfaWrapper, InflatableFungibleAsset, MS_ALLOWED_INFLATION, NIA_SCHEMA_ID,
-    NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_REPLACE, PFA_SCHEMA_ID,
+    NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_LINK, OS_REPLACE, PFA_SCHEMA_ID,
     PermissionedFungibleAsset, TS_BURN, TS_INFLATION, TS_REPLACE, TS_TRANSFER, UDA_SCHEMA_ID,
     UniqueDigitalAsset,
 };

@@ -1963,6 +1963,7 @@ fn ifa_replace() {
     );
     let builder = RgbInvoiceBuilder::new(beneficiary)
         .set_contract(contract_id)
+        .set_assignment_name("replaceRight")
         .set_void();
     let invoice = builder.finish();
     wlt_1.send_ifa_to_invoice(&mut wlt_3, invoice);
@@ -3004,6 +3005,86 @@ fn extra_after_merge() {
         .next()
         .unwrap();
     wlt_2.accept_transfer(consignment, None);
+}
+
+#[cfg(not(feature = "altered"))]
+#[rstest]
+fn contract_linking() {
+    initialize();
+
+    let wlt_desc = DescriptorType::Wpkh;
+    let mut wlt_1 = BpTestWallet::with_descriptor(&wlt_desc);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&wlt_desc);
+
+    let issuance_utxo_1 = wlt_1.get_utxo(None);
+    let amt_1 = 100;
+    let mut asset_info_1 = AssetInfo::default_ifa(vec![amt_1], vec![], vec![]);
+    if let AssetInfo::Ifa {
+        ref mut link_info, ..
+    } = asset_info_1
+    {
+        *link_info = (None, Some(issuance_utxo_1));
+    }
+    let contract_id_1 =
+        wlt_1.issue_with_info(asset_info_1, vec![Some(issuance_utxo_1)], None, None);
+
+    let issuance_utxo_2 = wlt_1.get_utxo(None);
+    let amt_2 = 200;
+    let mut asset_info_2 = AssetInfo::default_ifa(vec![amt_2], vec![], vec![]);
+    if let AssetInfo::Ifa {
+        ref mut link_info, ..
+    } = asset_info_2
+    {
+        *link_info = (Some(contract_id_1), None);
+    }
+    let contract_id_2 =
+        wlt_1.issue_with_info(asset_info_2, vec![Some(issuance_utxo_2)], None, None);
+
+    // sending contract_id_1 allocation causes link right to be moved in extra
+    let schema_id = wlt_1.schema_id(contract_id_1);
+    let invoice = wlt_2.invoice(contract_id_1, schema_id, amt_1, InvoiceType::Blinded(None));
+    let (consignment, tx, _, psbt_meta) = wlt_1.pay_full(invoice, None, None, true, None);
+    let txid = txid_bp_to_bitcoin(tx.txid());
+    wlt_1.mine_tx(&txid, false);
+    wlt_2.accept_transfer(consignment, None);
+    wlt_1.sync();
+    let link_utxo = Outpoint::new(txid, psbt_meta.change_vout.unwrap());
+    let (link_consignment, _) = wlt_1.link_ifa(contract_id_1, contract_id_2, link_utxo);
+    wlt_1.send_ifa(&mut wlt_2, InvoiceType::Blinded(None), contract_id_2, amt_2);
+
+    // contract link validation only succeeds after accepting the linking consignment
+    assert_eq!(
+        contract_id_1,
+        wlt_2
+            .contract_wrapper::<InflatableFungibleAsset>(contract_id_2)
+            .link_from()
+            .unwrap()
+            .unwrap()
+    );
+    assert!(
+        wlt_2
+            .contract_wrapper::<InflatableFungibleAsset>(contract_id_1)
+            .link_to()
+            .unwrap()
+            .is_none()
+    );
+    wlt_2
+        .wallet
+        .stock()
+        .validate_contracts_link::<InflatableFungibleAsset, InflatableFungibleAsset>(
+            contract_id_1,
+            contract_id_2,
+        )
+        .unwrap_err();
+    wlt_2.accept_transfer(link_consignment, None);
+    wlt_2
+        .wallet
+        .stock()
+        .validate_contracts_link::<InflatableFungibleAsset, InflatableFungibleAsset>(
+            contract_id_1,
+            contract_id_2,
+        )
+        .unwrap();
 }
 
 #[cfg(not(feature = "altered"))]

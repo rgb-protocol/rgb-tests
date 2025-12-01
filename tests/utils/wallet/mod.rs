@@ -348,6 +348,7 @@ pub enum AssetInfo {
         issue_amounts: Vec<u64>,
         replace_outpoints: Vec<Outpoint>,
         inflation_info: Vec<(Outpoint, u64)>,
+        link_info: (Option<ContractId>, Option<Outpoint>),
     },
 }
 
@@ -429,6 +430,7 @@ impl AssetInfo {
             issue_amounts,
             replace_outpoints,
             inflation_info,
+            (None, None),
         )
     }
 
@@ -561,6 +563,7 @@ impl AssetInfo {
         issue_amounts: Vec<u64>,
         replace_outpoints: Vec<Outpoint>,
         inflation_info: Vec<(Outpoint, u64)>,
+        link_info: (Option<ContractId>, Option<Outpoint>),
     ) -> Self {
         let spec = AssetSpec::with(
             ticker,
@@ -583,6 +586,7 @@ impl AssetInfo {
             issue_amounts,
             replace_outpoints,
             inflation_info,
+            link_info,
         }
     }
 
@@ -662,6 +666,7 @@ impl AssetInfo {
                 issue_amounts,
                 reject_list_url,
                 inflation_info,
+                link_info,
                 ..
             } => {
                 let issue_amount = Amount::from(issue_amounts.iter().sum::<u64>());
@@ -679,6 +684,11 @@ impl AssetInfo {
                 if let Some(reject_list_url) = reject_list_url {
                     builder = builder
                         .add_global_state("rejectListUrl", reject_list_url.clone())
+                        .unwrap()
+                }
+                if let (Some(linked_from_contract), _) = link_info {
+                    builder = builder
+                        .add_global_state("linkedFromContract", *linked_from_contract)
                         .unwrap()
                 }
                 builder
@@ -755,6 +765,21 @@ impl AssetInfo {
                     .add_rights("replaceRight", get_builder_seal(*outpoint, blinding))
                     .unwrap();
             }
+        }
+        builder
+    }
+
+    pub fn add_link_right(
+        &self,
+        mut builder: ContractBuilder,
+        blinding: Option<u64>,
+    ) -> ContractBuilder {
+        if let Self::Ifa { link_info, .. } = self
+            && let (_, Some(link_right_utxo)) = link_info
+        {
+            builder = builder
+                .add_rights("linkRight", get_builder_seal(*link_right_utxo, blinding))
+                .unwrap();
         }
         builder
     }
@@ -1093,6 +1118,7 @@ where
         builder = asset_info.add_asset_owner(builder, outpoints, blinding);
         builder = asset_info.add_inflation_allowance(builder, blinding);
         builder = asset_info.add_replace_right(builder, blinding);
+        builder = asset_info.add_link_right(builder, blinding);
 
         let created_at = created_at.unwrap_or_else(|| Utc::now().timestamp());
         let contract = builder.issue_contract_raw(created_at).unwrap();

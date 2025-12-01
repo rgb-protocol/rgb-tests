@@ -485,6 +485,59 @@ impl BpTestWallet {
         (consignment, tx)
     }
 
+    pub fn link_ifa(
+        &mut self,
+        from_contract_id: ContractId,
+        to_contract_id: ContractId,
+        link_right: Outpoint,
+    ) -> (Transfer, Tx) {
+        let address = self.get_address();
+        let (mut psbt, _) = self.construct_psbt(vec![link_right], vec![(address, None)], None);
+        let mut link_transition_builder = self
+            .wallet
+            .stock()
+            .transition_builder(from_contract_id, "link")
+            .unwrap();
+        let prev_outputs = psbt
+            .inputs()
+            .map(|txin| outpoint_bp_to_bitcoin(txin.previous_outpoint))
+            .collect::<HashSet<_>>();
+        for (_, opout_state_map) in self
+            .wallet
+            .stock()
+            .contract_assignments_for(from_contract_id, prev_outputs)
+            .unwrap()
+        {
+            for (opout, state) in opout_state_map {
+                if opout.ty == OS_LINK {
+                    link_transition_builder =
+                        link_transition_builder.add_input(opout, state).unwrap();
+                } else {
+                    unimplemented!("extra transition not supported");
+                }
+            }
+        }
+        link_transition_builder = link_transition_builder
+            .add_global_state("linkedToContract", to_contract_id)
+            .unwrap();
+        let transition = link_transition_builder.complete_transition().unwrap();
+        let opid = transition.id();
+        psbt.push_rgb_transition(transition).unwrap();
+        psbt.set_opret_host();
+        psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+        psbt.set_as_unmodifiable();
+        let fascia = psbt.rgb_commit().unwrap();
+        let txid = psbt.txid();
+        self.consume_fascia(fascia, txid);
+        let tx = self.sign_finalize_extract(&mut psbt);
+        self.broadcast_tx(&tx);
+        self.mine_tx(&psbt.get_txid(), false);
+        println!("link txid: {}", txid);
+        self.sync();
+        let consignment = self.consign_transfer(from_contract_id, [], [], [opid], Some(txid));
+        (consignment, tx)
+    }
+
     fn _construct_psbt_offchain(
         &mut self,
         input_outpoints: Vec<(BpOutpoint, u64, Terminal, ScriptPubkey)>,
