@@ -206,7 +206,6 @@ fn issue_ifa(wallet_desc: DescriptorType) {
     let terms_text = "Ricardian contract";
     let terms_media_fpath = Some(MEDIA_FPATH);
     let reject_list_url = Some(REJECT_LIST_URL);
-    let replace_outpoints = vec![wallet.get_utxo(None), wallet.get_utxo(None)];
     let inflation_info = vec![(wallet.get_utxo(None), 7), (wallet.get_utxo(None), 9)];
     let inflation_supply: u64 = inflation_info.iter().map(|(_, amt)| amt).sum();
     let asset_info = AssetInfo::ifa(
@@ -218,7 +217,6 @@ fn issue_ifa(wallet_desc: DescriptorType) {
         terms_media_fpath,
         reject_list_url,
         vec![issued_supply],
-        replace_outpoints.clone(),
         inflation_info.clone(),
         (None, None),
     );
@@ -259,17 +257,6 @@ fn issue_ifa(wallet_desc: DescriptorType) {
             .map(|(o, _)| o)
             .collect::<BTreeSet<_>>(),
     );
-    let replace_rights = contract
-        .replace_rights(FilterIncludeAll)
-        .collect::<Vec<_>>();
-    assert_eq!(
-        replace_rights
-            .iter()
-            .map(|r| r.seal.outpoint().unwrap())
-            .collect::<BTreeSet<_>>(),
-        replace_outpoints.into_iter().collect::<BTreeSet<_>>(),
-    );
-
     let allocations = wallet.contract_fungible_allocations(contract_id, false);
     assert_eq!(allocations.len(), 1);
     let allocation = allocations[0];
@@ -486,8 +473,8 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
             )
         }
         AssetSchema::Ifa => (
-            AssetInfo::default_ifa(vec![999], vec![], vec![]),
-            "rgb:9bU9k0zC-vBB3ZXu-VVhh0hp-QY58blH-QLsJpUv-oCiY2k4",
+            AssetInfo::default_ifa(vec![999], vec![]),
+            "rgb:1TyUZt~C-FxgMtiZ-vqFBx3b-_kszB6O-eAidSVh-NGRKTtA",
         ),
     };
 
@@ -508,12 +495,7 @@ fn contract_globals_order() {
     let tot_inflation = issue_amounts[1..].iter().sum();
     dbg!(tot_inflation);
     let issuance_utxo = wlt_1.get_utxo(None);
-    let contract_id = wlt_1.issue_ifa(
-        issue_amounts[0],
-        None,
-        vec![],
-        vec![(issuance_utxo, tot_inflation)],
-    );
+    let contract_id = wlt_1.issue_ifa(issue_amounts[0], None, vec![(issuance_utxo, tot_inflation)]);
 
     for (i, inflation_amt) in issue_amounts[1..].iter().enumerate() {
         let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);

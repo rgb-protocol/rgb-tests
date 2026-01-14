@@ -346,7 +346,6 @@ pub enum AssetInfo {
         terms: ContractTerms,
         reject_list_url: Option<RejectListUrl>,
         issue_amounts: Vec<u64>,
-        replace_outpoints: Vec<Outpoint>,
         inflation_info: Vec<(Outpoint, u64)>,
         link_info: (Option<ContractId>, Option<Outpoint>),
     },
@@ -414,11 +413,7 @@ impl AssetInfo {
         )
     }
 
-    pub fn default_ifa(
-        issue_amounts: Vec<u64>,
-        replace_outpoints: Vec<Outpoint>,
-        inflation_info: Vec<(Outpoint, u64)>,
-    ) -> Self {
+    pub fn default_ifa(issue_amounts: Vec<u64>, inflation_info: Vec<(Outpoint, u64)>) -> Self {
         AssetInfo::ifa(
             "IFATCKR",
             "IFA asset name",
@@ -428,7 +423,6 @@ impl AssetInfo {
             None,
             Some(REJECT_LIST_URL),
             issue_amounts,
-            replace_outpoints,
             inflation_info,
             (None, None),
         )
@@ -561,7 +555,6 @@ impl AssetInfo {
         terms_media_fpath: Option<&str>,
         reject_list_url: Option<&str>,
         issue_amounts: Vec<u64>,
-        replace_outpoints: Vec<Outpoint>,
         inflation_info: Vec<(Outpoint, u64)>,
         link_info: (Option<ContractId>, Option<Outpoint>),
     ) -> Self {
@@ -584,7 +577,6 @@ impl AssetInfo {
             reject_list_url: reject_list_url
                 .map(|u| RejectListUrl::try_from(u.to_owned()).unwrap()),
             issue_amounts,
-            replace_outpoints,
             inflation_info,
             link_info,
         }
@@ -745,24 +737,6 @@ impl AssetInfo {
                         get_builder_seal(*outpoint, blinding),
                         *amt,
                     )
-                    .unwrap();
-            }
-        }
-        builder
-    }
-
-    pub fn add_replace_right(
-        &self,
-        mut builder: ContractBuilder,
-        blinding: Option<u64>,
-    ) -> ContractBuilder {
-        if let Self::Ifa {
-            replace_outpoints, ..
-        } = self
-        {
-            for outpoint in replace_outpoints {
-                builder = builder
-                    .add_rights("replaceRight", get_builder_seal(*outpoint, blinding))
                     .unwrap();
             }
         }
@@ -1117,7 +1091,6 @@ where
         builder = asset_info.add_global_state(builder);
         builder = asset_info.add_asset_owner(builder, outpoints, blinding);
         builder = asset_info.add_inflation_allowance(builder, blinding);
-        builder = asset_info.add_replace_right(builder, blinding);
         builder = asset_info.add_link_right(builder, blinding);
 
         let created_at = created_at.unwrap_or_else(|| Utc::now().timestamp());
@@ -1157,11 +1130,9 @@ where
         &mut self,
         issued_supply: u64,
         outpoint: Option<&Outpoint>,
-        replace_outpoints: Vec<Outpoint>,
         inflation_info: Vec<(Outpoint, u64)>,
     ) -> ContractId {
-        let asset_info =
-            AssetInfo::default_ifa(vec![issued_supply], replace_outpoints, inflation_info);
+        let asset_info = AssetInfo::default_ifa(vec![issued_supply], inflation_info);
         self.issue_with_info(asset_info, vec![outpoint.copied()], None, None)
     }
 
@@ -1317,7 +1288,7 @@ where
 
     pub fn accept_transfer(&mut self, consignment: Transfer, report: Option<&Report>) -> Status {
         let resolver = self.get_resolver();
-        self.accept_transfer_custom(consignment, report, &resolver, bset![])
+        self.accept_transfer_custom(consignment, report, &resolver)
     }
 
     pub fn accept_transfer_custom(
@@ -1325,7 +1296,6 @@ where
         consignment: Transfer,
         report: Option<&Report>,
         resolver: &impl ResolveWitness,
-        trusted_op_seals: BTreeSet<OpId>,
     ) -> Status {
         self.sync();
         let validate_start = Instant::now();
@@ -1336,7 +1306,6 @@ where
                 &ValidationConfig {
                     chain_net: self.chain_net(),
                     trusted_typesystem: AssetSchema::from(consignment.schema_id()).types(),
-                    trusted_op_seals,
                     build_opouts_dag: true,
                     ..Default::default()
                 },
@@ -1658,13 +1627,7 @@ where
         let (consignment, tx, _, _) = self.pay_full(invoice, None, None, true, None);
         let txid = tx.txid();
         self.mine_tx(&txid_bp_to_bitcoin(txid), false);
-        let trusted_op_seals = consignment.replace_transitions_input_ops();
-        recv_wlt.accept_transfer_custom(
-            consignment.clone(),
-            None,
-            &recv_wlt.get_resolver(),
-            trusted_op_seals,
-        );
+        recv_wlt.accept_transfer_custom(consignment.clone(), None, &recv_wlt.get_resolver());
         self.sync();
         (consignment, tx)
     }

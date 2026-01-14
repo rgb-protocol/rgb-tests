@@ -4,8 +4,8 @@
   "terminals": {},
   "genesis": {
     "ffv": 0,
-    "schemaId": "rgb:sch:jCpmbaB5viN7ADbqM9o79mfcS9jj1cMrv~5gSaLXdW0#queen-joker-absent",
-    "timestamp": 1765901498,
+    "schemaId": "rgb:sch:p6H_wtDgei9HHUVLjKW0tNdHHFLhfHxrn9QX_QQUE78#scale-year-shave",
+    "timestamp": 1768327802,
     "issuer": "ssi:anonymous",
     "chainNet": "bitcoinRegtest",
     "sealClosingStrategy": "firstOpretOrTapret",
@@ -33,9 +33,9 @@
         "items": [
           {
             "seal": {
-              "txid": "7f73219278d4ea807604eb52bb3206c3b02969895211171842486d85a6249ea0",
-              "vout": 0,
-              "blinding": 17462886968488399251
+              "txid": "d20b2a6455a795e26f1a4c6cceb515cb6e36d931643684c6750e2d049b23be97",
+              "vout": 1,
+              "blinding": 3259561944024799135
             },
             "state": 666
           }
@@ -46,24 +46,11 @@
         "items": [
           {
             "seal": {
-              "txid": "7f73219278d4ea807604eb52bb3206c3b02969895211171842486d85a6249ea0",
-              "vout": 0,
-              "blinding": 10825611947828602559
+              "txid": "d20b2a6455a795e26f1a4c6cceb515cb6e36d931643684c6750e2d049b23be97",
+              "vout": 1,
+              "blinding": 15900867382779101602
             },
             "state": 100
-          }
-        ]
-      },
-      "4012": {
-        "type": "declarative",
-        "items": [
-          {
-            "seal": {
-              "txid": "7f73219278d4ea807604eb52bb3206c3b02969895211171842486d85a6249ea0",
-              "vout": 0,
-              "blinding": 13563725385882768927
-            },
-            "state": null
           }
         ]
       }
@@ -76,7 +63,7 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "7f73219278d4ea807604eb52bb3206c3b02969895211171842486d85a6249ea0:0",
+              "prevOutput": "d20b2a6455a795e26f1a4c6cceb515cb6e36d931643684c6750e2d049b23be97:1",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -85,15 +72,15 @@
           "outputs": [
             {
               "value": 0,
-              "scriptPubkey": "6a20544bf3ef2d872e70dc9f6cac2592fcb604267c1fdabf9a14536724f53145c477"
+              "scriptPubkey": "6a20ab563dc645e8ad481ba20613d85c5863f030439f9bb29a0a64cd5135af8fcf74"
             },
             {
               "value": 9000,
-              "scriptPubkey": "001466ec80da15a0ed85b5fe14f009887d5947c5f140"
+              "scriptPubkey": "0014f733d879d1cc03ce1b17a7564182abc55630b2c1"
             },
             {
               "value": 99990600,
-              "scriptPubkey": "00147061914f2408acfa3b22aa582fc1477d8db9e738"
+              "scriptPubkey": "0014ed3ae26c00ab6066993ba53101819625b7a44d89"
             }
           ],
           "lockTime": 0
@@ -101,64 +88,33 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 3,
+          "pos": 0,
           "cofactor": 0,
           "path": [
-            "11ce1f6163fe3642ffb5eddf2562474ca3f995c03fe0a6f9eb82b909335f2976",
-            "8799a947113d6383800d134161599df40dae4a93e372f2feef7c3a1a6af53d59",
-            "1fdc55353085681176ea794b7681992d8fbba90f9c7c26eaa17da12cc20e96c5"
+            "177d85dc11e305cbda48ded422e8cd7a7c77f819080bbda818ca735b5eafe994",
+            "c36330a2028186d87ebca16ce880a9d1ee1a42684cc51a6218b862849bd0bf22",
+            "ab41f05ba02d9358ca075600a7f17573e919174fc48a0b626754b59a1035d479"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "230706c9356c3264c7badb6227c98fc245fce99af82382dfef611d3350644bbb/4000/0": "6808ce0549221bff5faf316617e1b62ab187344f4f3e7af32c371e7ed153f4c1",
-          "230706c9356c3264c7badb6227c98fc245fce99af82382dfef611d3350644bbb/4010/0": "82cd31701e437d6b7ca912be262f548f8f77de81cd81ef2361441f2f5bf0b37d",
-          "230706c9356c3264c7badb6227c98fc245fce99af82382dfef611d3350644bbb/4012/0": "3cb422024173d64961c0c37aa3842b08fcfe14274063f9a702838217d313e964"
+          "d89f50bee61d284975702392fec938ffed5a740b6eafc82a2be19f28f71335a3/4000/0": "dec071e8fc1ed4fc0906d9f7b325fafa5df16b9dc8d26c4b8e430f1dacfb6fb8",
+          "d89f50bee61d284975702392fec938ffed5a740b6eafc82a2be19f28f71335a3/4010/0": "343b64f7751411c8fac25b3b07ad0c744d9b8904a15321a41b529e067ad9a1d3"
         },
         "knownTransitions": [
           {
-            "opid": "82cd31701e437d6b7ca912be262f548f8f77de81cd81ef2361441f2f5bf0b37d",
+            "opid": "dec071e8fc1ed4fc0906d9f7b325fafa5df16b9dc8d26c4b8e430f1dacfb6fb8",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:IwcGyTVs-MmTHutt-iJ8mPwk-X86Zr4I-4Lf72Ed-M1BkS7s",
+              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "230706c9356c3264c7badb6227c98fc245fce99af82382dfef611d3350644bbb/4010/0"
-              ],
-              "assignments": {
-                "4010": {
-                  "type": "fungible",
-                  "items": [
-                    {
-                      "seal": {
-                        "txid": null,
-                        "vout": 2,
-                        "blinding": 3256743567980818372
-                      },
-                      "state": 100
-                    }
-                  ]
-                }
-              },
-              "signature": null
-            }
-          },
-          {
-            "opid": "6808ce0549221bff5faf316617e1b62ab187344f4f3e7af32c371e7ed153f4c1",
-            "transition": {
-              "ffv": 0,
-              "contractId": "rgb:IwcGyTVs-MmTHutt-iJ8mPwk-X86Zr4I-4Lf72Ed-M1BkS7s",
-              "nonce": 18446744073709551615,
-              "transitionType": 10000,
-              "metadata": {},
-              "globals": {},
-              "inputs": [
-                "230706c9356c3264c7badb6227c98fc245fce99af82382dfef611d3350644bbb/4000/0"
+                "d89f50bee61d284975702392fec938ffed5a740b6eafc82a2be19f28f71335a3/4000/0"
               ],
               "assignments": {
                 "4000": {
@@ -168,7 +124,7 @@
                       "seal": {
                         "txid": null,
                         "vout": 2,
-                        "blinding": 15611392658824918378
+                        "blinding": 551529635014891351
                       },
                       "state": 666
                     }
@@ -179,28 +135,28 @@
             }
           },
           {
-            "opid": "3cb422024173d64961c0c37aa3842b08fcfe14274063f9a702838217d313e964",
+            "opid": "343b64f7751411c8fac25b3b07ad0c744d9b8904a15321a41b529e067ad9a1d3",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:IwcGyTVs-MmTHutt-iJ8mPwk-X86Zr4I-4Lf72Ed-M1BkS7s",
+              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "230706c9356c3264c7badb6227c98fc245fce99af82382dfef611d3350644bbb/4012/0"
+                "d89f50bee61d284975702392fec938ffed5a740b6eafc82a2be19f28f71335a3/4010/0"
               ],
               "assignments": {
-                "4012": {
-                  "type": "declarative",
+                "4010": {
+                  "type": "fungible",
                   "items": [
                     {
                       "seal": {
                         "txid": null,
                         "vout": 2,
-                        "blinding": 18323986463667731568
+                        "blinding": 7487465468667731468
                       },
-                      "state": null
+                      "state": 100
                     }
                   ]
                 }
@@ -217,7 +173,7 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "38d1f547ea1fcbf73bd753a8c0c463a01643df3d3ec972b547be1fbec5490d09:2",
+              "prevOutput": "bcd1faef6a10c7b5b652c2ce31b7ab200673f0ea5467f413d641e9236b1154c5:2",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -226,11 +182,11 @@
           "outputs": [
             {
               "value": 0,
-              "scriptPubkey": "6a20656fc5bebbd861c636692646e99f35600f5bec6911c5f3053cbe1efb7da0fa1d"
+              "scriptPubkey": "6a20ff5abad6c3ab6da244a9cff4e5ab94f2003a745a50751c89e3e3349dd1b80ad8"
             },
             {
               "value": 99990200,
-              "scriptPubkey": "001425c248801bf2618d2c65c246480e25800a318844"
+              "scriptPubkey": "0014b146de068cedaa3aa0186cacc0705b6d9998d8f4"
             }
           ],
           "lockTime": 0
@@ -238,36 +194,34 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 3,
+          "pos": 0,
           "cofactor": 0,
           "path": [
-            "f7f0ab396136c1e1ee86027bb5ed399bf1439f4ddd26d57bf0aaf5c4aa6da3b7",
-            "6aad39d946c8edac77693e413e804286ddf325b9a9e583ff26e6bf5e4bbac0d7",
-            "624f6fd8f59b0b75ffcc40c8e9011091f9f475524e278bcf7de75e4e01138b2f"
+            "a0bc45c6976181e3183bcc0b7a5825d7f9af4b8187fa28f04a35b39ab649c3cd",
+            "8cce52aea4b69db1683cc90e7f985ceed65ffa242441489d65a33ce96f6b379a",
+            "e0f9d48870645b3fb3837951820972479e7019260d2705de1de62d58f2ad017e"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "3cb422024173d64961c0c37aa3842b08fcfe14274063f9a702838217d313e964/4012/0": "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068",
-          "6808ce0549221bff5faf316617e1b62ab187344f4f3e7af32c371e7ed153f4c1/4000/0": "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068",
-          "82cd31701e437d6b7ca912be262f548f8f77de81cd81ef2361441f2f5bf0b37d/4010/0": "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068"
+          "343b64f7751411c8fac25b3b07ad0c744d9b8904a15321a41b529e067ad9a1d3/4010/0": "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d",
+          "dec071e8fc1ed4fc0906d9f7b325fafa5df16b9dc8d26c4b8e430f1dacfb6fb8/4000/0": "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d"
         },
         "knownTransitions": [
           {
-            "opid": "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068",
+            "opid": "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:IwcGyTVs-MmTHutt-iJ8mPwk-X86Zr4I-4Lf72Ed-M1BkS7s",
+              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "3cb422024173d64961c0c37aa3842b08fcfe14274063f9a702838217d313e964/4012/0",
-                "6808ce0549221bff5faf316617e1b62ab187344f4f3e7af32c371e7ed153f4c1/4000/0",
-                "82cd31701e437d6b7ca912be262f548f8f77de81cd81ef2361441f2f5bf0b37d/4010/0"
+                "343b64f7751411c8fac25b3b07ad0c744d9b8904a15321a41b529e067ad9a1d3/4010/0",
+                "dec071e8fc1ed4fc0906d9f7b325fafa5df16b9dc8d26c4b8e430f1dacfb6fb8/4000/0"
               ],
               "assignments": {
                 "4000": {
@@ -277,7 +231,7 @@
                       "seal": {
                         "txid": null,
                         "vout": 1,
-                        "blinding": 11640760669955900797
+                        "blinding": 5745744636059418323
                       },
                       "state": 666
                     }
@@ -288,26 +242,13 @@
                   "items": [
                     {
                       "seal": {
-                        "txid": "8b64320bf2caffb8731967de1940247423d75ee95075c0da966e10622c90ab5c",
-                        "vout": 1,
-                        "blinding": 11034159189520134043
+                        "txid": "b52305095266d6f683f333e984eaee5cbabdfacb1e5336f2395bb074d89950ac",
+                        "vout": 0,
+                        "blinding": 6838967523623182644
                       },
                       "state": 100
                     }
                   ]
-                },
-                "4012": {
-                  "type": "declarative",
-                  "items": [
-                    {
-                      "seal": {
-                        "txid": null,
-                        "vout": 1,
-                        "blinding": 4890559382062400811
-                      },
-                      "state": null
-                    }
-                  ]
                 }
               },
               "signature": null
@@ -322,276 +263,7 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "f8fb0d60169fc6430551ed6fa7a71a91dec999ef409197b9b8a250850c4a1e7e:1",
-              "sigScript": "",
-              "sequence": 0,
-              "witness": []
-            }
-          ],
-          "outputs": [
-            {
-              "value": 0,
-              "scriptPubkey": "6a2084358d4dcb000d0a26939417ba33d0353483f816b19c65db671726446c14494e"
-            },
-            {
-              "value": 8000,
-              "scriptPubkey": "00142fc83baaada5c3b34fbb7cbf10b8e290f586eaa2"
-            },
-            {
-              "value": 99981800,
-              "scriptPubkey": "0014842f28d2b912ff795a881856f382b9c111c6cb8b"
-            }
-          ],
-          "lockTime": 0
-        }
-      },
-      "anchor": {
-        "mpcProof": {
-          "pos": 3,
-          "cofactor": 0,
-          "path": [
-            "97031fc3880192a9d389d6b052e857690b31a44c01912ba09a342905491ee0d1",
-            "f8dbb9360103211622c33aef15778507212fb78ff4de0777bfde0fe740ffea43",
-            "e794f6e4479ed80ba35620cc0ba83bb82571f93745909d0ac3539f0d0ca38dfb"
-          ]
-        },
-        "dbcProof": null
-      },
-      "bundle": {
-        "inputMap": {
-          "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068/4000/0": "9e9cfb314e743e9c83959259bd712697699e8df56e8e390e5ff6f0378aede01d",
-          "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068/4012/0": "9e9cfb314e743e9c83959259bd712697699e8df56e8e390e5ff6f0378aede01d"
-        },
-        "knownTransitions": [
-          {
-            "opid": "9e9cfb314e743e9c83959259bd712697699e8df56e8e390e5ff6f0378aede01d",
-            "transition": {
-              "ffv": 0,
-              "contractId": "rgb:IwcGyTVs-MmTHutt-iJ8mPwk-X86Zr4I-4Lf72Ed-M1BkS7s",
-              "nonce": 18446744073709551615,
-              "transitionType": 10000,
-              "metadata": {},
-              "globals": {},
-              "inputs": [
-                "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068/4000/0",
-                "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068/4012/0"
-              ],
-              "assignments": {
-                "4000": {
-                  "type": "fungible",
-                  "items": [
-                    {
-                      "seal": {
-                        "txid": null,
-                        "vout": 1,
-                        "blinding": 10578808723434006197
-                      },
-                      "state": 666
-                    }
-                  ]
-                },
-                "4012": {
-                  "type": "declarative",
-                  "items": [
-                    {
-                      "seal": {
-                        "txid": null,
-                        "vout": 2,
-                        "blinding": 3705804964305434031
-                      },
-                      "state": null
-                    }
-                  ]
-                }
-              },
-              "signature": null
-            }
-          }
-        ]
-      }
-    },
-    {
-      "pubWitness": {
-        "tx": {
-          "version": 2,
-          "inputs": [
-            {
-              "prevOutput": "8c5e53688b76b7db277031c0dbe286d961109736eefc5baae02ae4976c3c549d:1",
-              "sigScript": "",
-              "sequence": 0,
-              "witness": []
-            },
-            {
-              "prevOutput": "8c5e53688b76b7db277031c0dbe286d961109736eefc5baae02ae4976c3c549d:2",
-              "sigScript": "",
-              "sequence": 0,
-              "witness": []
-            }
-          ],
-          "outputs": [
-            {
-              "value": 7600,
-              "scriptPubkey": "0014cd343cd16142d1fd461378612a556d92eab7d877"
-            },
-            {
-              "value": 99981800,
-              "scriptPubkey": "0014f49227aa08c0d57a9c0a486eb57c157f93161f65"
-            },
-            {
-              "value": 0,
-              "scriptPubkey": "6a205bcf20ccca018f5f4c60b0cf822c090184a90b9fbfe29ac56daef85db6e932eb"
-            }
-          ],
-          "lockTime": 0
-        }
-      },
-      "anchor": {
-        "mpcProof": {
-          "pos": 3,
-          "cofactor": 0,
-          "path": [
-            "e092f63e329bea6d463d299eebc5b2607e5bcb1d725f3ba370c92274898d2e53",
-            "92385aaf9a05e4ff26caf244bdde998637015b8e6671b698e1dc974920418fd1",
-            "909328eae280692f38ee7c9812eb258a7552b08b6a9da871e09a92b666372482"
-          ]
-        },
-        "dbcProof": null
-      },
-      "bundle": {
-        "inputMap": {
-          "9e9cfb314e743e9c83959259bd712697699e8df56e8e390e5ff6f0378aede01d/4000/0": "71e3d2f99482d285bdfecbdf75ff914f85b88c5eaa3c178aadfe58c0f434f04b",
-          "9e9cfb314e743e9c83959259bd712697699e8df56e8e390e5ff6f0378aede01d/4012/0": "71e3d2f99482d285bdfecbdf75ff914f85b88c5eaa3c178aadfe58c0f434f04b"
-        },
-        "knownTransitions": [
-          {
-            "opid": "71e3d2f99482d285bdfecbdf75ff914f85b88c5eaa3c178aadfe58c0f434f04b",
-            "transition": {
-              "ffv": 0,
-              "contractId": "rgb:IwcGyTVs-MmTHutt-iJ8mPwk-X86Zr4I-4Lf72Ed-M1BkS7s",
-              "nonce": 18446744073709551615,
-              "transitionType": 8011,
-              "metadata": {},
-              "globals": {},
-              "inputs": [
-                "9e9cfb314e743e9c83959259bd712697699e8df56e8e390e5ff6f0378aede01d/4000/0",
-                "9e9cfb314e743e9c83959259bd712697699e8df56e8e390e5ff6f0378aede01d/4012/0"
-              ],
-              "assignments": {
-                "4000": {
-                  "type": "fungible",
-                  "items": [
-                    {
-                      "seal": {
-                        "txid": null,
-                        "vout": 0,
-                        "blinding": 9992391026715388190
-                      },
-                      "state": 666
-                    }
-                  ]
-                },
-                "4012": {
-                  "type": "declarative",
-                  "items": [
-                    {
-                      "seal": {
-                        "txid": null,
-                        "vout": 1,
-                        "blinding": 7852114934535433948
-                      },
-                      "state": null
-                    }
-                  ]
-                }
-              },
-              "signature": null
-            }
-          }
-        ]
-      }
-    },
-    {
-      "pubWitness": {
-        "tx": {
-          "version": 2,
-          "inputs": [
-            {
-              "prevOutput": "4e6051c28827eb045293d30f20af5da0754c117b6143eaed5369f487d33313d9:0",
-              "sigScript": "",
-              "sequence": 0,
-              "witness": []
-            }
-          ],
-          "outputs": [
-            {
-              "value": 0,
-              "scriptPubkey": "6a2067033d5305f48fba75f7e0c9bd292f981dd4e74434776f5cc7ceced3af0c4fcf"
-            },
-            {
-              "value": 7000,
-              "scriptPubkey": "0014ba24f26f26bd4cf3575246322a2ad4ec76b1b0a2"
-            }
-          ],
-          "lockTime": 0
-        }
-      },
-      "anchor": {
-        "mpcProof": {
-          "pos": 3,
-          "cofactor": 0,
-          "path": [
-            "29493fd85dd7a8cc76e1107e3a40af1f56eab68b0b5c11444c53dd649ca68ac3",
-            "87beb961441f287c14d9a369878997e124a09449376b2891915b7c011d7085a4",
-            "a69760fc9470c488b083f2be40b08658922211345b0277709cea681572c72dca"
-          ]
-        },
-        "dbcProof": null
-      },
-      "bundle": {
-        "inputMap": {
-          "71e3d2f99482d285bdfecbdf75ff914f85b88c5eaa3c178aadfe58c0f434f04b/4000/0": "53e491c3b399df0a0670f5ad13d344b590136e36c8b2544fe3299b3d3d25752c"
-        },
-        "knownTransitions": [
-          {
-            "opid": "53e491c3b399df0a0670f5ad13d344b590136e36c8b2544fe3299b3d3d25752c",
-            "transition": {
-              "ffv": 0,
-              "contractId": "rgb:IwcGyTVs-MmTHutt-iJ8mPwk-X86Zr4I-4Lf72Ed-M1BkS7s",
-              "nonce": 18446744073709551615,
-              "transitionType": 10000,
-              "metadata": {},
-              "globals": {},
-              "inputs": [
-                "71e3d2f99482d285bdfecbdf75ff914f85b88c5eaa3c178aadfe58c0f434f04b/4000/0"
-              ],
-              "assignments": {
-                "4000": {
-                  "type": "fungible",
-                  "items": [
-                    {
-                      "seal": {
-                        "txid": null,
-                        "vout": 1,
-                        "blinding": 10913637264672349610
-                      },
-                      "state": 666
-                    }
-                  ]
-                }
-              },
-              "signature": null
-            }
-          }
-        ]
-      }
-    },
-    {
-      "pubWitness": {
-        "tx": {
-          "version": 2,
-          "inputs": [
-            {
-              "prevOutput": "8b64320bf2caffb8731967de1940247423d75ee95075c0da966e10622c90ab5c:1",
+              "prevOutput": "b52305095266d6f683f333e984eaee5cbabdfacb1e5336f2395bb074d89950ac:0",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -600,15 +272,15 @@
           "outputs": [
             {
               "value": 49999800,
-              "scriptPubkey": "00143bcf321b24666268a3db3d53fd84ebc1fd05fa00"
+              "scriptPubkey": "00149b85ebf99e324cbfb4cf394699efb50db7f94c4c"
             },
             {
               "value": 49999800,
-              "scriptPubkey": "00144b7c5a70c8e0e50e14cc54439e1bfb4ff7339936"
+              "scriptPubkey": "00145f2fe29a15c90da9abce0e1db0163962e9a60533"
             },
             {
               "value": 0,
-              "scriptPubkey": "6a201d54a941ab9ff4f8edc82d4cac652a07517b8dcf4a6b66003c59de4b4534dfd8"
+              "scriptPubkey": "6a20df21f64aeff7eb22249e4c6d5c408bcb301c7dfa1e3474b035ad1d40d0f0cb15"
             }
           ],
           "lockTime": 0
@@ -616,26 +288,26 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 3,
+          "pos": 0,
           "cofactor": 0,
           "path": [
-            "e0ec88fdf9e03a1ad166645e0e761289568b4b5a1e63b4697d6196e55d693496",
-            "27d90d56906bc52859e3fb4f5605aa88eba7f39b47a24ca7ed14351416c174dd",
-            "c3f996694d4a31fee3962114c46a25c341902bb09a6e079a94ac91458e28a42b"
+            "414d251ee5673247f80a2c02b80811c3e1f518b78f69e9e854def04c463c6cb7",
+            "730c09b4a7f82cdd5b349b03aa409ce0443e5e0412fc1b47c85ad60a130badc4",
+            "f86c453f119f76554666e99826257c94f019efed68c91202edebdc30598f77d7"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068/4010/0": "74e411868460f35f0f33083942e196536dfa8d954e3eaac9cb1c1216209c337a"
+          "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d/4010/0": "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f"
         },
         "knownTransitions": [
           {
-            "opid": "74e411868460f35f0f33083942e196536dfa8d954e3eaac9cb1c1216209c337a",
+            "opid": "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:IwcGyTVs-MmTHutt-iJ8mPwk-X86Zr4I-4Lf72Ed-M1BkS7s",
+              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
               "nonce": 18446744073709551615,
               "transitionType": 8000,
               "metadata": {
@@ -647,7 +319,7 @@
                 ]
               },
               "inputs": [
-                "4c7928b58038e777934cc70c45e78ae652769791890d664a62efd11c73718068/4010/0"
+                "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d/4010/0"
               ],
               "assignments": {
                 "4000": {
@@ -657,7 +329,7 @@
                       "seal": {
                         "txid": null,
                         "vout": 0,
-                        "blinding": 15219119549678937399
+                        "blinding": 16799276049115078484
                       },
                       "state": 60
                     }
@@ -670,7 +342,7 @@
                       "seal": {
                         "txid": null,
                         "vout": 1,
-                        "blinding": 6457018641167933793
+                        "blinding": 13654059782808730808
                       },
                       "state": 40
                     }
@@ -689,25 +361,19 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "4e6051c28827eb045293d30f20af5da0754c117b6143eaed5369f487d33313d9:1",
+              "prevOutput": "debb5703d305a8532db2b3fe449137f3899e607482fa0f8b1b9b141e6a9270b6:1",
               "sigScript": "",
               "sequence": 0,
               "witness": []
             },
             {
-              "prevOutput": "d9bcbaf5fcc8713c0e9461c0fdde2b111c9085d13686ebde81686beb5c174349:1",
+              "prevOutput": "9dfe5a7d40113bcc7d3065c9597a421df1abeb8671c7957cdad516066aa553fe:1",
               "sigScript": "",
               "sequence": 0,
               "witness": []
             },
             {
-              "prevOutput": "d17b8996d6a2510f1b7cca00cf69603a888f05696dd78a7575e2b978043d0fb5:1",
-              "sigScript": "",
-              "sequence": 0,
-              "witness": []
-            },
-            {
-              "prevOutput": "d17b8996d6a2510f1b7cca00cf69603a888f05696dd78a7575e2b978043d0fb5:0",
+              "prevOutput": "debb5703d305a8532db2b3fe449137f3899e607482fa0f8b1b9b141e6a9270b6:0",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -715,12 +381,12 @@
           ],
           "outputs": [
             {
-              "value": 199988000,
-              "scriptPubkey": "001458d92eee0d4947d4d42c9ec92f4c45b5a7e6d098"
+              "value": 199989400,
+              "scriptPubkey": "0014fbd52e48414ca64e371863185f37faf9688f4793"
             },
             {
               "value": 0,
-              "scriptPubkey": "6a20008b7f432eaa5608ef43a67abf4a23a225301080a0c530a2c994f94a25ff553d"
+              "scriptPubkey": "6a2003801a4d14ca60ec82ed828dad24a0ad2aaf3fd08ce24afe88a6f23dd3b83a20"
             }
           ],
           "lockTime": 0
@@ -728,38 +394,36 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 3,
+          "pos": 0,
           "cofactor": 0,
           "path": [
-            "2d888cf43681191b4ff88a50c4e12f7a7db114c26c183f52f3f56d3de43df0cf",
-            "c6a97c4ee2e9c0330da8d771107337a27c4f7f6abb688debb31c2e5f63dcd9e4",
-            "59e38a60112cab900c66151a3d2888ff53aee5a13420fbdbc09f04f60f18311b"
+            "2654d00479f293cb87da5ce93132c92a44b64637ba8035d16c0c3df0138e6937",
+            "711c461665619d9ffbc47fbd36afef92acb1e1aceb9563c8d5537595c8c80dd9",
+            "782a9e5846909dab4906c273b0e3984f5f6f22a15e5f0ec13d5c406ce320b7b6"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "53e491c3b399df0a0670f5ad13d344b590136e36c8b2544fe3299b3d3d25752c/4000/0": "5f5cb6e2fa921366ade67ee9461e0c54a26a72d87c8dd6816d6812626e4ef497",
-          "71e3d2f99482d285bdfecbdf75ff914f85b88c5eaa3c178aadfe58c0f434f04b/4012/0": "5f5cb6e2fa921366ade67ee9461e0c54a26a72d87c8dd6816d6812626e4ef497",
-          "74e411868460f35f0f33083942e196536dfa8d954e3eaac9cb1c1216209c337a/4000/0": "5f5cb6e2fa921366ade67ee9461e0c54a26a72d87c8dd6816d6812626e4ef497",
-          "74e411868460f35f0f33083942e196536dfa8d954e3eaac9cb1c1216209c337a/4010/0": "5f5cb6e2fa921366ade67ee9461e0c54a26a72d87c8dd6816d6812626e4ef497"
+          "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d/4000/0": "4c7b84de230c89a09fb15d3a4e21bab1a89c211428fca8f357504e82e980a7fd",
+          "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f/4000/0": "4c7b84de230c89a09fb15d3a4e21bab1a89c211428fca8f357504e82e980a7fd",
+          "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f/4010/0": "4c7b84de230c89a09fb15d3a4e21bab1a89c211428fca8f357504e82e980a7fd"
         },
         "knownTransitions": [
           {
-            "opid": "5f5cb6e2fa921366ade67ee9461e0c54a26a72d87c8dd6816d6812626e4ef497",
+            "opid": "4c7b84de230c89a09fb15d3a4e21bab1a89c211428fca8f357504e82e980a7fd",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:IwcGyTVs-MmTHutt-iJ8mPwk-X86Zr4I-4Lf72Ed-M1BkS7s",
+              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
               "nonce": 18446744073709551615,
               "transitionType": 8010,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "53e491c3b399df0a0670f5ad13d344b590136e36c8b2544fe3299b3d3d25752c/4000/0",
-                "71e3d2f99482d285bdfecbdf75ff914f85b88c5eaa3c178aadfe58c0f434f04b/4012/0",
-                "74e411868460f35f0f33083942e196536dfa8d954e3eaac9cb1c1216209c337a/4000/0",
-                "74e411868460f35f0f33083942e196536dfa8d954e3eaac9cb1c1216209c337a/4010/0"
+                "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d/4000/0",
+                "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f/4000/0",
+                "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f/4010/0"
               ],
               "assignments": {},
               "signature": null
@@ -844,11 +508,6 @@
         "name": "inflationAllowance",
         "defaultTransition": 10000
       },
-      "4012": {
-        "ownedStateSchema": "declarative",
-        "name": "replaceRight",
-        "defaultTransition": 10000
-      },
       "4013": {
         "ownedStateSchema": "declarative",
         "name": "linkRight",
@@ -868,7 +527,6 @@
       "assignments": {
         "4000": "noneOrMore",
         "4010": "noneOrMore",
-        "4012": "noneOrMore",
         "4013": "noneOrOnce"
       },
       "validator": {
@@ -906,32 +564,12 @@
           "inputs": {
             "4000": "noneOrMore",
             "4010": "noneOrMore",
-            "4012": "noneOrMore",
             "4013": "noneOrOnce"
           },
           "assignments": {},
           "validator": null
         },
         "name": "burn"
-      },
-      "8011": {
-        "transitionSchema": {
-          "metadata": [],
-          "globals": {},
-          "inputs": {
-            "4000": "onceOrMore",
-            "4012": "onceOrMore"
-          },
-          "assignments": {
-            "4000": "onceOrMore",
-            "4012": "onceOrMore"
-          },
-          "validator": {
-            "lib": "0ab6923b6dfd17180f52663d8afdf5f4fa6203c4b6a43e9aaccd906e1fb51c2a",
-            "pos": 0
-          }
-        },
-        "name": "replace"
       },
       "8012": {
         "transitionSchema": {
@@ -954,17 +592,15 @@
           "inputs": {
             "4000": "noneOrMore",
             "4010": "noneOrMore",
-            "4012": "noneOrMore",
             "4013": "noneOrOnce"
           },
           "assignments": {
             "4000": "noneOrMore",
             "4010": "noneOrMore",
-            "4012": "noneOrMore",
             "4013": "noneOrOnce"
           },
           "validator": {
-            "lib": "0ab6923b6dfd17180f52663d8afdf5f4fa6203c4b6a43e9aaccd906e1fb51c2a",
+            "lib": "027be242712c835b10596ec5b87604e5842f045f35cdd2cab8e22cfa09e464b3",
             "pos": 0
           }
         },
@@ -1545,42 +1181,6 @@
         170,
         15,
         1,
-        192,
-        172,
-        15,
-        0,
-        193,
-        172,
-        15,
-        1,
-        11,
-        17,
-        1,
-        0,
-        25,
-        1,
-        34,
-        3,
-        40,
-        0,
-        11,
-        0,
-        3,
-        0,
-        24,
-        9,
-        32,
-        31,
-        1,
-        7,
-        11,
-        0,
-        4,
-        0,
-        25,
-        9,
-        32,
-        1,
         11,
         0,
         0,
@@ -1600,11 +1200,7 @@
         7
       ],
       "data": [
-        0,
-        0,
-        0,
-        36,
-        35
+        0
       ],
       "libs": []
     },

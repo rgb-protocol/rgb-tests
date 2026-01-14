@@ -340,7 +340,7 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
     let utxo = wlt_1.get_utxo(None);
     let contract_id_1 = wlt_1.issue_nia(issued_supply_1, Some(&utxo));
     let contract_id_2 = match scenario {
-        Scenario::C => wlt_1.issue_ifa(issued_supply_2, Some(&utxo), vec![utxo], vec![(utxo, 100)]),
+        Scenario::C => wlt_1.issue_ifa(issued_supply_2, Some(&utxo), vec![(utxo, 100)]),
         _ => wlt_1.issue_nia(issued_supply_2, Some(&utxo)),
     };
 
@@ -350,8 +350,6 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
     txes.push(tx);
 
     if scenario == Scenario::C {
-        // wlt_1 can't replace assets since its inflation right would also be included
-
         // get inflation right out of the way
         let schema_id_2 = wlt_1.schema_id(contract_id_2);
         let mut invoice =
@@ -361,33 +359,6 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
         wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
         wlt_1.accept_transfer(consignment, None);
         wlt_1.sync();
-        txes.push(tx);
-
-        // send assets to be replaced to wlt_2
-        let amt = 666;
-        let (_, tx) = wlt_1.send(
-            &mut wlt_2,
-            transfer_type,
-            contract_id_2,
-            amt,
-            sats - 1000,
-            None,
-        );
-        let change_utxo = Outpoint::new(txid_bp_to_bitcoin(tx.txid()), 2);
-        txes.push(tx);
-
-        // replace assets
-        let tx = wlt_2.replace_ifa(&mut wlt_1, change_utxo, contract_id_2);
-        txes.push(tx);
-        // send them back to carry on with test
-        let (_, tx) = wlt_2.send(
-            &mut wlt_1,
-            transfer_type,
-            contract_id_2,
-            amt,
-            sats - 2000,
-            None,
-        );
         txes.push(tx);
     }
 
@@ -2089,7 +2060,7 @@ fn validate_consignment_logic_fail() {
                     .iter()
                     .map(|i| i.ty)
                     .collect::<HashSet<_>>()
-                    .is_superset(&set![OS_ASSET, OS_REPLACE, OS_INFLATION])
+                    .is_superset(&set![OS_ASSET, OS_INFLATION])
             {
                 witness_id = Some(wbun.witness_id());
                 transfer_transition = Some(transition);
@@ -2100,8 +2071,18 @@ fn validate_consignment_logic_fail() {
     let witness_id = witness_id.unwrap();
     let mut transition = transfer_transition.unwrap().clone();
     let old_opid = transition.id();
-    transition.transition_type = TS_REPLACE;
-    transition.assignments.remove(&OS_INFLATION).unwrap();
+    transition.transition_type = TS_INFLATION;
+    let val = Amount::from(42u64)
+        .to_strict_serialized::<{ u16::MAX as usize }>()
+        .unwrap();
+    transition
+        .metadata
+        .add_value(MS_ALLOWED_INFLATION, val.clone().into())
+        .unwrap();
+    transition
+        .globals
+        .add_state(GS_ISSUED_SUPPLY, val.into())
+        .unwrap();
     let opid = transition.id();
     assert_ne!(opid, old_opid);
     let wbundle = bundles
@@ -2121,10 +2102,7 @@ fn validate_consignment_logic_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(
-            opid,
-            OS_INFLATION
-        ))
+        ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(opid, OS_ASSET))
     );
 }
 
@@ -2277,227 +2255,22 @@ fn validate_consignment_ifa() {
         ..Default::default()
     };
 
-    // find a "transfer" transition that moves a "replace right" allocation
-    let spent_replace_opouts = base_consignment
+    // take the last "transfer" transition
+    let (old_txid, known_transition) = base_consignment
         .bundles
         .iter()
-        .flat_map(|b| b.bundle.known_transitions.iter())
-        .filter(|kt| kt.transition.transition_type == TS_TRANSFER)
-        .flat_map(|kt| kt.transition.inputs.iter().map(|ti| (ti.op, ti.ty)))
-        .collect::<HashSet<_>>();
-    let mut witness_id = None;
-    let mut base_transition = None;
-    for wbun in base_consignment.bundled_witnesses() {
-        for KnownTransition { opid, transition } in wbun.bundle.known_transitions.iter() {
-            if transition.inputs.len() > 1
-                && transition.inputs.iter().any(|i| i.ty == OS_REPLACE)
-                && transition.transition_type == TS_TRANSFER
-                // need its child later in the test
-                && spent_replace_opouts.contains(&(*opid, OS_REPLACE))
-            {
-                witness_id = Some(wbun.witness_id());
-                base_transition = Some(transition.clone());
-                break;
+        .filter_map(|wb| {
+            let kt = wb.bundle.known_transitions.last().unwrap();
+            if kt.transition.transition_type == TS_TRANSFER {
+                Some((wb.witness_id(), kt))
+            } else {
+                None
             }
-        }
-    }
-    let old_txid = witness_id.unwrap();
-    let base_transition = base_transition.unwrap();
-    let old_opid = base_transition.id();
-
-    // Success: replace right can be shared with others without losing it
-    let mut consignment = base_consignment.clone();
-    let mut bundles = consignment.bundles.release();
-    let wbundle = bundles
-        .iter_mut()
-        .find(|wb| wb.witness_id() == old_txid)
+        })
+        .next_back()
         .unwrap();
-    let mut transition = base_transition.clone();
-    let TypedAssigns::Declarative(replace_assignments) =
-        transition.assignments.get_mut(&OS_REPLACE).unwrap()
-    else {
-        panic!("unexpected assignment type")
-    };
-    let replace_assignment = replace_assignments[0].clone();
-    replace_assignments.push(replace_assignment).unwrap();
-    let opid = transition.id();
-    replace_transition_in_bundle(wbundle, old_opid, transition);
-    let txid = wbundle.witness_id();
-    update_transition_children(
-        &mut bundles,
-        HashMap::from([(old_opid, opid)]),
-        HashMap::from([(old_txid, txid)]),
-    );
-    consignment.bundles = LargeVec::from_checked(bundles);
-    let resolver = OfflineResolver {
-        consignment: &consignment,
-    };
-    let res = consignment.clone().validate(&resolver, &validation_config);
-    assert!(res.is_ok());
-
-    // Error: replace rights cannot be burned via transfer operation (2 in, 1 out)
-    // NOTE: reusing previous consignment to exploit duplicated allocation
-    let mut consignment = consignment.clone();
-    let mut bundles = consignment.bundles.release();
-    let mut child_witness_id = None;
-    let mut child_transition = None;
-    for wbun in bundles.iter() {
-        for KnownTransition { transition, .. } in wbun.bundle.known_transitions.iter() {
-            if transition
-                .inputs
-                .iter()
-                .any(|i| i.op == opid && i.ty == OS_REPLACE)
-            {
-                child_witness_id = Some(wbun.witness_id());
-                child_transition = Some(transition);
-                break;
-            }
-        }
-    }
-    let old_child_txid = child_witness_id.unwrap();
-    let child_transition = child_transition.unwrap();
-    let mut transition = child_transition.clone();
-    let old_child_opid = transition.id();
-    // add another replace right in input
-    let mut replace_input = *transition
-        .inputs
-        .iter()
-        .find(|i| i.ty == OS_REPLACE)
-        .unwrap();
-    replace_input.no = 1;
-    transition.inputs.push(replace_input).unwrap();
-    let child_opid = transition.id();
-    assert!(
-        transition
-            .inputs
-            .iter()
-            .filter(|i| i.ty == OS_REPLACE)
-            .count()
-            == 2
-    );
-    assert!(transition.assignments.get(&OS_REPLACE).iter().len() == 1);
-    assert_ne!(child_opid, old_child_opid);
-    let child_wbundle = bundles
-        .iter_mut()
-        .find(|wb| wb.witness_id() == old_child_txid)
-        .unwrap();
-    child_wbundle
-        .bundle
-        .input_map
-        .insert(replace_input, old_child_opid)
-        .unwrap();
-    replace_transition_in_bundle(child_wbundle, old_child_opid, transition);
-    let child_txid = child_wbundle.witness_id();
-    update_transition_children(
-        &mut bundles,
-        HashMap::from([(old_child_opid, child_opid)]),
-        HashMap::from([(old_child_txid, child_txid)]),
-    );
-    consignment.bundles = LargeVec::from_checked(bundles);
-    let resolver = OfflineResolver {
-        consignment: &consignment,
-    };
-    let res = consignment
-        .clone()
-        .validate(&resolver, &validation_config)
-        .unwrap_err();
-    dbg!(&res);
-    assert_eq!(
-        res,
-        ValidationError::InvalidConsignment(Failure::ScriptFailure(
-            child_opid,
-            Some(ERRNO_REPLACE_HIDDEN_BURN),
-            None
-        ))
-    );
-
-    // Error: replace rights cannot be created from thin air
-    let mut consignment = base_consignment.clone();
-    let mut bundles = consignment.bundles.release();
-    let wbundle = bundles
-        .iter_mut()
-        .find(|wb| wb.witness_id() == old_txid)
-        .unwrap();
-    let mut transition = base_transition.clone();
-    let old_opid = transition.id();
-    let TypedAssigns::Declarative(replace_assignments) =
-        transition.assignments.get_mut(&OS_REPLACE).unwrap()
-    else {
-        panic!("unexpected assignment type")
-    };
-    replace_assignments
-        .push(Assign::revealed(
-            BlindSeal::strict_dumb(),
-            VoidState::strict_dumb(),
-        ))
-        .unwrap();
-    transition.inputs = NonEmptyOrdSet::from_iter_checked(
-        transition.inputs.into_iter().filter(|i| i.ty != OS_REPLACE),
-    )
-    .into();
-    let opid = transition.id();
-    replace_transition_in_bundle(wbundle, old_opid, transition);
-    let txid = wbundle.witness_id();
-    update_transition_children(
-        &mut bundles,
-        HashMap::from([(old_opid, opid)]),
-        HashMap::from([(old_txid, txid)]),
-    );
-    consignment.bundles = LargeVec::from_checked(bundles);
-    let resolver = OfflineResolver {
-        consignment: &consignment,
-    };
-    let res = consignment
-        .clone()
-        .validate(&resolver, &validation_config)
-        .unwrap_err();
-    dbg!(&res);
-    assert_eq!(
-        res,
-        ValidationError::InvalidConsignment(Failure::ScriptFailure(
-            opid,
-            Some(ERRNO_REPLACE_NO_INPUT),
-            None
-        ))
-    );
-
-    // Error: replace rights cannot be burned via transfer operation (1 in, 0 out)
-    let mut consignment = base_consignment.clone();
-    let mut bundles = consignment.bundles.release();
-    let wbundle = bundles
-        .iter_mut()
-        .find(|wb| wb.witness_id() == old_txid)
-        .unwrap();
-    let mut transition = base_transition.clone();
-    let old_opid = transition.id();
-    transition.assignments.remove(&OS_REPLACE).unwrap();
-    let opid = transition.id();
-    assert_ne!(opid, old_opid);
-    replace_transition_in_bundle(wbundle, old_opid, transition);
-    let txid = wbundle.witness_id();
-    update_transition_children(
-        &mut bundles,
-        HashMap::from([(old_opid, opid)]),
-        HashMap::from([(old_txid, txid)]),
-    );
-    remove_transition_children(&mut bundles, bset![opid], Some(OS_REPLACE));
-    consignment.bundles = LargeVec::from_checked(bundles);
-    let resolver = OfflineResolver {
-        consignment: &consignment,
-    };
-    let res = consignment
-        .clone()
-        .validate(&resolver, &validation_config)
-        .unwrap_err();
-    dbg!(&res);
-    assert_eq!(
-        res,
-        ValidationError::InvalidConsignment(Failure::ScriptFailure(
-            opid,
-            Some(ERRNO_REPLACE_HIDDEN_BURN),
-            None
-        ))
-    );
+    let old_opid = known_transition.opid;
+    let base_transition = known_transition.transition.clone();
 
     // Error: zero-amount allocations are not allowed for fungible assignment types
     for assignment_type in [OS_ASSET, OS_INFLATION] {
@@ -2587,134 +2360,6 @@ fn validate_consignment_ifa() {
         );
     }
 
-    // test replace transition
-    let mut witness_id = None;
-    let mut base_transition = None;
-    for wbun in base_consignment.bundled_witnesses() {
-        for KnownTransition { transition, .. } in wbun.bundle.known_transitions.iter() {
-            if transition.inputs.len() > 1 && transition.transition_type == TS_REPLACE {
-                witness_id = Some(wbun.witness_id());
-                base_transition = Some(transition.clone());
-                break;
-            }
-        }
-    }
-    let old_txid = witness_id.unwrap();
-    let base_transition = base_transition.unwrap();
-    let old_opid = base_transition.id();
-
-    // Error: replace transfers require all inputs
-    for input in base_transition.inputs.iter() {
-        let mut consignment = base_consignment.clone();
-        let mut bundles = consignment.bundles.release();
-        let wbundle = bundles
-            .iter_mut()
-            .find(|wb| wb.witness_id() == old_txid)
-            .unwrap();
-        let mut transition = base_transition.clone();
-        transition.inputs = NonEmptyOrdSet::from_iter_checked(
-            base_transition.inputs.into_iter().filter(|ti| ti != input),
-        )
-        .into();
-        let opid = transition.id();
-        assert_ne!(opid, old_opid);
-        replace_transition_in_bundle(wbundle, old_opid, transition);
-        remove_transition_children(&mut bundles, bset![old_opid], None);
-        consignment.bundles = LargeVec::from_checked(bundles);
-        let resolver = OfflineResolver {
-            consignment: &consignment,
-        };
-        let res = consignment
-            .clone()
-            .validate(&resolver, &validation_config)
-            .unwrap_err();
-        dbg!(&res);
-        let mismatch = OccurrencesMismatch {
-            min: 1,
-            max: 65535,
-            found: 0,
-        };
-        assert_eq!(
-            res,
-            ValidationError::InvalidConsignment(Failure::SchemaInputOccurrences(
-                opid, input.ty, mismatch
-            ))
-        );
-    }
-
-    // Error: replace transitions can't inflate
-    let mut consignment = base_consignment.clone();
-    let mut bundles = consignment.bundles.release();
-    let wbundle = bundles
-        .iter_mut()
-        .find(|wb| wb.witness_id() == old_txid)
-        .unwrap();
-    let mut transition = base_transition.clone();
-    let TypedAssigns::Fungible(assign) = transition.assignments.get_mut(&OS_ASSET).unwrap() else {
-        panic!("unexpected asssignment type")
-    };
-    let value = assign.iter_mut().last().unwrap().as_revealed_state_mut();
-    *value = RevealedValue::new(value.as_u64() + 1);
-    let opid = transition.id();
-    assert_ne!(opid, old_opid);
-    replace_transition_in_bundle(wbundle, old_opid, transition);
-    remove_transition_children(&mut bundles, bset![old_opid], None);
-    consignment.bundles = LargeVec::from_checked(bundles);
-    let resolver = OfflineResolver {
-        consignment: &consignment,
-    };
-    let res = consignment
-        .clone()
-        .validate(&resolver, &validation_config)
-        .unwrap_err();
-    dbg!(&res);
-    assert_eq!(
-        res,
-        ValidationError::InvalidConsignment(Failure::ScriptFailure(
-            opid,
-            Some(ERRNO_NON_EQUAL_IN_OUT),
-            None
-        ))
-    );
-
-    // Error: replace transitions can't burn allocations
-    for assignment_type in [OS_ASSET, OS_REPLACE] {
-        let mut consignment = base_consignment.clone();
-        let mut bundles = consignment.bundles.release();
-        let wbundle = bundles
-            .iter_mut()
-            .find(|wb| wb.witness_id() == old_txid)
-            .unwrap();
-        let mut transition = base_transition.clone();
-        transition.assignments.remove(&assignment_type).unwrap();
-        let opid = transition.id();
-        assert_ne!(opid, old_opid);
-        replace_transition_in_bundle(wbundle, old_opid, transition);
-        remove_transition_children(&mut bundles, bset![old_opid], None);
-        consignment.bundles = LargeVec::from_checked(bundles);
-        let resolver = OfflineResolver {
-            consignment: &consignment,
-        };
-        let res = consignment
-            .clone()
-            .validate(&resolver, &validation_config)
-            .unwrap_err();
-        dbg!(&res);
-        let mismatch = OccurrencesMismatch {
-            min: 1,
-            max: 65535,
-            found: 0,
-        };
-        assert_eq!(
-            res,
-            ValidationError::InvalidConsignment(Failure::SchemaAssignmentOccurrences(
-                opid,
-                assignment_type,
-                mismatch
-            ))
-        );
-    }
-
     // test inflation transition
     let mut witness_id = None;
     let mut base_transition = None;
@@ -2791,13 +2436,10 @@ fn validate_consignment_ifa() {
         .iter()
         .map(|i| i.ty)
         .collect::<HashSet<_>>();
-    assert_eq!(
-        input_assignment_types,
-        set![OS_ASSET, OS_INFLATION, OS_REPLACE]
-    );
+    assert_eq!(input_assignment_types, set![OS_ASSET, OS_INFLATION]);
 
     // Error: burn transitions can't have assignments
-    for assignment_type in [OS_ASSET, OS_INFLATION, OS_REPLACE] {
+    for assignment_type in [OS_ASSET, OS_INFLATION] {
         let mut consignment = base_consignment.clone();
         let mut bundles = consignment.bundles.release();
         let wbundle = bundles

@@ -417,7 +417,7 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
             let pubkey = CompressedPublicKey::from_slice(&public_key.serialize()).unwrap();
             (wlt_1.issue_pfa(600, None, pubkey), Some(secret_key))
         }
-        AssetSchema::Ifa => (wlt_1.issue_ifa(600, None, vec![], vec![]), None),
+        AssetSchema::Ifa => (wlt_1.issue_ifa(600, None, vec![]), None),
     };
 
     if asset_schema == AssetSchema::Pfa {
@@ -1223,7 +1223,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
 
     // wlt_2 use custom resolver to be able to send the assets even if transfer TX sending to
     // blinded UTXO has not been broadcasted
-    wlt_2.accept_transfer_custom(consignment.clone(), None, &resolver, bset![]);
+    wlt_2.accept_transfer_custom(consignment.clone(), None, &resolver);
 
     let invoice = wlt_3.invoice(contract_id, schema_id, 50, InvoiceType::Witness);
     let (consignment, tx, _, _) = wlt_2.pay_full(invoice, Some(2000), None, true, None);
@@ -1609,7 +1609,6 @@ fn ifa_inflation() {
     let contract_id = wlt_1.issue_ifa(
         issued_supply,
         None,
-        vec![],
         vec![(inflation_outpoint, inflation_supply)],
     );
 
@@ -1729,7 +1728,6 @@ fn ifa_zero_issuance_with_inflation() {
     let contract_id = wlt_1.issue_ifa(
         issued_supply,
         None,
-        vec![],
         vec![(inflation_outpoint, inflation_supply)],
     );
     wlt_1.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
@@ -1767,7 +1765,6 @@ fn ifa_move_inflation_right() {
     let contract_id = wlt_1.issue_ifa(
         issued_supply,
         None,
-        vec![],
         vec![(inflation_outpoint, inflation_supply)],
     );
     let schema_id = wlt_1.schema_id(contract_id);
@@ -1865,7 +1862,7 @@ fn ifa_burn() {
     let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
     let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
-    let contract_id = wlt_1.issue_ifa(999, None, vec![], vec![]);
+    let contract_id = wlt_1.issue_ifa(999, None, vec![]);
 
     let amt = 300;
     let utxo = wlt_2.get_utxo(None);
@@ -1893,85 +1890,6 @@ fn ifa_burn() {
         .clone();
     assert!(last_transition.transition_type == TS_BURN);
     wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
-}
-
-#[cfg(not(feature = "altered"))]
-#[test]
-fn ifa_replace() {
-    initialize();
-
-    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
-
-    let right_utxo = wlt_1.get_utxo(None);
-    let amount = 999;
-    let contract_id = wlt_1.issue_ifa(amount, None, vec![right_utxo], vec![]);
-
-    // check replace right has been correctly defined
-    let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
-    let replace_rights = contract
-        .replace_rights(AllocationFilter::Wallet.filter_for(&wlt_1))
-        .collect::<Vec<_>>();
-    let replace_outpoints = replace_rights
-        .iter()
-        .map(|oa| oa.seal.outpoint().unwrap())
-        .collect::<Vec<_>>();
-    assert_eq!(replace_outpoints.len(), 1);
-    assert_eq!(right_utxo, replace_outpoints[0]);
-
-    // history that will be excluded after replace
-    let mut txs_before_replace = HashSet::<BpTxid>::new();
-    let (_, tx) = wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, amount);
-    txs_before_replace.insert(tx.txid());
-    let (_, tx) = wlt_2.send_ifa(&mut wlt_1, TransferType::Blinded, contract_id, amount);
-    txs_before_replace.insert(tx.txid());
-    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
-
-    // send assets that will be replaced
-    let amt_1 = 900;
-    wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, amt_1);
-    let amt_2 = amount - amt_1;
-    wlt_1.send_ifa(&mut wlt_2, TransferType::Blinded, contract_id, amt_2);
-    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amt_1, amt_2], false);
-
-    // replace assets
-    wlt_2.replace_ifa(&mut wlt_1, right_utxo, contract_id);
-    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amount], false);
-
-    // send assets and check that excluded history does not appear in the consignment
-    let (consignment, _) = wlt_2.send_ifa(&mut wlt_3, TransferType::Blinded, contract_id, amount);
-    assert_eq!(consignment.bundles.len(), 4);
-    let spent_witnesses = consignment
-        .bundles
-        .iter()
-        .map(|b| txid_bitcoin_to_bp(b.witness_id()))
-        .collect::<HashSet<BpTxid>>();
-    assert!(spent_witnesses.is_disjoint(&txs_before_replace));
-
-    // check replace right has been moved
-    let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
-    let replace_rights = contract
-        .replace_rights(AllocationFilter::Wallet.filter_for(&wlt_1))
-        .collect::<Vec<_>>();
-    assert_eq!(replace_rights.len(), 1);
-
-    // move replace right from wlt_1 to wlt_3
-    let beneficiary = XChainNet::bitcoin(
-        wlt_3.network(),
-        Beneficiary::BlindedSeal(wlt_3.get_secret_seal(None, None)),
-    );
-    let builder = RgbInvoiceBuilder::new(beneficiary)
-        .set_contract(contract_id)
-        .set_assignment_name("replaceRight")
-        .set_void();
-    let invoice = builder.finish();
-    wlt_1.send_ifa_to_invoice(&mut wlt_3, invoice);
-    let contract = wlt_3.contract_wrapper::<InflatableFungibleAsset>(contract_id);
-    let replace_rights = contract
-        .replace_rights(AllocationFilter::Wallet.filter_for(&wlt_3))
-        .collect::<Vec<_>>();
-    assert_eq!(replace_rights.len(), 1);
 }
 
 #[cfg(not(feature = "altered"))]
@@ -3018,7 +2936,7 @@ fn contract_linking() {
 
     let issuance_utxo_1 = wlt_1.get_utxo(None);
     let amt_1 = 100;
-    let mut asset_info_1 = AssetInfo::default_ifa(vec![amt_1], vec![], vec![]);
+    let mut asset_info_1 = AssetInfo::default_ifa(vec![amt_1], vec![]);
     if let AssetInfo::Ifa {
         ref mut link_info, ..
     } = asset_info_1
@@ -3030,7 +2948,7 @@ fn contract_linking() {
 
     let issuance_utxo_2 = wlt_1.get_utxo(None);
     let amt_2 = 200;
-    let mut asset_info_2 = AssetInfo::default_ifa(vec![amt_2], vec![], vec![]);
+    let mut asset_info_2 = AssetInfo::default_ifa(vec![amt_2], vec![]);
     if let AssetInfo::Ifa {
         ref mut link_info, ..
     } = asset_info_2
