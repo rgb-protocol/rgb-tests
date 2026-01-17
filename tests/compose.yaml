@@ -74,3 +74,37 @@ services:
     ports:
       - 50006:50001
       - 8096:80
+  bitcoind_signet_custom:
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:30.0
+    profiles: [electrum, esplora]
+    command: "-signet -signetchallenge=51 -fallbackfee=0.0002"
+    environment:
+      NETWORK: signet
+  electrs_signet_custom:
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0
+    profiles: [electrum]
+    environment:
+      BTCHOST: bitcoind_signet_custom
+      NETWORK: signet
+      BTCRPCPORT: 38332
+      BTCP2PPORT: 38333
+      SIGNET_MAGIC: 54d26fbd
+    ports:
+      - 50007:50001
+    depends_on:
+      - bitcoind_signet_custom
+  esplora_signet_custom:
+    image: blockstream/esplora:latest
+    profiles: [esplora]
+    command: /srv/explorer/run.sh bitcoin-signet explorer
+    environment:
+      DEBUG: verbose
+      NO_PRECACHE: 1
+      NO_ADDRESS_SEARCH: 1
+      ELECTRS_ARGS: --jsonrpc-import
+    volumes:
+      - ./esplora-private-nodes.conf:/data/private_nodes:ro
+    ports:
+      - 8097:80
+    depends_on:
+      - bitcoind_signet_custom

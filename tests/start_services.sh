@@ -10,8 +10,10 @@ _prepare_bitcoin_nodes() {
     $BCLI_1 createwallet miner >/dev/null
     $BCLI_2 createwallet miner >/dev/null
     $BCLI_3 createwallet miner >/dev/null
+    $BCLI_4 createwallet miner >/dev/null
     $BCLI_1 -rpcwallet=miner -generate 103 >/dev/null
     $BCLI_2 -rpcwallet=miner -generate 103 >/dev/null
+    $BCLI_4 -rpcwallet=miner generatetoaddress 103 "$($BCLI_4 getnewaddress)" 100000000 >/dev/null
     # connect the 2 bitcoin services for the reorg
     if [ "$PROFILE" == "esplora" ]; then
         $BCLI_2 addnode "esplora_3:18444" "onetry" >/dev/null
@@ -102,16 +104,17 @@ TEST_DATA_DIR="./test-data"
 TIMEOUT=100
 
 # see compose.yaml for the exposed ports
+BCLI_4="$COMPOSE exec -T -u blits bitcoind_signet_custom bitcoin-cli -signet"
 if [ "$PROFILE" == "esplora" ]; then
     BCLI_1="$COMPOSE exec -T esplora_1 cli"
     BCLI_2="$COMPOSE exec -T esplora_2 cli"
     BCLI_3="$COMPOSE exec -T esplora_3 cli"
-    EXPOSED_PORTS=(8094 8095 8096 50004 50005 50006)
+    EXPOSED_PORTS=(8094 8095 8096 8097 50004 50005 50006)
 elif [ "$PROFILE" == "electrum" ]; then
     BCLI_1="$COMPOSE exec -T -u blits bitcoind_1 bitcoin-cli -regtest"
     BCLI_2="$COMPOSE exec -T -u blits bitcoind_2 bitcoin-cli -regtest"
     BCLI_3="$COMPOSE exec -T -u blits bitcoind_3 bitcoin-cli -regtest"
-    EXPOSED_PORTS=(50001 50002 50003)
+    EXPOSED_PORTS=(50001 50002 50003 50007)
 else
     _die "invalid profile"
 fi
@@ -124,13 +127,16 @@ if [ "$PROFILE" == "esplora" ]; then
     _wait_for_esplora esplora_1
     _wait_for_esplora esplora_2
     _wait_for_esplora esplora_3
+    _wait_for_esplora esplora_signet_custom
     _stop_esplora_tor esplora_1
     _stop_esplora_tor esplora_2
     _stop_esplora_tor esplora_3
+    _stop_esplora_tor esplora_signet_custom
 elif [ "$PROFILE" == "electrum" ]; then
     _wait_for_bitcoind bitcoind_1
     _wait_for_bitcoind bitcoind_2
     _wait_for_bitcoind bitcoind_3
+    _wait_for_bitcoind bitcoind_signet_custom
 fi
 
 _prepare_bitcoin_nodes
@@ -140,4 +146,5 @@ if [ "$PROFILE" == "electrum" ]; then
     _wait_for_electrs electrs_1
     _wait_for_electrs electrs_2
     _wait_for_electrs electrs_3
+    _wait_for_electrs electrs_signet_custom
 fi

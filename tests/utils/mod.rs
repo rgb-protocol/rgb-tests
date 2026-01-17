@@ -8,6 +8,9 @@ pub const SAVE_DIR: &str = "saves";
 
 pub const ELECTRUM_MAINNET_URL: &str = "ssl://electrum.iriswallet.com:50003";
 pub const ESPLORA_MAINNET_URL: &str = "https://blockstream.info/api";
+pub const ELECTRUM_TESTNET3_URL: &str = "ssl://electrum.iriswallet.com:50013";
+pub const ESPLORA_TESTNET3_URL: &str = "https://blockstream.info/testnet/api";
+pub const ELECTRUM_TESTNET4_URL: &str = "ssl://electrum.iriswallet.com:50053";
 pub const FAKE_TXID: &str = "e5a3e577309df31bd606f48049049d2e1e02b048206ba232944fcc053a176ccb:0";
 pub const UDA_FIXED_INDEX: u32 = 0;
 pub const DEFAULT_FEE_ABS: u64 = 400;
@@ -59,11 +62,11 @@ pub use amplify::{
     num::u24,
     s, set,
 };
-use bdk_electrum::{
+pub use bdk_electrum::{
     BdkElectrumClient,
     electrum_client::{Client as ElectrumClient, ElectrumApi as _},
 };
-use bdk_esplora::{
+pub use bdk_esplora::{
     EsploraExt,
     esplora_client::{BlockingClient as EsploraClient, Builder as EsploraBuilder},
 };
@@ -137,8 +140,8 @@ pub use rgb::{
     assignments::AssignVec,
     bitcoin::{
         Address, CompressedPublicKey, Network, Psbt, ScriptBuf, TapLeafHash, TapNodeHash,
-        Transaction, hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1, taproot::LeafScript,
-        taproot::LeafVersion,
+        Transaction, constants::ChainHash, hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1,
+        taproot::LeafScript, taproot::LeafVersion,
     },
     containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{
@@ -169,8 +172,8 @@ pub use rgb_altered::{
     assignments::AssignVec,
     bitcoin::{
         Address, CompressedPublicKey, Network, Psbt, ScriptBuf, TapLeafHash, TapNodeHash,
-        Transaction, hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1, taproot::LeafScript,
-        taproot::LeafVersion,
+        Transaction, constants::ChainHash, hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1,
+        taproot::LeafScript, taproot::LeafVersion,
     },
     containers::{PubWitness, ValidContract, WitnessBundle},
     contract::{
@@ -284,6 +287,20 @@ lazy_static! {
             "http://esplora_3:80/regtest/api"
         } else {
             "http://127.0.0.1:8096/regtest/api"
+        }
+    };
+    pub static ref ELECTRUM_SIGNET_CUSTOM_URL: &'static str = {
+        if running_in_docker() {
+            "electrs_signet_custom:50001"
+        } else {
+            "127.0.0.1:50007"
+        }
+    };
+    pub static ref ESPLORA_SIGNET_CUSTOM_URL: &'static str = {
+        if running_in_docker() {
+            "http://esplora_signet_custom:80/api"
+        } else {
+            "http://127.0.0.1:8097/signet/api"
         }
     };
 }

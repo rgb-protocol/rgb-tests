@@ -821,15 +821,6 @@ fn get_bp_indexer(indexer_url: &str) -> AnyIndexer {
     }
 }
 
-fn get_resolver(indexer_url: &str) -> AnyResolver {
-    match INDEXER.get().unwrap() {
-        Indexer::Electrum => AnyResolver::electrum_blocking(indexer_url, None).unwrap(),
-        Indexer::Esplora => {
-            AnyResolver::esplora_blocking(EsploraBuilder::new(indexer_url)).unwrap()
-        }
-    }
-}
-
 fn broadcast_tx(tx: &Tx, indexer_url: &str) {
     match get_bp_indexer(indexer_url) {
         AnyIndexer::Electrum(inner) => {

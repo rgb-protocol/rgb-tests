@@ -282,6 +282,15 @@ pub fn get_indexer_client(indexer_url: &str) -> IndexerClient {
     }
 }
 
+pub fn get_resolver(indexer_url: &str) -> AnyResolver {
+    match INDEXER.get().unwrap() {
+        Indexer::Electrum => AnyResolver::electrum_blocking(indexer_url, None).unwrap(),
+        Indexer::Esplora => {
+            AnyResolver::esplora_blocking(EsploraBuilder::new(indexer_url)).unwrap()
+        }
+    }
+}
+
 fn _wait_indexer_sync(instance: u8) {
     let t_0 = OffsetDateTime::now_utc();
     let blockcount = get_height_custom(instance);
