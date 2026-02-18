@@ -1728,6 +1728,7 @@ where
         &self,
         asset_beneficiaries: AssetBeneficiariesMap,
         witness_id: BpTxid,
+        fascia: &Fascia,
     ) -> ConsignmentsMap {
         let witness_id = txid_bp_to_bitcoin(witness_id);
         let mut consignments_map = ConsignmentsMap::new();
@@ -1750,14 +1751,15 @@ where
             consignments_map.insert(
                 contract_id,
                 stock
-                    .transfer(
+                    .transfer_from_fascia_with_dag(
                         contract_id,
                         beneficiaries_witness,
                         beneficiaries_blinded,
                         [],
-                        Some(witness_id),
+                        fascia,
                     )
-                    .unwrap(),
+                    .unwrap()
+                    .0,
             );
         }
         consignments_map

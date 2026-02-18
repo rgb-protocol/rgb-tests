@@ -311,13 +311,14 @@ impl BpTestWallet {
         psbt.set_as_unmodifiable();
         let fascia = psbt.rgb_commit().unwrap();
         let txid = psbt.txid();
-        self.consume_fascia(fascia, txid);
         let tx = self.sign_finalize_extract(&mut psbt);
         self.broadcast_tx(&tx);
         self.mine_tx(&psbt.get_txid(), false);
         println!("inflation txid: {}", txid);
         self.sync();
-        let consignment_map = self.create_consignments(bmap![contract_id => beneficiaries], txid);
+        let consignment_map =
+            self.create_consignments(bmap![contract_id => beneficiaries], txid, &fascia);
+        self.consume_fascia(fascia, txid);
         for consignment in consignment_map.values() {
             consignment
                 .clone()
@@ -963,8 +964,8 @@ impl BpTestWallet {
 
         self.broadcast_tx(&tx);
         let txid = tx.txid();
+        let consignment_map = self.create_consignments(rgb_beneficiaries, txid, &fascia);
         self.consume_fascia(fascia.clone(), txid);
-        let consignment_map = self.create_consignments(rgb_beneficiaries, txid);
         if !blinded_to_self.is_empty()
             && let Some(revealed_fascia) = self.reveal_fascia(fascia.clone(), &blinded_to_self)
         {

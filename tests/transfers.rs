@@ -1136,14 +1136,13 @@ fn collaborative_transfer() {
     let tx = wlt_2.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&tx);
 
-    wlt_1.consume_fascia(fascia.clone(), tx.txid());
-    wlt_2.consume_fascia(fascia, tx.txid());
-
-    let consignments = wlt_1.create_consignments(beneficiaries.clone(), tx.txid());
+    let consignments = wlt_1.create_consignments(beneficiaries.clone(), tx.txid(), &fascia);
     assert_eq!(
         consignments,
-        wlt_2.create_consignments(beneficiaries, tx.txid())
+        wlt_2.create_consignments(beneficiaries, tx.txid(), &fascia)
     );
+    wlt_1.consume_fascia(fascia.clone(), tx.txid());
+    wlt_2.consume_fascia(fascia, tx.txid());
 
     for consignment in consignments.into_values() {
         wlt_3.accept_transfer(consignment, None);
@@ -2207,7 +2206,6 @@ fn concealed_known_transition() {
     psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
-    wlt_1.consume_fascia(fascia, witness_id);
     let tx = wlt_1.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&tx);
     wlt_2.sync();
@@ -2215,10 +2213,11 @@ fn concealed_known_transition() {
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
     let consignment = wlt_1
-        .create_consignments(beneficiaries, witness_id)
+        .create_consignments(beneficiaries, witness_id, &fascia)
         .into_values()
         .next()
         .unwrap();
+    wlt_1.consume_fascia(fascia, witness_id);
 
     // ensure the consignment contains the bundle with missing transition
     let bundle = consignment
@@ -2289,7 +2288,6 @@ fn remove_scripts_code() {
     psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
-    wlt_1.consume_fascia(fascia, witness_id);
     let tx = wlt_1.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&tx);
     wlt_2.sync();
@@ -2297,10 +2295,11 @@ fn remove_scripts_code() {
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
     let mut consignment = wlt_1
-        .create_consignments(beneficiaries, witness_id)
+        .create_consignments(beneficiaries, witness_id, &fascia)
         .into_values()
         .next()
         .unwrap();
+    wlt_1.consume_fascia(fascia, witness_id);
     let mut scripts = consignment.scripts.clone().release();
     let mut lib = scripts.pop_last().unwrap().clone();
     lib.code = none!();
@@ -2437,7 +2436,6 @@ fn accept_bundle_missing_transitions() {
     psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
-    wlt_1.consume_fascia(fascia, witness_id);
     let tx = wlt_1.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&tx);
     wlt_2.sync();
@@ -2445,7 +2443,7 @@ fn accept_bundle_missing_transitions() {
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
     let consignment_1 = wlt_1
-        .create_consignments(beneficiaries, witness_id)
+        .create_consignments(beneficiaries, witness_id, &fascia)
         .into_values()
         .next()
         .unwrap();
@@ -2461,7 +2459,7 @@ fn accept_bundle_missing_transitions() {
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_2]);
     let consignment_2 = wlt_1
-        .create_consignments(beneficiaries, witness_id)
+        .create_consignments(beneficiaries, witness_id, &fascia)
         .into_values()
         .next()
         .unwrap();
@@ -2471,6 +2469,7 @@ fn accept_bundle_missing_transitions() {
             .iter()
             .all(|wb| !wb.bundle.known_transitions_opids().contains(&opid_1))
     );
+    wlt_1.consume_fascia(fascia, witness_id);
     // wlt_3 accepts the same bundle with opid_1 concealed and opid_2 revealed
     wlt_3.accept_transfer(consignment_2, None);
 
@@ -2568,13 +2567,13 @@ fn unordered_transitions_within_bundle() {
     psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
-    wlt_1.consume_fascia(fascia, witness_id);
 
     let tx = wlt_1.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&tx);
     wlt_2.sync();
 
-    let consignments = wlt_1.create_consignments(beneficiaries, witness_id);
+    let consignments = wlt_1.create_consignments(beneficiaries, witness_id, &fascia);
+    wlt_1.consume_fascia(fascia, witness_id);
     for (_, consignment) in consignments {
         wlt_2.accept_transfer(consignment, None);
     }
@@ -2717,12 +2716,12 @@ fn transition_spending_uncommitted_opout() {
     psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
-    wlt_1.consume_fascia(fascia, witness_id);
     let tx = wlt_1.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&tx);
     wlt_2.sync();
 
-    let consignments = wlt_1.create_consignments(beneficiaries, witness_id);
+    let consignments = wlt_1.create_consignments(beneficiaries, witness_id, &fascia);
+    wlt_1.consume_fascia(fascia, witness_id);
     for (_, consignment) in consignments {
         wlt_3.accept_transfer(consignment, None);
     }
@@ -2910,7 +2909,6 @@ fn extra_after_merge() {
     psbt.set_as_unmodifiable();
     let fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
-    wlt_1.consume_fascia(fascia, witness_id);
     let tx = wlt_1.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&tx);
     wlt_2.sync();
@@ -2918,10 +2916,11 @@ fn extra_after_merge() {
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
     let consignment = wlt_1
-        .create_consignments(beneficiaries, witness_id)
+        .create_consignments(beneficiaries, witness_id, &fascia)
         .into_values()
         .next()
         .unwrap();
+    wlt_1.consume_fascia(fascia, witness_id);
     wlt_2.accept_transfer(consignment, None);
 }
 
