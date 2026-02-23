@@ -1770,7 +1770,7 @@ where
         fascia: Fascia,
         contract_filter: &[ContractId],
     ) -> Option<Fascia> {
-        let seal_witness = fascia.seal_witness.clone();
+        let seal_witness = fascia.seal_witness().clone();
         let mut revealed_bundles = BTreeMap::new();
         for (cid, bundle) in fascia.into_bundles() {
             if !contract_filter.contains(&cid) {
@@ -1801,11 +1801,10 @@ where
             }
         }
         if !revealed_bundles.is_empty() {
-            let revealed_fascia = Fascia {
+            return Some(Fascia::new(
                 seal_witness,
-                bundles: NonEmptyOrdMap::from_checked(revealed_bundles),
-            };
-            return Some(revealed_fascia);
+                NonEmptyOrdMap::from_checked(revealed_bundles),
+            ));
         }
         None
     }

@@ -839,7 +839,7 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
         txid_same_bundle_2 = psbt.txid();
         offset += 1;
     }
-    fascia.seal_witness.public = PubWitness::with(psbt.unsigned_tx());
+    fascia.update_pub_witness(PubWitness::with(psbt.unsigned_tx()));
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     let mut old_psbt = psbt.clone();
 
@@ -2204,11 +2204,11 @@ fn concealed_known_transition() {
     // we don't push this transition to keep it concealed
 
     psbt.set_as_unmodifiable();
-    let fascia = psbt.rgb_commit().unwrap();
+    let mut fascia = psbt.rgb_commit().unwrap();
     let witness_id = psbt.txid();
     let tx = wlt_1.sign_finalize_extract(&mut psbt);
-    wlt_1.broadcast_tx(&tx);
-    wlt_2.sync();
+    // update fascia with signed tx so it will be included in consignment
+    fascia.update_pub_witness(PubWitness::Tx(tx_bp_to_bitcoin(tx)));
 
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
@@ -2227,6 +2227,17 @@ fn concealed_known_transition() {
         .unwrap();
     assert!(!bundle.bundle.known_transitions_contain_opid(&opid_2));
 
+    wlt_2.broadcast_tx(&tx_bitcoin_to_bp(
+        consignment
+            .bundles
+            .last()
+            .unwrap()
+            .pub_witness
+            .tx()
+            .unwrap()
+            .clone(),
+    ));
+    wlt_2.sync();
     wlt_2.accept_transfer(consignment, None);
 }
 
