@@ -3076,12 +3076,12 @@ fn validate_consignment_unknown_rgbisa_opcode() {
     let lib_id = script.id();
     consignment.scripts = Confined::from_checked(bset![script]);
     // update schema and genesis
-    let mut validator = consignment.schema.genesis.validator.unwrap().clone();
+    let mut validator = consignment.schema.genesis.validator.unwrap();
     validator.lib = lib_id;
     consignment.schema.genesis.validator = Some(validator);
     consignment.schema.transitions.values_mut().for_each(|t| {
         // update transitions validator otherwise validation fails before running aluvm
-        let mut validator = t.transition_schema.validator.unwrap().clone();
+        let mut validator = t.transition_schema.validator.unwrap();
         validator.lib = lib_id;
         t.transition_schema.validator = Some(validator);
     });
