@@ -182,13 +182,15 @@ fn update_transition_children(
     witness_bundles: &mut Vec<WitnessBundle>,
     changed_opids: HashMap<OpId, OpId>,
     changed_txids: HashMap<Txid, Txid>,
+    new_contract_id: Option<ContractId>,
 ) {
     let mut changed_opids = changed_opids;
     let mut changed_txids = changed_txids;
     let mut something_changed = false;
     for wbundle in witness_bundles.iter_mut() {
         let old_txid = wbundle.witness_id();
-        if !changed_txids.contains_key(&old_txid)
+        if new_contract_id.is_none()
+            && !changed_txids.contains_key(&old_txid)
             && !wbundle
                 .bundle
                 .input_map
@@ -216,21 +218,22 @@ fn update_transition_children(
         wbundle.bundle.known_transitions =
             NonEmptyVec::from_iter_checked(wbundle.bundle.known_transitions.iter().map(
                 |KnownTransition { opid, transition }| {
-                    let new_t = Transition {
+                    let new_transition = Transition {
                         inputs: NonEmptyOrdSet::from_iter_checked(
                             transition.inputs.iter().map(|i| *opout_map.get(i).unwrap()),
                         )
                         .into(),
+                        contract_id: new_contract_id.unwrap_or_else(|| transition.contract_id()),
                         ..transition.clone()
                     };
-                    let new_opid = new_t.id();
+                    let new_opid = new_transition.id();
                     if *opid != new_opid {
                         changed_opids.insert(*opid, new_opid);
                         something_changed = true;
                     }
                     KnownTransition {
                         opid: new_opid,
-                        transition: new_t,
+                        transition: new_transition,
                     }
                 },
             ));
@@ -257,7 +260,7 @@ fn update_transition_children(
         }
     }
     if something_changed {
-        update_transition_children(witness_bundles, changed_opids, changed_txids)
+        update_transition_children(witness_bundles, changed_opids, changed_txids, None)
     }
 }
 
@@ -1915,6 +1918,7 @@ fn validate_consignment_logic_fail() {
         &mut bundles,
         HashMap::from([(old_opid, opid)]),
         HashMap::from([(old_txid, txid)]),
+        None,
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
@@ -1949,6 +1953,7 @@ fn validate_consignment_logic_fail() {
         &mut bundles,
         HashMap::from([(old_opid, opid)]),
         HashMap::from([(old_txid, txid)]),
+        None,
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
@@ -1983,6 +1988,7 @@ fn validate_consignment_logic_fail() {
         &mut bundles,
         HashMap::from([(old_opid, opid)]),
         HashMap::from([(old_txid, txid)]),
+        None,
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
@@ -2027,6 +2033,7 @@ fn validate_consignment_logic_fail() {
         &mut bundles,
         HashMap::from([(old_opid, opid)]),
         HashMap::from([(old_txid, txid)]),
+        None,
     );
     consignment.bundles = LargeVec::from_checked(bundles);
     let resolver = OfflineResolver {
@@ -2301,6 +2308,7 @@ fn validate_consignment_ifa() {
             &mut bundles,
             HashMap::from([(old_opid, opid)]),
             HashMap::from([(old_txid, txid)]),
+            None,
         );
         consignment.bundles = LargeVec::from_checked(bundles);
         let resolver = OfflineResolver {
@@ -3044,4 +3052,65 @@ fn validate_consignment_strict_roundtrip() {
             .release();
         assert_eq!(std::fs::read(cons_path).unwrap(), cons_bytes);
     }
+}
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn validate_consignment_unknown_rgbisa_opcode() {
+    let scenario = Scenario::B;
+
+    let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let trusted_typesystem = AssetSchema::from(base_consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
+
+    let mut consignment = base_consignment.clone();
+    // add unknown opcode to script
+    let mut script = consignment.scripts.into_iter().next().unwrap();
+    let ret = script.code.pop().unwrap();
+    script.code.push(0b11_010_101).unwrap(); // unknown opcode
+    script.code.push(ret).unwrap();
+    let lib_id = script.id();
+    consignment.scripts = Confined::from_checked(bset![script]);
+    // update schema and genesis
+    let mut validator = consignment.schema.genesis.validator.unwrap().clone();
+    validator.lib = lib_id;
+    consignment.schema.genesis.validator = Some(validator);
+    consignment.schema.transitions.values_mut().for_each(|t| {
+        // update transitions validator otherwise validation fails before running aluvm
+        let mut validator = t.transition_schema.validator.unwrap().clone();
+        validator.lib = lib_id;
+        t.transition_schema.validator = Some(validator);
+    });
+    let old_genesis_opid = consignment.genesis.id();
+    consignment.genesis.schema_id = consignment.schema_id();
+    let genesis_opid = consignment.genesis.id();
+    let contract_id = consignment.contract_id();
+    let mut bundles = consignment.bundles.release();
+    update_transition_children(
+        &mut bundles,
+        map! {old_genesis_opid => genesis_opid},
+        map! {},
+        Some(contract_id),
+    );
+    consignment.bundles = LargeVec::from_checked(bundles);
+
+    let resolver = OfflineResolver {
+        consignment: &consignment,
+    };
+    let res = consignment
+        .clone()
+        .validate(&resolver, &validation_config)
+        .unwrap_err();
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::ScriptFailure(
+            genesis_opid,
+            Some(ERRNO_ISSUED_MISMATCH),
+            None
+        ))
+    );
 }
