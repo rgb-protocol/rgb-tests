@@ -75,3 +75,21 @@ fn check_chain_net(scenario: ChainNetScenario) {
         .check_chain_net(chain_net)
         .expect("chain net match");
 }
+
+#[cfg(not(feature = "altered"))]
+#[test]
+fn check_chain_net_failures() {
+    initialize();
+
+    if *INDEXER.get().unwrap() != Indexer::Electrum {
+        return;
+    }
+
+    let url = ELECTRUM_SIGNET_CUSTOM_URL.to_string();
+    let resolver = get_resolver(&url);
+    let result = resolver.check_chain_net(ChainNet::BitcoinSignet);
+    assert!(
+        matches!(result, Err(WitnessResolverError::WrongChainNet)),
+        "expected WrongChainNet, got {result:?}"
+    );
+}
