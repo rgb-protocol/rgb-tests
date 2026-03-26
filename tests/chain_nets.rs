@@ -7,6 +7,7 @@ use utils::*;
 pub enum ChainNetScenario {
     Regtest,
     Mainnet,
+    Signet,
     SignetCustom,
     Testnet3,
     Testnet4,
@@ -18,6 +19,8 @@ fn get_chain_net_config(scenario: &ChainNetScenario) -> (String, ChainNet) {
         (Indexer::Esplora, ChainNetScenario::Regtest) => ESPLORA_1_REGTEST_URL.to_string(),
         (Indexer::Electrum, ChainNetScenario::Mainnet) => ELECTRUM_MAINNET_URL.to_string(),
         (Indexer::Esplora, ChainNetScenario::Mainnet) => ESPLORA_MAINNET_URL.to_string(),
+        (Indexer::Electrum, ChainNetScenario::Signet) => ELECTRUM_SIGNET_URL.to_string(),
+        (Indexer::Esplora, ChainNetScenario::Signet) => ESPLORA_SIGNET_URL.to_string(),
         (Indexer::Electrum, ChainNetScenario::SignetCustom) => {
             ELECTRUM_SIGNET_CUSTOM_URL.to_string()
         }
@@ -33,6 +36,7 @@ fn get_chain_net_config(scenario: &ChainNetScenario) -> (String, ChainNet) {
         ChainNetScenario::Mainnet => ChainNet::BitcoinMainnet,
         ChainNetScenario::Testnet3 => ChainNet::BitcoinTestnet3,
         ChainNetScenario::Testnet4 => ChainNet::BitcoinTestnet4,
+        ChainNetScenario::Signet => ChainNet::BitcoinSignet,
         ChainNetScenario::SignetCustom => ChainNet::BitcoinSignetCustom,
     };
 
@@ -45,6 +49,7 @@ fn get_chain_net_config(scenario: &ChainNetScenario) -> (String, ChainNet) {
 #[case(ChainNetScenario::Mainnet)]
 #[case(ChainNetScenario::Testnet3)]
 #[case(ChainNetScenario::Testnet4)]
+#[case(ChainNetScenario::Signet)]
 #[case(ChainNetScenario::SignetCustom)]
 fn chain_net_scenario(#[case] scenario: ChainNetScenario) {}
 
@@ -55,9 +60,12 @@ fn check_chain_net(scenario: ChainNetScenario) {
 
     initialize();
 
-    if scenario == ChainNetScenario::Testnet4 && *INDEXER.get().unwrap() == Indexer::Esplora {
+    match (&scenario, INDEXER.get().unwrap()) {
         // no public testnet4 esplora indexer yet
-        return;
+        (ChainNetScenario::Testnet4, Indexer::Esplora) => return,
+        // no public signet electrum indexer with verbose support yet
+        (ChainNetScenario::Signet, Indexer::Electrum) => return,
+        _ => {}
     }
 
     let (url, chain_net) = get_chain_net_config(&scenario);
@@ -69,19 +77,17 @@ fn check_chain_net(scenario: ChainNetScenario) {
 }
 
 #[cfg(not(feature = "altered"))]
-#[test]
-fn check_chain_net_failures() {
+#[rstest]
+#[case(*ELECTRUM_SIGNET_CUSTOM_URL, WitnessResolverError::WrongChainNet)]
+#[case(ELECTRUM_SIGNET_URL, WitnessResolverError::ResolverIssue(None, "verbose transactions are unsupported by the provided electrum service".to_string()))]
+fn check_chain_net_failures(#[case] url: &str, #[case] expected_err: WitnessResolverError) {
     initialize();
 
     if *INDEXER.get().unwrap() != Indexer::Electrum {
         return;
     }
 
-    let url = ELECTRUM_SIGNET_CUSTOM_URL.to_string();
-    let resolver = get_resolver(&url);
+    let resolver = get_resolver(url);
     let result = resolver.check_chain_net(ChainNet::BitcoinSignet);
-    assert!(
-        matches!(result, Err(WitnessResolverError::WrongChainNet)),
-        "expected WrongChainNet, got {result:?}"
-    );
+    assert!(matches!(result, Err(err) if err == expected_err));
 }
