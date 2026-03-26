@@ -33,15 +33,7 @@ fn get_chain_net_config(scenario: &ChainNetScenario) -> (String, ChainNet) {
         ChainNetScenario::Mainnet => ChainNet::BitcoinMainnet,
         ChainNetScenario::Testnet3 => ChainNet::BitcoinTestnet3,
         ChainNetScenario::Testnet4 => ChainNet::BitcoinTestnet4,
-        ChainNetScenario::SignetCustom => {
-            let genesis_hash = match get_indexer_client(&url) {
-                IndexerClient::Electrum(client) => client.block_header(0).unwrap().block_hash(),
-                IndexerClient::Esplora(client) => {
-                    client.get_block_hash(0).expect("genesis block hash")
-                }
-            };
-            ChainNet::BitcoinSignetCustom(ChainHash::from_genesis_block_hash(genesis_hash))
-        }
+        ChainNetScenario::SignetCustom => ChainNet::BitcoinSignetCustom,
     };
 
     (url, chain_net)
