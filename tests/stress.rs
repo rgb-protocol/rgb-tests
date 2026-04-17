@@ -721,7 +721,7 @@ fn random_transfers() {
             let wallet = wallets.get_mut(*wi);
             // sort contracts deterministically using the RNG
             let mut contracts = wallet.list_contracts();
-            contracts.sort_by(|a, b| a.issued_at.cmp(&b.issued_at));
+            contracts.sort_by_key(|a| a.issued_at);
             contracts.shuffle(rng);
             // build contract map
             for c in contracts {
