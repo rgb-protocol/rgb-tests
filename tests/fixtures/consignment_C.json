@@ -4,8 +4,8 @@
   "terminals": {},
   "genesis": {
     "ffv": 0,
-    "schemaId": "rgb:sch:p6H_wtDgei9HHUVLjKW0tNdHHFLhfHxrn9QX_QQUE78#scale-year-shave",
-    "timestamp": 1768327802,
+    "schemaId": "rgb:sch:IpjJhFLz3oywYKQxO3KmFgR0Aa415nlTNrNyEFqMZCE#shoe-colombo-mango",
+    "timestamp": 1777472703,
     "issuer": "ssi:anonymous",
     "chainNet": "bitcoinRegtest",
     "sealClosingStrategy": "firstOpretOrTapret",
@@ -33,9 +33,9 @@
         "items": [
           {
             "seal": {
-              "txid": "d20b2a6455a795e26f1a4c6cceb515cb6e36d931643684c6750e2d049b23be97",
+              "txid": "7040a989aa8fcdbf9f8f2b797acf41faabb432725256d90f83c3c3a704b44740",
               "vout": 1,
-              "blinding": 3259561944024799135
+              "blinding": 8537134690431088313
             },
             "state": 666
           }
@@ -46,9 +46,9 @@
         "items": [
           {
             "seal": {
-              "txid": "d20b2a6455a795e26f1a4c6cceb515cb6e36d931643684c6750e2d049b23be97",
+              "txid": "7040a989aa8fcdbf9f8f2b797acf41faabb432725256d90f83c3c3a704b44740",
               "vout": 1,
-              "blinding": 15900867382779101602
+              "blinding": 6212672796954923605
             },
             "state": 100
           }
@@ -63,7 +63,7 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "d20b2a6455a795e26f1a4c6cceb515cb6e36d931643684c6750e2d049b23be97:1",
+              "prevOutput": "7040a989aa8fcdbf9f8f2b797acf41faabb432725256d90f83c3c3a704b44740:1",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -72,15 +72,15 @@
           "outputs": [
             {
               "value": 0,
-              "scriptPubkey": "6a20ab563dc645e8ad481ba20613d85c5863f030439f9bb29a0a64cd5135af8fcf74"
+              "scriptPubkey": "6a2062078f2793ff31879d47fa68ab6a4b238febc8fa3a0646657e3a3af660864ada"
             },
             {
               "value": 9000,
-              "scriptPubkey": "0014f733d879d1cc03ce1b17a7564182abc55630b2c1"
+              "scriptPubkey": "001451db0bffc71fa08ab5dd07c174af6cd6fdd99a9b"
             },
             {
               "value": 99990600,
-              "scriptPubkey": "0014ed3ae26c00ab6066993ba53101819625b7a44d89"
+              "scriptPubkey": "001408d30ed2faaaebd86056b9c1198f72e7f0b40bcb"
             }
           ],
           "lockTime": 0
@@ -88,33 +88,33 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 0,
+          "pos": 3,
           "cofactor": 0,
           "path": [
-            "177d85dc11e305cbda48ded422e8cd7a7c77f819080bbda818ca735b5eafe994",
-            "c36330a2028186d87ebca16ce880a9d1ee1a42684cc51a6218b862849bd0bf22",
-            "ab41f05ba02d9358ca075600a7f17573e919174fc48a0b626754b59a1035d479"
+            "2acbb74a602bba5f7e705ca77184b5f9cc38342c6e7d7b72dc02ad4aaba4c2f3",
+            "4e6425d69459780f8149aa343f41206d1c37589bc963b0173f842479ded6996f",
+            "8c1ff13d9403301d34d30d23641529b80a9739a8ab2649862099c84c3cbe9472"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "d89f50bee61d284975702392fec938ffed5a740b6eafc82a2be19f28f71335a3/4000/0": "dec071e8fc1ed4fc0906d9f7b325fafa5df16b9dc8d26c4b8e430f1dacfb6fb8",
-          "d89f50bee61d284975702392fec938ffed5a740b6eafc82a2be19f28f71335a3/4010/0": "343b64f7751411c8fac25b3b07ad0c744d9b8904a15321a41b529e067ad9a1d3"
+          "5bc2bdc4e2b9d6e78f6e4ed8ea67eb6019bd137d34b05a6783cdfe41e2c38e60/4000/0": "9ab8e7dd49d60cc8f15b231e1e80efa0c1e6add7eb406217683e6c5d7f9085f2",
+          "5bc2bdc4e2b9d6e78f6e4ed8ea67eb6019bd137d34b05a6783cdfe41e2c38e60/4010/0": "70e4520b53a0f7de3249db1c4339d754f33c7c0c3eb7bd4109d24ff4cb4d816b"
         },
         "knownTransitions": [
           {
-            "opid": "dec071e8fc1ed4fc0906d9f7b325fafa5df16b9dc8d26c4b8e430f1dacfb6fb8",
+            "opid": "9ab8e7dd49d60cc8f15b231e1e80efa0c1e6add7eb406217683e6c5d7f9085f2",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
+              "contractId": "rgb:W8K9xOK5-1uePbk7-Y6mfrYB-m9E300s-Fpng83_-QeLDjmA",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "d89f50bee61d284975702392fec938ffed5a740b6eafc82a2be19f28f71335a3/4000/0"
+                "5bc2bdc4e2b9d6e78f6e4ed8ea67eb6019bd137d34b05a6783cdfe41e2c38e60/4000/0"
               ],
               "assignments": {
                 "4000": {
@@ -124,7 +124,7 @@
                       "seal": {
                         "txid": null,
                         "vout": 2,
-                        "blinding": 551529635014891351
+                        "blinding": 997935127262379982
                       },
                       "state": 666
                     }
@@ -135,16 +135,16 @@
             }
           },
           {
-            "opid": "343b64f7751411c8fac25b3b07ad0c744d9b8904a15321a41b529e067ad9a1d3",
+            "opid": "70e4520b53a0f7de3249db1c4339d754f33c7c0c3eb7bd4109d24ff4cb4d816b",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
+              "contractId": "rgb:W8K9xOK5-1uePbk7-Y6mfrYB-m9E300s-Fpng83_-QeLDjmA",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "d89f50bee61d284975702392fec938ffed5a740b6eafc82a2be19f28f71335a3/4010/0"
+                "5bc2bdc4e2b9d6e78f6e4ed8ea67eb6019bd137d34b05a6783cdfe41e2c38e60/4010/0"
               ],
               "assignments": {
                 "4010": {
@@ -154,7 +154,7 @@
                       "seal": {
                         "txid": null,
                         "vout": 2,
-                        "blinding": 7487465468667731468
+                        "blinding": 2816051613231731519
                       },
                       "state": 100
                     }
@@ -173,7 +173,7 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "bcd1faef6a10c7b5b652c2ce31b7ab200673f0ea5467f413d641e9236b1154c5:2",
+              "prevOutput": "507f22167c9a75dfe7d569872822f77edbd98c967ade04764c3dc1622db1b831:2",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -182,11 +182,11 @@
           "outputs": [
             {
               "value": 0,
-              "scriptPubkey": "6a20ff5abad6c3ab6da244a9cff4e5ab94f2003a745a50751c89e3e3349dd1b80ad8"
+              "scriptPubkey": "6a208e4e8af4220dd41d1cf17b6761f38efbd4f2e3d092a3b0c7754497d6fd999330"
             },
             {
               "value": 99990200,
-              "scriptPubkey": "0014b146de068cedaa3aa0186cacc0705b6d9998d8f4"
+              "scriptPubkey": "0014ac6c0c7f6f57320e8b57c1cbefc284264a72d08b"
             }
           ],
           "lockTime": 0
@@ -194,34 +194,34 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 0,
+          "pos": 3,
           "cofactor": 0,
           "path": [
-            "a0bc45c6976181e3183bcc0b7a5825d7f9af4b8187fa28f04a35b39ab649c3cd",
-            "8cce52aea4b69db1683cc90e7f985ceed65ffa242441489d65a33ce96f6b379a",
-            "e0f9d48870645b3fb3837951820972479e7019260d2705de1de62d58f2ad017e"
+            "b8c10903a68e10c30833907c003fb9077234d586e5b771f46ae968fb6f64786b",
+            "5fda0570b16b7b505dc5bfa62144e05a8faa4dc293199dc386d38c6dc148654f",
+            "9ab84eb72bb3f0a64df60b494125334034770ac895e6c236680b15d3c74d7d1c"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "343b64f7751411c8fac25b3b07ad0c744d9b8904a15321a41b529e067ad9a1d3/4010/0": "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d",
-          "dec071e8fc1ed4fc0906d9f7b325fafa5df16b9dc8d26c4b8e430f1dacfb6fb8/4000/0": "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d"
+          "70e4520b53a0f7de3249db1c4339d754f33c7c0c3eb7bd4109d24ff4cb4d816b/4010/0": "59a8f27a38a3bb64dd86820fcf8d2ba0816a41aa78ea5d9b8aa875e3c42cbe33",
+          "9ab8e7dd49d60cc8f15b231e1e80efa0c1e6add7eb406217683e6c5d7f9085f2/4000/0": "59a8f27a38a3bb64dd86820fcf8d2ba0816a41aa78ea5d9b8aa875e3c42cbe33"
         },
         "knownTransitions": [
           {
-            "opid": "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d",
+            "opid": "59a8f27a38a3bb64dd86820fcf8d2ba0816a41aa78ea5d9b8aa875e3c42cbe33",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
+              "contractId": "rgb:W8K9xOK5-1uePbk7-Y6mfrYB-m9E300s-Fpng83_-QeLDjmA",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "343b64f7751411c8fac25b3b07ad0c744d9b8904a15321a41b529e067ad9a1d3/4010/0",
-                "dec071e8fc1ed4fc0906d9f7b325fafa5df16b9dc8d26c4b8e430f1dacfb6fb8/4000/0"
+                "70e4520b53a0f7de3249db1c4339d754f33c7c0c3eb7bd4109d24ff4cb4d816b/4010/0",
+                "9ab8e7dd49d60cc8f15b231e1e80efa0c1e6add7eb406217683e6c5d7f9085f2/4000/0"
               ],
               "assignments": {
                 "4000": {
@@ -231,7 +231,7 @@
                       "seal": {
                         "txid": null,
                         "vout": 1,
-                        "blinding": 5745744636059418323
+                        "blinding": 6386430580914282116
                       },
                       "state": 666
                     }
@@ -242,9 +242,9 @@
                   "items": [
                     {
                       "seal": {
-                        "txid": "b52305095266d6f683f333e984eaee5cbabdfacb1e5336f2395bb074d89950ac",
-                        "vout": 0,
-                        "blinding": 6838967523623182644
+                        "txid": "317ac8dc28cbfe5258b5e404b4525cd51b510426204ce806604b1bdc1a65b420",
+                        "vout": 1,
+                        "blinding": 14518343275814138614
                       },
                       "state": 100
                     }
@@ -263,7 +263,7 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "b52305095266d6f683f333e984eaee5cbabdfacb1e5336f2395bb074d89950ac:0",
+              "prevOutput": "317ac8dc28cbfe5258b5e404b4525cd51b510426204ce806604b1bdc1a65b420:1",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -272,15 +272,15 @@
           "outputs": [
             {
               "value": 49999800,
-              "scriptPubkey": "00149b85ebf99e324cbfb4cf394699efb50db7f94c4c"
+              "scriptPubkey": "0014c8fd907c86d430d7e1ab380df00958ea69439c58"
             },
             {
               "value": 49999800,
-              "scriptPubkey": "00145f2fe29a15c90da9abce0e1db0163962e9a60533"
+              "scriptPubkey": "0014349e18ad3a4c01e9b12f7a0024c391454a5e6eb4"
             },
             {
               "value": 0,
-              "scriptPubkey": "6a20df21f64aeff7eb22249e4c6d5c408bcb301c7dfa1e3474b035ad1d40d0f0cb15"
+              "scriptPubkey": "6a2001892e223d3bd1379d3a63bcf43f65c29f4b4f7101502ce22b4df4a891ec335d"
             }
           ],
           "lockTime": 0
@@ -288,26 +288,26 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 0,
+          "pos": 3,
           "cofactor": 0,
           "path": [
-            "414d251ee5673247f80a2c02b80811c3e1f518b78f69e9e854def04c463c6cb7",
-            "730c09b4a7f82cdd5b349b03aa409ce0443e5e0412fc1b47c85ad60a130badc4",
-            "f86c453f119f76554666e99826257c94f019efed68c91202edebdc30598f77d7"
+            "f797bb618080140018d2778afaf59c5235f1a5e522113c2ce57a8bfb4085c3e4",
+            "f7b99d468ff576eb027f95486f049e945a93808fa373a8ed7dd5f4c9970a007c",
+            "fcbac35f5d2ba9fef6696d1ecffbf994a81abcbceaaee6426742e617dd2a4284"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d/4010/0": "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f"
+          "59a8f27a38a3bb64dd86820fcf8d2ba0816a41aa78ea5d9b8aa875e3c42cbe33/4010/0": "50776b79f906a2ae68e7ed2d84204b326961429e5e22ab0d338b0645df184b55"
         },
         "knownTransitions": [
           {
-            "opid": "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f",
+            "opid": "50776b79f906a2ae68e7ed2d84204b326961429e5e22ab0d338b0645df184b55",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
+              "contractId": "rgb:W8K9xOK5-1uePbk7-Y6mfrYB-m9E300s-Fpng83_-QeLDjmA",
               "nonce": 18446744073709551615,
               "transitionType": 8000,
               "metadata": {
@@ -319,7 +319,7 @@
                 ]
               },
               "inputs": [
-                "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d/4010/0"
+                "59a8f27a38a3bb64dd86820fcf8d2ba0816a41aa78ea5d9b8aa875e3c42cbe33/4010/0"
               ],
               "assignments": {
                 "4000": {
@@ -329,7 +329,7 @@
                       "seal": {
                         "txid": null,
                         "vout": 0,
-                        "blinding": 16799276049115078484
+                        "blinding": 16726363056347702683
                       },
                       "state": 60
                     }
@@ -342,7 +342,7 @@
                       "seal": {
                         "txid": null,
                         "vout": 1,
-                        "blinding": 13654059782808730808
+                        "blinding": 18101545057576986474
                       },
                       "state": 40
                     }
@@ -361,19 +361,19 @@
           "version": 2,
           "inputs": [
             {
-              "prevOutput": "debb5703d305a8532db2b3fe449137f3899e607482fa0f8b1b9b141e6a9270b6:1",
+              "prevOutput": "35c0e94677725db5bf2dba08c1832a868d5829a7654cbdd59330c4ce9d08a4e9:1",
               "sigScript": "",
               "sequence": 0,
               "witness": []
             },
             {
-              "prevOutput": "9dfe5a7d40113bcc7d3065c9597a421df1abeb8671c7957cdad516066aa553fe:1",
+              "prevOutput": "5cf8d08176920eb1b9365432fd84f68315aa98824264bd92db4d892429d9024e:1",
               "sigScript": "",
               "sequence": 0,
               "witness": []
             },
             {
-              "prevOutput": "debb5703d305a8532db2b3fe449137f3899e607482fa0f8b1b9b141e6a9270b6:0",
+              "prevOutput": "35c0e94677725db5bf2dba08c1832a868d5829a7654cbdd59330c4ce9d08a4e9:0",
               "sigScript": "",
               "sequence": 0,
               "witness": []
@@ -382,11 +382,11 @@
           "outputs": [
             {
               "value": 199989400,
-              "scriptPubkey": "0014fbd52e48414ca64e371863185f37faf9688f4793"
+              "scriptPubkey": "00140bf1c0c5c08c11ccfc51920410ad7c722ce6f058"
             },
             {
               "value": 0,
-              "scriptPubkey": "6a2003801a4d14ca60ec82ed828dad24a0ad2aaf3fd08ce24afe88a6f23dd3b83a20"
+              "scriptPubkey": "6a2001bbcf25b7188f77f56e0a9e200e1602df9c023477ced7b0b6ece527259a8170"
             }
           ],
           "lockTime": 0
@@ -394,38 +394,55 @@
       },
       "anchor": {
         "mpcProof": {
-          "pos": 0,
+          "pos": 3,
           "cofactor": 0,
           "path": [
-            "2654d00479f293cb87da5ce93132c92a44b64637ba8035d16c0c3df0138e6937",
-            "711c461665619d9ffbc47fbd36afef92acb1e1aceb9563c8d5537595c8c80dd9",
-            "782a9e5846909dab4906c273b0e3984f5f6f22a15e5f0ec13d5c406ce320b7b6"
+            "b3ac81eebe7502f7eddc8cb19864d337465be890600a513a0ff2107d3b301835",
+            "8ccab3bafe4836e7dfdf6894426172b2bac0d9be813028f8adaee040cb32376c",
+            "2e147035d3bd650cd542600bc299ee23588a302d4f1f29bee409865910ee3785"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d/4000/0": "4c7b84de230c89a09fb15d3a4e21bab1a89c211428fca8f357504e82e980a7fd",
-          "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f/4000/0": "4c7b84de230c89a09fb15d3a4e21bab1a89c211428fca8f357504e82e980a7fd",
-          "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f/4010/0": "4c7b84de230c89a09fb15d3a4e21bab1a89c211428fca8f357504e82e980a7fd"
+          "50776b79f906a2ae68e7ed2d84204b326961429e5e22ab0d338b0645df184b55/4000/0": "8d8800c6ec156c42b207a03b843c49871238b6f2b37a09052af3fcf491203343",
+          "50776b79f906a2ae68e7ed2d84204b326961429e5e22ab0d338b0645df184b55/4010/0": "8d8800c6ec156c42b207a03b843c49871238b6f2b37a09052af3fcf491203343",
+          "59a8f27a38a3bb64dd86820fcf8d2ba0816a41aa78ea5d9b8aa875e3c42cbe33/4000/0": "8d8800c6ec156c42b207a03b843c49871238b6f2b37a09052af3fcf491203343"
         },
         "knownTransitions": [
           {
-            "opid": "4c7b84de230c89a09fb15d3a4e21bab1a89c211428fca8f357504e82e980a7fd",
+            "opid": "8d8800c6ec156c42b207a03b843c49871238b6f2b37a09052af3fcf491203343",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:2J9QvuYd-KEl1cCO-S~sk4~_-1adAtur-8gqK_Gf-KPcTNaM",
+              "contractId": "rgb:W8K9xOK5-1uePbk7-Y6mfrYB-m9E300s-Fpng83_-QeLDjmA",
               "nonce": 18446744073709551615,
               "transitionType": 8010,
-              "metadata": {},
+              "metadata": {
+                "1001": "9f02000000000000",
+                "1002": "2800000000000000"
+              },
               "globals": {},
               "inputs": [
-                "211f99cfe7590aa2eac03611958771364f929bcc460c36838770fb650036083d/4000/0",
-                "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f/4000/0",
-                "9be2d09bfe09cf43900b58f1281ac62fd1506ae92f964dd95c740d6d7440e27f/4010/0"
+                "50776b79f906a2ae68e7ed2d84204b326961429e5e22ab0d338b0645df184b55/4000/0",
+                "50776b79f906a2ae68e7ed2d84204b326961429e5e22ab0d338b0645df184b55/4010/0",
+                "59a8f27a38a3bb64dd86820fcf8d2ba0816a41aa78ea5d9b8aa875e3c42cbe33/4000/0"
               ],
-              "assignments": {},
+              "assignments": {
+                "4000": {
+                  "type": "fungible",
+                  "items": [
+                    {
+                      "seal": {
+                        "txid": null,
+                        "vout": 0,
+                        "blinding": 5914338037619459764
+                      },
+                      "state": 55
+                    }
+                  ]
+                }
+              },
               "signature": null
             }
           }
@@ -440,6 +457,14 @@
       "1000": {
         "semId": "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84",
         "name": "allowedInflation"
+      },
+      "1001": {
+        "semId": "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84",
+        "name": "burnedAsset"
+      },
+      "1002": {
+        "semId": "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84",
+        "name": "burnedInflation"
       }
     },
     "globalTypes": {
@@ -559,15 +584,24 @@
       },
       "8010": {
         "transitionSchema": {
-          "metadata": [],
+          "metadata": [
+            1001,
+            1002
+          ],
           "globals": {},
           "inputs": {
             "4000": "noneOrMore",
             "4010": "noneOrMore",
             "4013": "noneOrOnce"
           },
-          "assignments": {},
-          "validator": null
+          "assignments": {
+            "4000": "noneOrMore",
+            "4010": "noneOrMore"
+          },
+          "validator": {
+            "lib": "929b73a8510231c9084c9eb6776f0e1cfb15cd7ad1a6b4b24a8a19387e334443",
+            "pos": 0
+          }
         },
         "name": "burn"
       },
@@ -1201,6 +1235,175 @@
       ],
       "data": [
         0
+      ],
+      "libs": []
+    },
+    {
+      "isae": [
+        "ALU",
+        "BPDIGEST",
+        "RGB"
+      ],
+      "code": [
+        11,
+        0,
+        0,
+        0,
+        11,
+        1,
+        1,
+        0,
+        11,
+        3,
+        3,
+        0,
+        193,
+        160,
+        15,
+        1,
+        25,
+        1,
+        33,
+        3,
+        36,
+        0,
+        198,
+        160,
+        15,
+        16,
+        32,
+        8,
+        96,
+        1,
+        36,
+        1,
+        1,
+        2,
+        16,
+        0,
+        11,
+        1,
+        1,
+        0,
+        202,
+        233,
+        3,
+        0,
+        57,
+        48,
+        1,
+        1,
+        32,
+        8,
+        96,
+        1,
+        210,
+        160,
+        15,
+        1,
+        11,
+        0,
+        11,
+        0,
+        26,
+        11,
+        30,
+        32,
+        26,
+        3,
+        31,
+        30,
+        34,
+        26,
+        8,
+        1,
+        11,
+        0,
+        0,
+        0,
+        11,
+        1,
+        1,
+        0,
+        11,
+        3,
+        1,
+        0,
+        193,
+        170,
+        15,
+        1,
+        25,
+        1,
+        33,
+        3,
+        108,
+        0,
+        198,
+        170,
+        15,
+        16,
+        32,
+        8,
+        96,
+        1,
+        36,
+        1,
+        1,
+        2,
+        88,
+        0,
+        11,
+        1,
+        1,
+        0,
+        202,
+        234,
+        3,
+        0,
+        57,
+        48,
+        1,
+        1,
+        32,
+        8,
+        96,
+        1,
+        210,
+        170,
+        15,
+        1,
+        11,
+        0,
+        11,
+        0,
+        26,
+        11,
+        30,
+        32,
+        26,
+        3,
+        31,
+        30,
+        34,
+        26,
+        8,
+        1,
+        7
+      ],
+      "data": [
+        40,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        41
       ],
       "libs": []
     },

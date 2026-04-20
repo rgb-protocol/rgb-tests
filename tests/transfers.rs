@@ -1861,20 +1861,66 @@ fn ifa_burn() {
     let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
     let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
-    let contract_id = wlt_1.issue_ifa(999, None, vec![]);
+    let issued_amt = 999;
+    let infl_utxo = wlt_1.get_utxo(None);
+    let contract_id = wlt_1.issue_ifa(issued_amt, None, vec![(infl_utxo, 100)]);
+    let schema_id = wlt_1.schema_id(contract_id);
 
-    let amt = 300;
+    let mut amt_asset = 300;
     let utxo = wlt_2.get_utxo(None);
     wlt_1.send_ifa(
         &mut wlt_2,
         InvoiceType::Blinded(Some(utxo)),
         contract_id,
-        amt,
+        amt_asset,
     );
+    let mut amt_infl = 60;
+    let mut invoice = wlt_2.invoice(
+        contract_id,
+        schema_id,
+        amt_infl,
+        InvoiceType::Blinded(Some(utxo)),
+    );
+    invoice.assignment_name = Some(fname!("inflationAllowance"));
+    wlt_1.send_to_invoice(&mut wlt_2, invoice, None, None, None);
 
-    // burn assets
-    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amt], false);
-    let (consignment, _) = wlt_2.burn_ifa(contract_id, vec![utxo]);
+    // partial burn assets
+    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amt_asset], false);
+    let utxos = wlt_2.list_unspent_outpoints();
+    let burn_amt_asset = 99;
+    let burn_amt_infl = 12;
+    wlt_2.burn_ifa(
+        contract_id,
+        utxos,
+        Some(map! {OS_ASSET => burn_amt_asset, OS_INFLATION => burn_amt_infl}),
+    );
+    amt_asset -= burn_amt_asset;
+    amt_infl -= burn_amt_infl;
+
+    wlt_2.debug_logs(contract_id, AllocationFilter::Wallet);
+    let utxo = wlt_1.get_utxo(None);
+    wlt_2.send_ifa(
+        &mut wlt_1,
+        InvoiceType::Blinded(Some(utxo)),
+        contract_id,
+        amt_asset,
+    );
+    let mut invoice = wlt_1.invoice(
+        contract_id,
+        schema_id,
+        amt_infl,
+        InvoiceType::Blinded(Some(utxo)),
+    );
+    invoice.assignment_name = Some(fname!("inflationAllowance"));
+    wlt_2.send_to_invoice(&mut wlt_1, invoice, None, None, None);
+
+    // partial burn of asset allocation, inflation is burned in full
+    let utxos = wlt_1.list_unspent_outpoints();
+    wlt_1.burn_ifa(contract_id, utxos, Some(map! {OS_ASSET => 16}));
+    wlt_1.debug_logs(contract_id, AllocationFilter::Wallet);
+    // burn remaining asset allocation
+    let utxos = wlt_1.list_unspent_outpoints();
+    let (consignment, _) = wlt_1.burn_ifa(contract_id, utxos, None);
     let last_transition = consignment
         .bundles
         .iter()
@@ -1888,6 +1934,7 @@ fn ifa_burn() {
         .transition
         .clone();
     assert!(last_transition.transition_type == TS_BURN);
+    wlt_1.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
     wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
 }
 

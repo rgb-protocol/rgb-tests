@@ -474,7 +474,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
         }
         AssetSchema::Ifa => (
             AssetInfo::default_ifa(vec![999], vec![]),
-            "rgb:1TyUZt~C-FxgMtiZ-vqFBx3b-_kszB6O-eAidSVh-NGRKTtA",
+            "rgb:Klp~7R_Q-z3Fv1J5-Vd6NotS-eGBmIqT-_zx2cz3-shptV6w",
         ),
     };
 

@@ -349,7 +349,12 @@ impl BpTestWallet {
         );
     }
 
-    pub fn burn_ifa(&mut self, contract_id: ContractId, utxos: Vec<Outpoint>) -> (Transfer, Tx) {
+    pub fn burn_ifa(
+        &mut self,
+        contract_id: ContractId,
+        utxos: Vec<Outpoint>,
+        burn_amount_by_type: Option<HashMap<AssignmentType, u64>>,
+    ) -> (Transfer, Tx) {
         let address = self.get_address();
         let (mut psbt, _) = self.construct_psbt(utxos, vec![(address, None)], None);
         let mut asset_transition_builder = self
@@ -361,6 +366,7 @@ impl BpTestWallet {
             .inputs()
             .map(|txin| outpoint_bp_to_bitcoin(txin.previous_outpoint))
             .collect::<HashSet<_>>();
+        let mut amt_by_type = map! { OS_ASSET => 0, OS_INFLATION => 0 };
         for (_, opout_state_map) in self
             .wallet
             .stock()
@@ -368,9 +374,29 @@ impl BpTestWallet {
             .unwrap()
         {
             for (opout, state) in opout_state_map {
+                if let AllocatedState::Amount(amt) = state {
+                    *amt_by_type.get_mut(&opout.ty).unwrap() += amt.as_u64();
+                }
                 asset_transition_builder =
                     asset_transition_builder.add_input(opout, state).unwrap();
             }
+        }
+        let burn_amt_by_type = burn_amount_by_type.unwrap_or_default();
+        let seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(0));
+        for (assignment_type, amt) in &amt_by_type {
+            let burn_amt = burn_amt_by_type.get(assignment_type).unwrap_or(amt);
+            let change = amt - burn_amt;
+            if change > 0 {
+                asset_transition_builder = asset_transition_builder
+                    .add_owned_state_raw(*assignment_type, seal, Amount::from(change).into())
+                    .unwrap();
+            }
+            asset_transition_builder = asset_transition_builder
+                .add_metadata_raw(
+                    burn_meta_by_assignment(assignment_type),
+                    Amount::from(*burn_amt),
+                )
+                .unwrap();
         }
         let transition = asset_transition_builder.complete_transition().unwrap();
         let opid = transition.id();
@@ -387,6 +413,7 @@ impl BpTestWallet {
         println!("burn txid: {}", txid);
         self.sync();
         let consignment = self.consign_transfer(contract_id, [], [], [opid], Some(txid));
+        self.accept_transfer(consignment.clone(), None);
         (consignment, tx)
     }
 

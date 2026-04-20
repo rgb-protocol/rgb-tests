@@ -389,7 +389,11 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
     let (consignment, tx) = if scenario == Scenario::C {
         // burn all allocations
         let wlt_1_utxos = wlt_1.list_unspent_outpoints();
-        wlt_1.burn_ifa(contract_id_2, wlt_1_utxos)
+        wlt_1.burn_ifa(
+            contract_id_2,
+            wlt_1_utxos,
+            Some(map! {OS_ASSET => next_amt}),
+        )
     } else {
         // spend change of previous send
         wlt_1.send(
@@ -402,6 +406,19 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
         )
     };
     txes.push(tx);
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
+    let resolver = OfflineResolver {
+        consignment: &consignment,
+    };
+    consignment
+        .clone()
+        .validate(&resolver, &validation_config)
+        .unwrap();
 
     (consignment, txes)
 }
@@ -2445,9 +2462,10 @@ fn validate_consignment_ifa() {
         .map(|i| i.ty)
         .collect::<HashSet<_>>();
     assert_eq!(input_assignment_types, set![OS_ASSET, OS_INFLATION]);
+    let assignment_types = [OS_ASSET, OS_INFLATION];
 
-    // Error: burn transitions can't have assignments
-    for assignment_type in [OS_ASSET, OS_INFLATION] {
+    // Error: burn transitions can't inflate
+    for assignment_type in assignment_types {
         let mut consignment = base_consignment.clone();
         let mut bundles = consignment.bundles.release();
         let wbundle = bundles
@@ -2457,7 +2475,15 @@ fn validate_consignment_ifa() {
         let mut transition = base_transition.clone();
         transition
             .assignments
-            .insert(assignment_type, TypedAssigns::strict_dumb())
+            .insert(
+                assignment_type,
+                TypedAssigns::Fungible(AssignVec::with(NonEmptyVec::with(
+                    AssignFungible::ConfidentialSeal {
+                        seal: SecretSeal::strict_dumb(),
+                        state: RevealedValue::new(1u64),
+                    },
+                ))),
+            )
             .unwrap();
         let opid = transition.id();
         assert_ne!(opid, old_opid);
@@ -2474,11 +2500,183 @@ fn validate_consignment_ifa() {
         dbg!(&res);
         assert_eq!(
             res,
-            ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(
+            ValidationError::InvalidConsignment(Failure::ScriptFailure(
                 opid,
-                assignment_type
+                Some(ERRNO_BURN_MISMATCH),
+                None,
             ))
         );
+    }
+
+    // Error: burn transitions need to report correct burn amount
+    for assignment_type in assignment_types {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        let metadata_type = burn_meta_by_assignment(&assignment_type);
+        let mut burn_meta = u64::from_le_bytes(
+            <[u8; 8]>::try_from(transition.metadata[&metadata_type].as_slice()).unwrap(),
+        );
+        burn_meta += 1;
+        *transition.metadata.get_mut(&metadata_type).unwrap() =
+            SmallBlob::from_iter_checked(burn_meta.to_le_bytes()).into();
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        remove_transition_children(&mut bundles, bset![old_opid], None);
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &consignment,
+        };
+        let res = consignment
+            .clone()
+            .validate(&resolver, &validation_config)
+            .unwrap_err();
+        dbg!(&res);
+        assert_eq!(
+            res,
+            ValidationError::InvalidConsignment(Failure::ScriptFailure(
+                opid,
+                Some(ERRNO_BURN_MISMATCH),
+                None,
+            ))
+        );
+    }
+
+    // Error: burn transitions need to burn a nonzero amount
+    for assignment_type in assignment_types {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        let metadata_type = burn_meta_by_assignment(&assignment_type);
+        let burn_amt = u64::from_le_bytes(
+            <[u8; 8]>::try_from(transition.metadata[&metadata_type].as_slice()).unwrap(),
+        );
+        let chg_amt: u64 = if let Some(ta) = transition.assignments.get(&assignment_type) {
+            ta.as_fungible()
+                .iter()
+                .map(|a| a.as_revealed_state().as_u64())
+                .sum()
+        } else {
+            0
+        };
+        transition
+            .assignments
+            .insert(
+                assignment_type,
+                TypedAssigns::Fungible(AssignVec::with(NonEmptyVec::with(
+                    AssignFungible::ConfidentialSeal {
+                        seal: SecretSeal::strict_dumb(),
+                        state: RevealedValue::new(burn_amt + chg_amt),
+                    },
+                ))),
+            )
+            .unwrap();
+        *transition.metadata.get_mut(&metadata_type).unwrap() =
+            SmallBlob::from_iter_checked([0; 8]).into();
+        assert_ne!(burn_amt, 0);
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        remove_transition_children(&mut bundles, bset![old_opid], None);
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &consignment,
+        };
+        let res = consignment
+            .clone()
+            .validate(&resolver, &validation_config)
+            .unwrap_err();
+        dbg!(&res);
+        assert_eq!(
+            res,
+            ValidationError::InvalidConsignment(Failure::ScriptFailure(
+                opid,
+                Some(ERRNO_BURN_ZERO),
+                None,
+            ))
+        );
+    }
+
+    // Error: even if an assignment type is not present, its meta type must be there
+    for assignment_type in assignment_types {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        transition.inputs = NonEmptyOrdSet::from_iter_checked(
+            transition
+                .inputs
+                .iter()
+                .filter(|i| i.ty != assignment_type)
+                .cloned(),
+        )
+        .into();
+        let meta_type = burn_meta_by_assignment(&assignment_type);
+        transition.metadata.remove(&meta_type).unwrap();
+        transition.assignments.remove(&assignment_type).unwrap();
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        remove_transition_children(&mut bundles, bset![old_opid], None);
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &consignment,
+        };
+        let res = consignment
+            .clone()
+            .validate(&resolver, &validation_config)
+            .unwrap_err();
+        assert_eq!(
+            res,
+            ValidationError::InvalidConsignment(Failure::SchemaNoMetadata(opid, meta_type,))
+        );
+    }
+
+    // Success: when an assignment type is missing, the corresponding metadata needs to be zero
+    for assignment_type in assignment_types {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let wbundle = bundles
+            .iter_mut()
+            .find(|wb| wb.witness_id() == old_txid)
+            .unwrap();
+        let mut transition = base_transition.clone();
+        let metadata_type = burn_meta_by_assignment(&assignment_type);
+        transition.inputs = NonEmptyOrdSet::from_iter_checked(
+            transition
+                .inputs
+                .iter()
+                .filter(|i| i.ty != assignment_type)
+                .cloned(),
+        )
+        .into();
+        transition.assignments.remove(&assignment_type).unwrap();
+        *transition.metadata.get_mut(&metadata_type).unwrap() =
+            SmallBlob::from_iter_checked([0; 8]).into();
+        let opid = transition.id();
+        assert_ne!(opid, old_opid);
+        replace_transition_in_bundle(wbundle, old_opid, transition);
+        remove_transition_children(&mut bundles, bset![old_opid], None);
+        consignment.bundles = LargeVec::from_checked(bundles);
+        let resolver = OfflineResolver {
+            consignment: &consignment,
+        };
+        consignment
+            .clone()
+            .validate(&resolver, &validation_config)
+            .unwrap();
     }
 }
 

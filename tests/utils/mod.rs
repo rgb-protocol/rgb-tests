@@ -56,8 +56,8 @@ pub use std::{
 pub use amplify::{
     ByteArray, Bytes64, From, Wrapper, bmap, bset,
     confinement::{
-        Collection, Confined, LargeVec, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallOrdMap,
-        TinyOrdMap, TinyOrdSet, U16,
+        Collection, Confined, LargeVec, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallBlob,
+        SmallOrdMap, TinyOrdMap, TinyOrdSet, U16,
     },
     hex::FromHex,
     map, none,
@@ -133,12 +133,12 @@ pub use psrgbt_altered::{
 pub use rand::{Rng, RngCore, SeedableRng, rngs::StdRng, seq::SliceRandom};
 #[cfg(not(feature = "altered"))]
 pub use rgb::{
-    Assign, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb, FungibleState, GenesisSeal,
-    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
-    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, Outpoint,
-    OwnedStateSchema, RevealedData, RevealedValue, RgbDescr, RgbWallet, StateType, TapretKey,
-    TransferParams, Transition, TransitionBundle, TransitionType, TypedAssigns, Vin, VoidState,
-    WalletProvider, WpkhDescr,
+    Assign, AssignFungible, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb,
+    FungibleState, GenesisSeal, GlobalDetails, GlobalStateSchema, GraphSeal, Identity,
+    KnownTransition, MetaDetails, MetaType, MetaValue, Occurrences, OccurrencesMismatch,
+    OpFullType, OpId, Opout, Outpoint, OwnedStateSchema, RevealedData, RevealedValue, RgbDescr,
+    RgbWallet, StateType, TapretKey, TransferParams, Transition, TransitionBundle, TransitionType,
+    TypedAssigns, Vin, VoidState, WalletProvider, WpkhDescr,
     assignments::AssignVec,
     bitcoin::{
         Address, CompressedPublicKey, Network, Psbt, ScriptBuf, TapLeafHash, TapNodeHash,
@@ -225,11 +225,11 @@ pub use rgbstd::{
 };
 pub use rstest::rstest;
 pub use schemata::{
-    CFA_SCHEMA_ID, CollectibleFungibleAsset, ERRNO_INFLATION_MISMATCH, ERRNO_ISSUED_MISMATCH,
-    ERRNO_NON_EQUAL_IN_OUT, GS_ISSUED_SUPPLY, IFA_SCHEMA_ID, IfaWrapper, InflatableFungibleAsset,
-    MS_ALLOWED_INFLATION, NIA_SCHEMA_ID, NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_LINK,
-    PFA_SCHEMA_ID, PermissionedFungibleAsset, TS_BURN, TS_INFLATION, TS_TRANSFER, UDA_SCHEMA_ID,
-    UniqueDigitalAsset,
+    CFA_SCHEMA_ID, CollectibleFungibleAsset, ERRNO_BURN_MISMATCH, ERRNO_BURN_ZERO,
+    ERRNO_INFLATION_MISMATCH, ERRNO_ISSUED_MISMATCH, ERRNO_NON_EQUAL_IN_OUT, GS_ISSUED_SUPPLY,
+    IFA_SCHEMA_ID, IfaWrapper, InflatableFungibleAsset, MS_ALLOWED_INFLATION, NIA_SCHEMA_ID,
+    NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_LINK, PFA_SCHEMA_ID, PermissionedFungibleAsset,
+    TS_BURN, TS_INFLATION, TS_TRANSFER, UDA_SCHEMA_ID, UniqueDigitalAsset, burn_meta_by_assignment,
 };
 pub use serde::{Deserialize, Serialize};
 pub use serde_json::{Value, json};

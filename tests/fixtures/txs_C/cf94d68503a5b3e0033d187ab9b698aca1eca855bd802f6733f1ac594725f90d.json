@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "inputs": [
+    {
+      "prevOutput": "35c0e94677725db5bf2dba08c1832a868d5829a7654cbdd59330c4ce9d08a4e9:1",
+      "sigScript": "",
+      "sequence": 0,
+      "witness": [
+        "304402204171bfa599fbaf7660eb1d64a31296d86d24dfba037b0f973bc69ac1b0f52cb902207b88e6f5112540a5cfde31e1268d651bab5f00900f91863cd1fef957e969842001",
+        "025071cbd6111bf2787df5c771f015d5796d9e5688c01b64dd0ba8e3d15f594970"
+      ]
+    },
+    {
+      "prevOutput": "5cf8d08176920eb1b9365432fd84f68315aa98824264bd92db4d892429d9024e:1",
+      "sigScript": "",
+      "sequence": 0,
+      "witness": [
+        "30440220136c326375653cbc0836855f364f75aec3e4630738426dc966a620993c9e00f1022057de66f3cbd8926e9c11e2d8575989ae3104a8f2fd7c3be372909fc29305984601",
+        "034bff9a9dddf089ec9e18a319bc9642628462640fdb47410628ec5dcabb9e1024"
+      ]
+    },
+    {
+      "prevOutput": "35c0e94677725db5bf2dba08c1832a868d5829a7654cbdd59330c4ce9d08a4e9:0",
+      "sigScript": "",
+      "sequence": 0,
+      "witness": [
+        "3045022100fb8ad4639c4bfeada626e8d7634a81476b9b7cd73cd96bda55f5fb6cbacf90e502205281127dab0f24115aa1a8374145828f276b0786ed7a83839469c4341ef1a50201",
+        "02fa803f8914c00f65cd25a797e60321234f2075e97e6c726f0bf0d2c3b1a33837"
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "value": 199989400,
+      "scriptPubkey": "00140bf1c0c5c08c11ccfc51920410ad7c722ce6f058"
+    },
+    {
+      "value": 0,
+      "scriptPubkey": "6a2001bbcf25b7188f77f56e0a9e200e1602df9c023477ced7b0b6ece527259a8170"
+    }
+  ],
+  "lockTime": 0
+}
