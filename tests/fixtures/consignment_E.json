@@ -2,27 +2,27 @@
   "version": "v1",
   "transfer": true,
   "terminals": {
-    "28386ab2c9dc56884fde06ae2d7e19d0e79b6a4217c4427cc9498e63e9745ec7": [
+    "fa154ee579ef409214d813df5db87d0ed421d019b9aa401e1e6caf8874b9a425": [
       {
         "revealed": {
           "txid": null,
           "vout": 1,
-          "blinding": 11261779031724228947
+          "blinding": 4605982409543760845
         }
       },
       {
         "revealed": {
           "txid": null,
           "vout": 2,
-          "blinding": 15796659193755825237
+          "blinding": 8784657165716557382
         }
       }
     ]
   },
   "genesis": {
     "ffv": 0,
-    "schemaId": "rgb:sch:C_ZJ35ghex9tixOVVCNCdA6w~aTdF3~C644SAFFMK3Q#sister-cigar-orbit",
-    "timestamp": 1784805963,
+    "schemaId": "rgb:sch:SrIchyt1Ykw2UsT0XFgmmx7UjF7MAhaAanCsWzbCjGM#trilogy-initial-south",
+    "timestamp": 1789634697,
     "issuer": "ssi:anonymous",
     "chainNet": "bitcoinRegtest",
     "sealClosingStrategy": "firstOpretOrTapret",
@@ -35,19 +35,19 @@
         "0900424641207465726d7300"
       ],
       "3008": [
-        "000e657468657265756d3a2f2f307830"
+        "00010000000000000003307830"
       ]
     },
     "assignments": {
-      "4014": {
+      "4013": {
         "type": "declarative",
         "items": [
           {
             "seal": {
               "revealed": {
-                "txid": "e3c93e0b5e67b59e696840ee56a31f068d2599bb4fb927310b260a6e2ebd240c",
+                "txid": "3f5dc29b8ab3e8a7444d1acf178f97eaa7cbd7d48f0eb93e60180cd9e60127ed",
                 "vout": 0,
-                "blinding": 10031640349850228364
+                "blinding": 5133609945045335031
               }
             },
             "state": null
@@ -63,13 +63,13 @@
         "lock_time": 0,
         "input": [
           {
-            "previous_output": "e3c93e0b5e67b59e696840ee56a31f068d2599bb4fb927310b260a6e2ebd240c:0",
+            "previous_output": "3f5dc29b8ab3e8a7444d1acf178f97eaa7cbd7d48f0eb93e60180cd9e60127ed:0",
             "script_sig": "",
             "sequence": 0,
             "witness": []
           },
           {
-            "previous_output": "de21fee5afe32a3af2452d01bf16f5e0242fd5c320769c7a9ea9ca2c17325abe:1",
+            "previous_output": "86b034ea2e05c1b8eec655e3e6eae39a36742c08476232069b7c544d6091d94d:0",
             "script_sig": "",
             "sequence": 0,
             "witness": []
@@ -78,51 +78,53 @@
         "output": [
           {
             "value": 0,
-            "script_pubkey": "6a2009bcaeacb2d48cdc662c5bfc104b4039676e3cc5975759f5b9f3250af2526411"
+            "script_pubkey": "6a20a9a288c878ec05c0b6b3b7cfed97ffbd916534e7de9cf3a3d95e4a36dca739ae"
           },
           {
-            "value": 199999200,
-            "script_pubkey": "0014354c406901c9f1faf5b5201de22debb9ad319582"
+            "value": 199997600,
+            "script_pubkey": "0014702cb70b58f6a6c5a63254fcf274dc3ddc2a8fb8"
           },
           {
-            "value": 400,
-            "script_pubkey": "001483db35ded6d610b623db54eec99307417c77ab1f"
+            "value": 2000,
+            "script_pubkey": "00147ab99fc1ac07ef38593e1a29cb5b3b47048f3d06"
           }
         ]
       },
       "spvProof": null,
       "anchor": {
         "mpcProof": {
-          "pos": 6,
+          "pos": 5,
           "cofactor": 0,
           "path": [
-            "7ab00746eef5b213fd980b08bd2a1df92ff9b85ebd9d74eabf1e49ede8949095",
-            "fe5701ec4bd20e41fdcea7db42f3d24b87a163cf557e27363da9d46cb77924bb",
-            "7737ffda75cc6f1d962ca384cbd1618c7ba92d9711d67943940f8f31c459f6c4"
+            "ae17e76a540982d81e1159495d4b3bca30caed3163d760e65bfbe78db141fbdd",
+            "bac5cd1b8a9fd317f9db341d3ec0dfbc2b9fd8875f9b2d6327ce8a4fa2b9b0d8",
+            "94308c77dc96d5323dfa957af8f4a290ec9b22986b18d341d066ebec1714dec7"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "76501ba5f2b4def187e6366d0cd3a352a1b04e391c256f55ff4f76593e29175b/4014/0": "0fa9a8b8253196440b73995aff5ac9275f37945ab8ea18cabb41b33a7312f6b0"
+          "9d3581fb231a9fcd361ad49dbbb4da188e203783c8ba2ecfb24431005be2b1b0/4013/0": "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d"
         },
         "knownTransitions": [
           {
-            "opid": "0fa9a8b8253196440b73995aff5ac9275f37945ab8ea18cabb41b33a7312f6b0",
+            "opid": "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:dlAbpfK0-3vGH5jZ-tDNOjUq-GwTjkcJ-W9V~092-WT4pF1s",
+              "contractId": "rgb:nTWB_yMa-n802GtS-du7TaGI-4gN4PIu-i7PskQx-AFvisbA",
               "nonce": 18446744073709551615,
-              "transitionType": 8014,
-              "metadata": {},
+              "transitionType": 8013,
+              "metadata": {
+                "1003": "002d310100000000"
+              },
               "globals": {
                 "2010": [
                   "e803000000000000"
                 ]
               },
               "inputs": [
-                "76501ba5f2b4def187e6366d0cd3a352a1b04e391c256f55ff4f76593e29175b/4014/0"
+                "9d3581fb231a9fcd361ad49dbbb4da188e203783c8ba2ecfb24431005be2b1b0/4013/0"
               ],
               "assignments": {
                 "4000": {
@@ -133,14 +135,14 @@
                         "revealed": {
                           "txid": null,
                           "vout": 1,
-                          "blinding": 16275660691244529906
+                          "blinding": 17802485008863792598
                         }
                       },
                       "state": 1000
                     }
                   ]
                 },
-                "4014": {
+                "4013": {
                   "type": "declarative",
                   "items": [
                     {
@@ -148,7 +150,7 @@
                         "revealed": {
                           "txid": null,
                           "vout": 2,
-                          "blinding": 14366151634235131977
+                          "blinding": 16934344757390080269
                         }
                       },
                       "state": null
@@ -168,13 +170,13 @@
         "lock_time": 0,
         "input": [
           {
-            "previous_output": "6ef67f664a650f0a4acee4370fc45586b53e3cbdd78ead35e40af942297252b0:1",
+            "previous_output": "1b4f5779a1d2fea6071827d2ba3136e281f354c4e2dad558ab6f15b9f18ce492:1",
             "script_sig": "",
             "sequence": 0,
             "witness": []
           },
           {
-            "previous_output": "6ef67f664a650f0a4acee4370fc45586b53e3cbdd78ead35e40af942297252b0:2",
+            "previous_output": "1b4f5779a1d2fea6071827d2ba3136e281f354c4e2dad558ab6f15b9f18ce492:2",
             "script_sig": "",
             "sequence": 0,
             "witness": []
@@ -183,49 +185,49 @@
         "output": [
           {
             "value": 0,
-            "script_pubkey": "6a2022ed27d9fa681942fe95250104a2652dd714a080133f53dcb02a2b87501b9ce4"
+            "script_pubkey": "6a20f1b9f4b89e63a0c7ee66e38844c81a780ff1c7ec6994904026c0a039796255d5"
           },
           {
-            "value": 199998800,
-            "script_pubkey": "0014cbe45decfb73d63639318ce3269994af6c751a87"
+            "value": 199997200,
+            "script_pubkey": "0014cb87e370b8bb272e3d5488c6c82ce8b16d6f5917"
           },
           {
-            "value": 400,
-            "script_pubkey": "001424b9c93a3334622207b37e7d68a4abb1f8b62782"
+            "value": 2000,
+            "script_pubkey": "001467435affd4c4ae9772f07d0b296cbed617f4550e"
           }
         ]
       },
       "spvProof": null,
       "anchor": {
         "mpcProof": {
-          "pos": 6,
+          "pos": 5,
           "cofactor": 0,
           "path": [
-            "9f5b278822ce6d6425f42c39637b1cd4db9e6ab6534bf66f97b241f4d994b42d",
-            "e8ecd537e2fd4cf21f623f092f6a48cb190e3cda339bb3acffea7f3ac6587057",
-            "524945648f4d67de5f6f2468b0ffc62640bf4a1ca9bb5aa4ecda06cd5ae820ce"
+            "b1e6074eb0141f2c73057044457c03c61545b835a48665a2ac888903d21cb912",
+            "b023e328f1c96ae0be994c139ee02f73857e7dc15bfa9917dc2cd89579241522",
+            "32c416d91de3cfee308e0100cd38a7fff9af0b23ba25f1a854cc06e5ced8f1b5"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "0fa9a8b8253196440b73995aff5ac9275f37945ab8ea18cabb41b33a7312f6b0/4000/0": "45c2af6dd92c7702e41ce1b2351c796c933e031ebca75ddbc6619f5aa3327fd6",
-          "0fa9a8b8253196440b73995aff5ac9275f37945ab8ea18cabb41b33a7312f6b0/4014/0": "45c2af6dd92c7702e41ce1b2351c796c933e031ebca75ddbc6619f5aa3327fd6"
+          "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d/4000/0": "f8911504a034c488509173d8d83b18259cdc7710fd38f96dfdfba818d6574257",
+          "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d/4013/0": "f8911504a034c488509173d8d83b18259cdc7710fd38f96dfdfba818d6574257"
         },
         "knownTransitions": [
           {
-            "opid": "45c2af6dd92c7702e41ce1b2351c796c933e031ebca75ddbc6619f5aa3327fd6",
+            "opid": "f8911504a034c488509173d8d83b18259cdc7710fd38f96dfdfba818d6574257",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:dlAbpfK0-3vGH5jZ-tDNOjUq-GwTjkcJ-W9V~092-WT4pF1s",
+              "contractId": "rgb:nTWB_yMa-n802GtS-du7TaGI-4gN4PIu-i7PskQx-AFvisbA",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "0fa9a8b8253196440b73995aff5ac9275f37945ab8ea18cabb41b33a7312f6b0/4000/0",
-                "0fa9a8b8253196440b73995aff5ac9275f37945ab8ea18cabb41b33a7312f6b0/4014/0"
+                "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d/4000/0",
+                "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d/4013/0"
               ],
               "assignments": {
                 "4000": {
@@ -236,14 +238,14 @@
                         "revealed": {
                           "txid": null,
                           "vout": 1,
-                          "blinding": 11261779031724228947
+                          "blinding": 4605982409543760845
                         }
                       },
                       "state": 1000
                     }
                   ]
                 },
-                "4014": {
+                "4013": {
                   "type": "declarative",
                   "items": [
                     {
@@ -251,7 +253,7 @@
                         "revealed": {
                           "txid": null,
                           "vout": 2,
-                          "blinding": 15796659193755825237
+                          "blinding": 8784657165716557382
                         }
                       },
                       "state": null
@@ -264,394 +266,6 @@
           }
         ]
       }
-    }
-  ],
-  "schema": {
-    "ffv": 0,
-    "name": "BridgedFungibleAsset",
-    "metaTypes": {
-      "1001": {
-        "semId": "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84",
-        "name": "burnedAsset"
-      }
-    },
-    "globalTypes": {
-      "2000": {
-        "globalStateSchema": {
-          "semId": "d7fcbee31ef0a85d5f973bda1b0b8c9e7efbcbc5572577382cacd3bdb4218a01",
-          "maxItems": 1
-        },
-        "name": "spec"
-      },
-      "2001": {
-        "globalStateSchema": {
-          "semId": "5b8bc7543832054a1d22be94226be7538b133a26881cba4613027878e05c6cf7",
-          "maxItems": 1
-        },
-        "name": "terms"
-      },
-      "2010": {
-        "globalStateSchema": {
-          "semId": "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84",
-          "maxItems": 16777215
-        },
-        "name": "issuedSupply"
-      },
-      "2012": {
-        "globalStateSchema": {
-          "semId": "75759cea945d1a532617e6f30227c91c63bfad8f6fd698b5c72fcca965540e68",
-          "maxItems": 1
-        },
-        "name": "rejectListUrl"
-      },
-      "2013": {
-        "globalStateSchema": {
-          "semId": "9f082c493ac802a2bac5dddc0b227c20af94d468c448cf1a5a21e0bdc2f53a32",
-          "maxItems": 1
-        },
-        "name": "linkedFromContract"
-      },
-      "2014": {
-        "globalStateSchema": {
-          "semId": "9f082c493ac802a2bac5dddc0b227c20af94d468c448cf1a5a21e0bdc2f53a32",
-          "maxItems": 1
-        },
-        "name": "linkedToContract"
-      },
-      "3008": {
-        "globalStateSchema": {
-          "semId": "67ba7814a980570b5b521e6484fa3f0e8d5a5e9ec2a0e635226db6eb6ace7d04",
-          "maxItems": 1
-        },
-        "name": "bridgeLocation"
-      }
-    },
-    "ownedTypes": {
-      "4000": {
-        "ownedStateSchema": {
-          "fungible": "unsigned64Bit"
-        },
-        "name": "assetOwner",
-        "defaultTransition": 10000
-      },
-      "4013": {
-        "ownedStateSchema": "declarative",
-        "name": "linkRight",
-        "defaultTransition": 10000
-      },
-      "4014": {
-        "ownedStateSchema": "declarative",
-        "name": "bridgeRight",
-        "defaultTransition": 10000
-      }
-    },
-    "genesis": {
-      "metadata": [],
-      "globals": {
-        "2000": "once",
-        "2001": "once",
-        "2012": "noneOrOnce",
-        "2013": "noneOrOnce",
-        "3008": "once"
-      },
-      "assignments": {
-        "4013": "noneOrOnce",
-        "4014": "onceOrMore"
-      },
-      "validator": null
-    },
-    "transitions": {
-      "8010": {
-        "transitionSchema": {
-          "metadata": [
-            1001
-          ],
-          "globals": {},
-          "inputs": {
-            "4000": "noneOrMore",
-            "4013": "noneOrOnce",
-            "4014": "noneOrMore"
-          },
-          "assignments": {
-            "4000": "noneOrMore"
-          },
-          "validator": {
-            "lib": "4f21628b959b3bbbfed29a670b1e897ed3b615a70367e1d74b03e6c978d313c9",
-            "pos": 0
-          }
-        },
-        "name": "burn"
-      },
-      "8012": {
-        "transitionSchema": {
-          "metadata": [],
-          "globals": {
-            "2014": "once"
-          },
-          "inputs": {
-            "4013": "once"
-          },
-          "assignments": {},
-          "validator": null
-        },
-        "name": "link"
-      },
-      "8014": {
-        "transitionSchema": {
-          "metadata": [],
-          "globals": {
-            "2010": "once"
-          },
-          "inputs": {
-            "4014": "once"
-          },
-          "assignments": {
-            "4000": "onceOrMore",
-            "4014": "noneOrOnce"
-          },
-          "validator": {
-            "lib": "d5d462b7fcb24183eec9b79b91bda230b0cad5b4fed63b7bbb159008ebf5c875",
-            "pos": 0
-          }
-        },
-        "name": "bridge"
-      },
-      "10000": {
-        "transitionSchema": {
-          "metadata": [],
-          "globals": {},
-          "inputs": {
-            "4000": "noneOrMore",
-            "4013": "noneOrOnce",
-            "4014": "noneOrMore"
-          },
-          "assignments": {
-            "4000": "noneOrMore",
-            "4013": "noneOrOnce",
-            "4014": "noneOrMore"
-          },
-          "validator": {
-            "lib": "cc9848565d5d7f2763fedd06d6b7ec110ae957d322a8b26770460c0d68b50397",
-            "pos": 0
-          }
-        },
-        "name": "transfer"
-      }
-    },
-    "defaultAssignment": 4000
-  },
-  "scripts": [
-    {
-      "isae": [
-        "ALU",
-        "BPDIGEST",
-        "RGB"
-      ],
-      "code": [
-        11,
-        0,
-        0,
-        0,
-        11,
-        1,
-        1,
-        0,
-        11,
-        3,
-        3,
-        0,
-        193,
-        160,
-        15,
-        1,
-        25,
-        1,
-        33,
-        3,
-        36,
-        0,
-        198,
-        160,
-        15,
-        16,
-        32,
-        8,
-        96,
-        1,
-        36,
-        1,
-        1,
-        2,
-        16,
-        0,
-        11,
-        1,
-        1,
-        0,
-        202,
-        233,
-        3,
-        0,
-        57,
-        48,
-        1,
-        1,
-        32,
-        8,
-        96,
-        1,
-        210,
-        160,
-        15,
-        1,
-        11,
-        0,
-        11,
-        0,
-        26,
-        11,
-        30,
-        32,
-        26,
-        3,
-        31,
-        30,
-        34,
-        26,
-        8,
-        1
-      ],
-      "data": [
-        40,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        41
-      ],
-      "libs": []
-    },
-    {
-      "isae": [
-        "ALU",
-        "BPDIGEST",
-        "RGB"
-      ],
-      "code": [
-        11,
-        0,
-        0,
-        0,
-        208,
-        160,
-        15,
-        1,
-        192,
-        173,
-        15,
-        0,
-        193,
-        173,
-        15,
-        1,
-        25,
-        1,
-        33,
-        1,
-        192,
-        174,
-        15,
-        0,
-        193,
-        174,
-        15,
-        1,
-        11,
-        17,
-        1,
-        0,
-        25,
-        1,
-        34,
-        3,
-        48,
-        0,
-        11,
-        0,
-        3,
-        0,
-        24,
-        9,
-        32,
-        31,
-        1,
-        7,
-        11,
-        0,
-        4,
-        0,
-        25,
-        9,
-        32,
-        1,
-        7
-      ],
-      "data": [
-        0,
-        0,
-        0,
-        3,
-        2
-      ],
-      "libs": []
-    },
-    {
-      "isae": [
-        "ALU",
-        "BPDIGEST",
-        "RGB"
-      ],
-      "code": [
-        11,
-        0,
-        0,
-        0,
-        11,
-        8,
-        1,
-        0,
-        11,
-        1,
-        2,
-        0,
-        200,
-        218,
-        7,
-        1,
-        57,
-        48,
-        0,
-        209,
-        160,
-        15,
-        212,
-        0,
-        1,
-        7
-      ],
-      "data": [
-        1,
-        0,
-        0,
-        0
-      ],
-      "libs": []
     }
   ]
 }

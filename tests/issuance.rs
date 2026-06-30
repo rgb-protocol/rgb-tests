@@ -506,8 +506,9 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
         }
         AssetSchema::Ifa => (
             AssetInfo::default_ifa(vec![999], vec![]),
-            "rgb:Klp~7R_Q-z3Fv1J5-Vd6NotS-eGBmIqT-_zx2cz3-shptV6w",
+            "rgb:Ujb1KB6a-sfYFzER-uTaRT9e-YoeEGS2-YQBFU35-eqaIjmM",
         ),
+        AssetSchema::Bfa => unreachable!("BFA requires mint, not tested here"),
     };
 
     let mut wallet = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);

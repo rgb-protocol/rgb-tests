@@ -296,6 +296,7 @@ type TweakInfo = (WitnessInfo, TapretCommitment);
 
 #[derive(Debug, EnumIter, Copy, Clone, PartialEq)]
 pub enum AssetSchema {
+    Bfa,
     Nia,
     Uda,
     Cfa,
@@ -312,6 +313,7 @@ impl fmt::Display for AssetSchema {
 impl AssetSchema {
     pub fn schema(&self) -> Schema {
         match self {
+            Self::Bfa => BridgedFungibleAsset::schema(),
             Self::Nia => NonInflatableAsset::schema(),
             Self::Uda => UniqueDigitalAsset::schema(),
             Self::Cfa => CollectibleFungibleAsset::schema(),
@@ -322,6 +324,7 @@ impl AssetSchema {
 
     pub fn scripts(&self) -> Scripts {
         match self {
+            Self::Bfa => BridgedFungibleAsset::scripts(),
             Self::Nia => NonInflatableAsset::scripts(),
             Self::Uda => UniqueDigitalAsset::scripts(),
             Self::Cfa => CollectibleFungibleAsset::scripts(),
@@ -332,6 +335,7 @@ impl AssetSchema {
 
     pub fn libs(&self) -> TypeLibs {
         match self {
+            Self::Bfa => BridgedFungibleAsset::libs(),
             Self::Nia => NonInflatableAsset::libs(),
             Self::Uda => UniqueDigitalAsset::libs(),
             Self::Cfa => CollectibleFungibleAsset::libs(),
@@ -360,14 +364,16 @@ impl AssetSchema {
 
     pub fn default_state_type(&self) -> StateType {
         match self {
-            Self::Cfa | Self::Nia | Self::Pfa | Self::Ifa => StateType::Fungible,
+            Self::Bfa | Self::Cfa | Self::Nia | Self::Pfa | Self::Ifa => StateType::Fungible,
             Self::Uda => StateType::Structured,
         }
     }
 
     pub fn allocated_state(&self, value: u64) -> AllocatedState {
         match self {
-            Self::Cfa | Self::Nia | Self::Pfa | Self::Ifa => AllocatedState::Amount(value.into()),
+            Self::Bfa | Self::Cfa | Self::Nia | Self::Pfa | Self::Ifa => {
+                AllocatedState::Amount(value.into())
+            }
             Self::Uda => AllocatedState::Data(
                 Allocation::with(UDA_FIXED_INDEX, OwnedFraction::from(1)).into(),
             ),
@@ -383,6 +389,7 @@ impl From<SchemaId> for AssetSchema {
             UDA_SCHEMA_ID => AssetSchema::Uda,
             PFA_SCHEMA_ID => AssetSchema::Pfa,
             IFA_SCHEMA_ID => AssetSchema::Ifa,
+            BFA_SCHEMA_ID => AssetSchema::Bfa,
             _ => panic!("unknown schema ID"),
         }
     }
@@ -422,11 +429,19 @@ pub enum AssetInfo {
         inflation_info: Vec<(Outpoint, u64)>,
         link_info: (Option<ContractId>, Option<Outpoint>),
     },
+    Bfa {
+        spec: AssetSpec,
+        terms: ContractTerms,
+        bridge_location: BridgeLocation,
+        mint_right_outpoint: Outpoint,
+        link_info: (Option<ContractId>, Option<Outpoint>),
+    },
 }
 
 impl AssetInfo {
     pub fn asset_schema(&self) -> AssetSchema {
         match self {
+            Self::Bfa { .. } => AssetSchema::Bfa,
             Self::Nia { .. } => AssetSchema::Nia,
             Self::Uda { .. } => AssetSchema::Uda,
             Self::Cfa { .. } => AssetSchema::Cfa,
@@ -466,6 +481,7 @@ impl AssetInfo {
             | Self::Pfa { issue_amounts, .. }
             | Self::Ifa { issue_amounts, .. } => issue_amounts.iter().sum(),
             Self::Uda { .. } => 1,
+            Self::Bfa { .. } => 0,
         }
     }
 
@@ -522,6 +538,39 @@ impl AssetInfo {
             None,
             uda_token_data_minimal(),
         )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn bfa(
+        ticker: &str,
+        name: &str,
+        precision: u8,
+        details: Option<&str>,
+        terms_text: &str,
+        terms_media_fpath: Option<&str>,
+        bridge_location: BridgeLocation,
+        mint_right_outpoint: Outpoint,
+    ) -> Self {
+        let spec = AssetSpec::with(
+            ticker,
+            name,
+            Precision::try_from(precision).unwrap(),
+            details,
+        )
+        .unwrap();
+        let text = RicardianContract::from_str(terms_text).unwrap();
+        let attachment = terms_media_fpath.map(attachment_from_fpath);
+        let terms = ContractTerms {
+            text,
+            media: attachment,
+        };
+        Self::Bfa {
+            spec,
+            terms,
+            bridge_location,
+            mint_right_outpoint,
+            link_info: (None, None),
+        }
     }
 
     pub fn nia(
@@ -770,6 +819,27 @@ impl AssetInfo {
                 }
                 builder
             }
+            Self::Bfa {
+                spec,
+                terms,
+                bridge_location,
+                link_info,
+                ..
+            } => {
+                builder = builder
+                    .add_global_state("spec", spec.clone())
+                    .unwrap()
+                    .add_global_state("terms", terms.clone())
+                    .unwrap()
+                    .add_global_state("bridgeLocation", bridge_location.clone())
+                    .unwrap();
+                if let (Some(linked_from_contract), _) = link_info {
+                    builder = builder
+                        .add_global_state("linkedFromContract", *linked_from_contract)
+                        .unwrap()
+                }
+                builder
+            }
         }
     }
 
@@ -806,6 +876,7 @@ impl AssetInfo {
                     )
                     .unwrap()
             }
+            Self::Bfa { .. } => builder,
         }
     }
 
@@ -833,11 +904,31 @@ impl AssetInfo {
         mut builder: ContractBuilder,
         blinding: Option<u64>,
     ) -> ContractBuilder {
-        if let Self::Ifa { link_info, .. } = self
+        if let Self::Ifa { link_info, .. } | Self::Bfa { link_info, .. } = self
             && let (_, Some(link_right_utxo)) = link_info
         {
             builder = builder
                 .add_rights("linkRight", get_builder_seal(*link_right_utxo, blinding))
+                .unwrap();
+        }
+        builder
+    }
+
+    pub fn add_mint_right(
+        &self,
+        mut builder: ContractBuilder,
+        blinding: Option<u64>,
+    ) -> ContractBuilder {
+        if let Self::Bfa {
+            mint_right_outpoint,
+            ..
+        } = self
+        {
+            builder = builder
+                .add_rights(
+                    "mintRight",
+                    get_builder_seal(*mint_right_outpoint, blinding),
+                )
                 .unwrap();
         }
         builder
@@ -1203,6 +1294,7 @@ where
         builder = asset_info.add_asset_owner(builder, outpoints, blinding);
         builder = asset_info.add_inflation_allowance(builder, blinding);
         builder = asset_info.add_link_right(builder, blinding);
+        builder = asset_info.add_mint_right(builder, blinding);
 
         let created_at = created_at.unwrap_or_else(|| Utc::now().timestamp());
         let contract = builder.issue_contract_raw(created_at).unwrap();
@@ -1247,6 +1339,56 @@ where
         self.issue_with_info(asset_info, vec![outpoint.copied()], None, None)
     }
 
+    pub fn issue_bfa(&mut self) -> ContractId {
+        let mint_right_outpoint = self.get_utxo(None);
+        let bridge_location = BridgeLocation::Evm {
+            chain_id: 1,
+            address: TinyString::try_from("0x0".to_owned()).unwrap(),
+        };
+        let asset_info = AssetInfo::bfa(
+            "BFATCKR",
+            "BFA asset name",
+            2,
+            None,
+            "BFA terms",
+            None,
+            bridge_location,
+            mint_right_outpoint,
+        );
+        self.issue_with_info(asset_info, vec![], None, None)
+    }
+
+    pub fn accept_transfer_bfa(
+        &mut self,
+        consignment: Transfer,
+        anchor_resolver: impl FnMut(&ExternalAnchor) -> bool,
+    ) -> Status {
+        let resolver = self.get_resolver();
+        self.sync();
+        let schema_rules = AssetSchema::Bfa.schema_rules();
+        let validated_consignment = consignment
+            .clone()
+            .validate_bfa(
+                &schema_rules,
+                &resolver,
+                &ValidationConfig {
+                    chain_net: self.chain_net(),
+                    build_opouts_dag: true,
+                    ..Default::default()
+                },
+                anchor_resolver,
+            )
+            .unwrap();
+        let validation_status = validated_consignment.clone().into_validation_status();
+        let validity = validation_status.validity();
+        assert_eq!(validity, Validity::Valid);
+        self.wallet
+            .stock_mut()
+            .accept_transfer(validated_consignment, &resolver)
+            .unwrap();
+        validation_status
+    }
+
     pub fn get_secret_seal(
         &mut self,
         outpoint: Option<Outpoint>,
@@ -1261,13 +1403,12 @@ where
         seal.to_secret_seal()
     }
 
-    pub fn invoice(
+    fn invoice_builder(
         &mut self,
         contract_id: ContractId,
         schema_id: SchemaId,
-        amount: u64,
         invoice_type: impl Into<InvoiceType>,
-    ) -> RgbInvoice {
+    ) -> RgbInvoiceBuilder {
         let beneficiary = match invoice_type.into() {
             InvoiceType::Blinded(outpoint) => {
                 Beneficiary::BlindedSeal(self.get_secret_seal(outpoint, None))
@@ -1286,10 +1427,34 @@ where
                 Beneficiary::WitnessVout(Pay2Vout::new(address_payload), Some(tap_internal_key))
             }
         };
-
-        let mut builder = RgbInvoiceBuilder::new(XChainNet::bitcoin(self.network(), beneficiary))
+        RgbInvoiceBuilder::new(XChainNet::bitcoin(self.network(), beneficiary))
             .set_contract(contract_id)
-            .set_schema(schema_id);
+            .set_schema(schema_id)
+    }
+
+    /// Invoice for a declarative (void) assignment, e.g. a `linkRight` or `mintRight`, which is
+    /// held by mere possession and so has no amount to ask for.
+    pub fn invoice_void(
+        &mut self,
+        contract_id: ContractId,
+        schema_id: SchemaId,
+        assignment_name: FieldName,
+        invoice_type: impl Into<InvoiceType>,
+    ) -> RgbInvoice {
+        self.invoice_builder(contract_id, schema_id, invoice_type)
+            .set_void()
+            .set_assignment_name(assignment_name)
+            .finish()
+    }
+
+    pub fn invoice(
+        &mut self,
+        contract_id: ContractId,
+        schema_id: SchemaId,
+        amount: u64,
+        invoice_type: impl Into<InvoiceType>,
+    ) -> RgbInvoice {
+        let mut builder = self.invoice_builder(contract_id, schema_id, invoice_type);
 
         if matches!(schema_id.into(), AssetSchema::Uda) {
             if amount != 1 {
@@ -1548,7 +1713,11 @@ where
             .schema_id()
             .into();
         match asset_schema {
-            AssetSchema::Nia | AssetSchema::Cfa | AssetSchema::Ifa | AssetSchema::Pfa => {
+            AssetSchema::Bfa
+            | AssetSchema::Nia
+            | AssetSchema::Cfa
+            | AssetSchema::Ifa
+            | AssetSchema::Pfa => {
                 // balance can overflow with show_tentative=true
                 let allocations = self.contract_fungible_allocations(contract_id, false);
                 let mut balance = 0;
@@ -1791,6 +1960,27 @@ where
         (consignment, tx)
     }
 
+    pub fn send_bfa<W2: WalletProvider, D2>(
+        &mut self,
+        recv_wlt: &mut TestWallet<W2, D2>,
+        invoice_type: impl Into<InvoiceType>,
+        contract_id: ContractId,
+        amount: u64,
+        sats: u64,
+    ) -> (Transfer, Tx)
+    where
+        TestWallet<W2, D2>: TestWalletExt,
+        <TestWallet<W2, D2> as TestWalletExt>::Psbt: Serialize,
+    {
+        let schema_id = self.schema_id(contract_id);
+        let invoice = recv_wlt.invoice(contract_id, schema_id, amount, invoice_type.into());
+        let (consignment, tx, _, _) = self.pay_full(invoice, Some(sats), None, true, None);
+        self.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+        recv_wlt.accept_transfer_bfa(consignment.clone(), |_anchor| true);
+        self.sync();
+        (consignment, tx)
+    }
+
     pub fn check_allocations(
         &self,
         contract_id: ContractId,
@@ -1799,7 +1989,11 @@ where
         nonfungible_allocation: bool,
     ) {
         match asset_schema.into() {
-            AssetSchema::Nia | AssetSchema::Cfa | AssetSchema::Pfa | AssetSchema::Ifa => {
+            AssetSchema::Bfa
+            | AssetSchema::Nia
+            | AssetSchema::Cfa
+            | AssetSchema::Pfa
+            | AssetSchema::Ifa => {
                 let allocations = self.contract_fungible_allocations(contract_id, false);
                 let mut actual_fungible_allocations = allocations
                     .iter()

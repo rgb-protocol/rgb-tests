@@ -407,6 +407,7 @@ fn unknown_schema_definition(#[case] asset_schema: AssetSchema) {
     let mut wlt_2 = BpTestWallet::with(&DescriptorType::Wpkh, None, false);
 
     let (contract_id, secret_key) = match asset_schema {
+        AssetSchema::Bfa => unreachable!("BFA requires mint, not tested here"),
         AssetSchema::Nia => (wlt_1.issue_nia(600, None), None),
         AssetSchema::Uda => (wlt_1.issue_uda(None), None),
         AssetSchema::Cfa => (wlt_1.issue_cfa(600, None), None),
@@ -2260,6 +2261,25 @@ fn ifa_burn() {
     assert!(last_transition.transition_type == TS_BURN);
     wlt_1.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
     wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![], false);
+
+    // Burned amounts are global state, so they can be read straight off the contract.
+    let ifa = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    for assignment_type in [OS_ASSET, OS_INFLATION] {
+        let amounts = ifa.burn_amounts(&assignment_type);
+        // A burn that does not touch this assignment type records nothing at all, rather than
+        // an entry of zero - the reason the burned amount is NoneOrOnce.
+        assert!(
+            amounts.iter().all(|a| a.value() > 0),
+            "zero entry in {assignment_type} burn history: {amounts:?}"
+        );
+        assert_eq!(
+            ifa.total_burned(&assignment_type),
+            amounts.iter().copied().sum::<Amount>()
+        );
+    }
+    // wlt_1 burned 16 and then the whole remaining allocation, and accepted wlt_2's burn of 99
+    // when it received the onward transfer.
+    assert_eq!(ifa.total_burned(&OS_ASSET), Amount::from(issued_amt));
 }
 
 #[should_panic(expected = "InputMapTransitionMismatch")]
@@ -3232,35 +3252,100 @@ fn contract_linking() {
     let contract_id_1 =
         wlt_1.issue_with_info(asset_info_1, vec![Some(issuance_utxo_1)], None, None);
 
-    let issuance_utxo_2 = wlt_1.get_utxo(None);
-    let amt_2 = 200;
-    let mut asset_info_2 = AssetInfo::default_ifa(vec![amt_2], vec![]);
-    if let AssetInfo::Ifa {
+    let mint_right_utxo = wlt_1.get_utxo(None);
+    let bfa_link_utxo = wlt_1.get_utxo(None);
+    let mut asset_info_2 = AssetInfo::bfa(
+        "BFATCKR",
+        "BFA asset name",
+        2,
+        None,
+        "BFA terms",
+        None,
+        BridgeLocation::Evm {
+            chain_id: 1,
+            address: TinyString::try_from("0x0".to_owned()).unwrap(),
+        },
+        mint_right_utxo,
+    );
+    if let AssetInfo::Bfa {
         ref mut link_info, ..
     } = asset_info_2
     {
-        *link_info = (Some(contract_id_1), None);
+        *link_info = (Some(contract_id_1), Some(bfa_link_utxo));
     }
-    let contract_id_2 =
-        wlt_1.issue_with_info(asset_info_2, vec![Some(issuance_utxo_2)], None, None);
+    let contract_id_2 = wlt_1.issue_with_info(asset_info_2, vec![], None, None);
+
+    let issuance_utxo_3 = wlt_1.get_utxo(None);
+    let amt_3 = 200;
+    let mut asset_info_3 = AssetInfo::default_ifa(vec![amt_3], vec![]);
+    if let AssetInfo::Ifa {
+        ref mut link_info, ..
+    } = asset_info_3
+    {
+        *link_info = (Some(contract_id_2), None);
+    }
+    let contract_id_3 =
+        wlt_1.issue_with_info(asset_info_3, vec![Some(issuance_utxo_3)], None, None);
 
     // sending contract_id_1 allocation causes link right to be moved in extra
-    let schema_id = wlt_1.schema_id(contract_id_1);
-    let invoice = wlt_2.invoice(contract_id_1, schema_id, amt_1, InvoiceType::Blinded(None));
+    let schema_id_1 = wlt_1.schema_id(contract_id_1);
+    let invoice = wlt_2.invoice(
+        contract_id_1,
+        schema_id_1,
+        amt_1,
+        InvoiceType::Blinded(None),
+    );
     let (consignment, tx, _, psbt_meta) = wlt_1.pay_full(invoice, None, None, true, None);
     let txid = txid_bp_to_bitcoin(tx.txid());
     wlt_1.mine_tx(&txid, false);
     wlt_2.accept_transfer(consignment, None);
     wlt_1.sync();
-    let link_utxo = Outpoint::new(txid, psbt_meta.change_vout.unwrap());
-    let (link_consignment, _) = wlt_1.link_ifa(contract_id_1, contract_id_2, link_utxo);
-    wlt_1.send_ifa(&mut wlt_2, InvoiceType::Blinded(None), contract_id_2, amt_2);
 
-    // contract link validation only succeeds after accepting the linking consignment
+    // LINK C1 -> C2
+    let link_utxo = Outpoint::new(txid, psbt_meta.change_vout.unwrap());
+    let (link_consignment_1, _) = wlt_1.link_contract(contract_id_1, contract_id_2, link_utxo);
+
+    // give wlt_2 knowledge of BFA schema
+    let mint_amt = 1000;
+    wlt_1.mint_bfa(contract_id_2, mint_amt, 20_000_000);
+    wlt_1.send_bfa(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id_2,
+        mint_amt / 2,
+        2000,
+    );
+
+    // transfer the BFA link right before the link transition spends it
+    let bfa_link_dest = wlt_1.get_utxo(None);
+    let schema_id_2 = wlt_1.schema_id(contract_id_2);
+    let invoice = wlt_1.invoice_void(
+        contract_id_2,
+        schema_id_2,
+        fname!("linkRight"),
+        InvoiceType::Blinded(Some(bfa_link_dest)),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+    wlt_1.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_1.sync();
+
+    // LINK C2 -> C3
+    let (link_consignment_2, _) = wlt_1.link_contract(contract_id_2, contract_id_3, bfa_link_dest);
+    wlt_1.send_ifa(&mut wlt_2, InvoiceType::Blinded(None), contract_id_3, amt_3);
+
     assert_eq!(
         contract_id_1,
         wlt_2
-            .contract_wrapper::<InflatableFungibleAsset>(contract_id_2)
+            .contract_wrapper::<BridgedFungibleAsset>(contract_id_2)
+            .link_from()
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        contract_id_2,
+        wlt_2
+            .contract_wrapper::<InflatableFungibleAsset>(contract_id_3)
             .link_from()
             .unwrap()
             .unwrap()
@@ -3272,23 +3357,38 @@ fn contract_linking() {
             .unwrap()
             .is_none()
     );
-    wlt_2
-        .wallet
-        .stock()
-        .validate_contracts_link::<InflatableFungibleAsset, InflatableFungibleAsset>(
-            contract_id_1,
-            contract_id_2,
-        )
-        .unwrap_err();
-    wlt_2.accept_transfer(link_consignment, None);
-    wlt_2
-        .wallet
-        .stock()
-        .validate_contracts_link::<InflatableFungibleAsset, InflatableFungibleAsset>(
-            contract_id_1,
-            contract_id_2,
-        )
-        .unwrap();
+    assert!(
+        wlt_2
+            .contract_wrapper::<BridgedFungibleAsset>(contract_id_2)
+            .link_to()
+            .unwrap()
+            .is_none()
+    );
+
+    let validate_link_1_2 = |wlt: &BpTestWallet| {
+        wlt.wallet
+            .stock()
+            .validate_contracts_link::<InflatableFungibleAsset, BridgedFungibleAsset>(
+                contract_id_1,
+                contract_id_2,
+            )
+    };
+    let validate_link_2_3 = |wlt: &BpTestWallet| {
+        wlt.wallet
+            .stock()
+            .validate_contracts_link::<BridgedFungibleAsset, InflatableFungibleAsset>(
+                contract_id_2,
+                contract_id_3,
+            )
+    };
+
+    validate_link_1_2(&wlt_2).unwrap_err();
+    validate_link_2_3(&wlt_2).unwrap_err();
+    wlt_2.accept_transfer(link_consignment_1, None);
+    validate_link_1_2(&wlt_2).unwrap();
+    validate_link_2_3(&wlt_2).unwrap_err();
+    wlt_2.accept_transfer_bfa(link_consignment_2, |_anchor| true);
+    validate_link_2_3(&wlt_2).unwrap();
 }
 
 #[test]
@@ -4080,6 +4180,202 @@ fn spv_proofs_bitcoind() {
         vec![issued_supply - 400, 200],
         false,
     );
+}
+
+#[rstest]
+#[case(TT::Blinded, DT::Wpkh, DT::Wpkh)]
+#[case(TT::Witness, DT::Wpkh, DT::Wpkh)]
+#[case(TT::Blinded, DT::Tr, DT::Tr)]
+#[case(TT::Witness, DT::Tr, DT::Tr)]
+#[case(TT::Blinded, DT::Wpkh, DT::Tr)]
+#[case(TT::Witness, DT::Wpkh, DT::Tr)]
+#[case(TT::Blinded, DT::Tr, DT::Wpkh)]
+#[case(TT::Witness, DT::Tr, DT::Wpkh)]
+fn bfa_mint_and_transfer(
+    #[case] transfer_type: TransferType,
+    #[case] wlt_1_desc: DescriptorType,
+    #[case] wlt_2_desc: DescriptorType,
+) {
+    println!("transfer_type {transfer_type:?} wlt_1_desc {wlt_1_desc:?} wlt_2_desc {wlt_2_desc:?}");
+
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&wlt_1_desc);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&wlt_2_desc);
+
+    let contract_id = wlt_1.issue_bfa();
+
+    // no initial allocations
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![], false);
+    let mut mint_amts = set![];
+
+    // 1st mint
+    let mint_amt_1: u64 = 1000;
+    let after_block_1: u64 = 20_000_000;
+    let (mint_consignment, _) = wlt_1.mint_bfa(contract_id, mint_amt_1, after_block_1);
+    mint_amts.push(mint_amt_1);
+
+    // validate the mint consignment with 3-phase validation
+    let validation_config = ValidationConfig {
+        chain_net: wlt_1.chain_net(),
+        build_opouts_dag: true,
+        ..Default::default()
+    };
+    let validated_mint = mint_consignment
+        .clone()
+        .validate_bfa(
+            &AssetSchema::Bfa.schema_rules(),
+            &wlt_1.get_resolver(),
+            &validation_config,
+            |anchor| match anchor {
+                ExternalAnchor::MintEvent {
+                    amount,
+                    after_block,
+                    ..
+                } => {
+                    assert_eq!(*after_block, after_block_1);
+                    if mint_amts.contains(amount) {
+                        true
+                    } else {
+                        panic!("unexpected amount: {amount}")
+                    }
+                }
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        validated_mint.into_validation_status().validity(),
+        Validity::Valid
+    );
+
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![mint_amt_1], false);
+
+    // transfer bridged assets from wlt_1 to wlt_2
+    let send_amt: u64 = 400;
+    wlt_1.send_bfa(&mut wlt_2, transfer_type, contract_id, send_amt, 2000);
+
+    let wlt_1_remaining = mint_amt_1 - send_amt;
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![wlt_1_remaining], false);
+    wlt_2.check_allocations(contract_id, AssetSchema::Bfa, vec![send_amt], false);
+
+    // 2nd mint
+    let mint_amt_2: u64 = 500;
+    let after_block_2: u64 = after_block_1 + 100;
+    let (mint_consignment_2, _) = wlt_1.mint_bfa(contract_id, mint_amt_2, after_block_2);
+    mint_amts.push(mint_amt_2);
+
+    let validation_config_2 = ValidationConfig {
+        chain_net: wlt_1.chain_net(),
+        build_opouts_dag: true,
+        ..Default::default()
+    };
+    let validated_mint_2 = mint_consignment_2
+        .clone()
+        .validate_bfa(
+            &AssetSchema::Bfa.schema_rules(),
+            &wlt_1.get_resolver(),
+            &validation_config_2,
+            |anchor| match anchor {
+                ExternalAnchor::MintEvent {
+                    amount,
+                    after_block,
+                    ..
+                } => {
+                    assert!(
+                        [after_block_1, after_block_2].contains(after_block),
+                        "unexpected afterBlock: {after_block}"
+                    );
+                    if mint_amts.contains(amount) {
+                        true
+                    } else {
+                        panic!("unexpected amount: {amount}")
+                    }
+                }
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        validated_mint_2.into_validation_status().validity(),
+        Validity::Valid
+    );
+
+    wlt_1.check_allocations(
+        contract_id,
+        AssetSchema::Bfa,
+        vec![wlt_1_remaining, mint_amt_2],
+        false,
+    );
+
+    // transfer all assets from wlt_1 to wlt_2
+    let total_wlt_1 = wlt_1_remaining + mint_amt_2;
+    wlt_1.send_bfa(&mut wlt_2, transfer_type, contract_id, total_wlt_1, 2000);
+
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![], false);
+    wlt_2.check_allocations(
+        contract_id,
+        AssetSchema::Bfa,
+        vec![send_amt, total_wlt_1],
+        false,
+    );
+}
+
+#[test]
+fn bfa_burn() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let contract_id = wlt_1.issue_bfa();
+
+    let mint_amt: u64 = 1000;
+    wlt_1.mint_bfa(contract_id, mint_amt, 20_000_000);
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![mint_amt], false);
+
+    // helpers to address the asset allocation and the mint right separately, so that burning
+    // one does not incidentally destroy the other
+    let asset_outpoints = |wlt: &BpTestWallet| -> Vec<Outpoint> {
+        wlt.contract_wrapper::<BridgedFungibleAsset>(contract_id)
+            .allocations(Filter::Wallet(&wlt.wallet))
+            .map(|a| a.unwrap().seal.outpoint().unwrap())
+            .collect()
+    };
+    let mint_right_outpoint = |wlt: &BpTestWallet| -> Outpoint {
+        wlt.contract_wrapper::<BridgedFungibleAsset>(contract_id)
+            .mint_rights(Filter::Wallet(&wlt.wallet))
+            .next()
+            .expect("no mint right")
+            .unwrap()
+            .seal
+            .outpoint()
+            .unwrap()
+    };
+
+    // partial burn, leaving change
+    let burn_amt: u64 = 400;
+    wlt_1.burn_bfa(contract_id, asset_outpoints(&wlt_1), Some(burn_amt));
+    let remaining = mint_amt - burn_amt;
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![remaining], false);
+    {
+        let bfa = wlt_1.contract_wrapper::<BridgedFungibleAsset>(contract_id);
+        assert_eq!(bfa.burn_amounts(), vec![Amount::from(burn_amt)]);
+        assert_eq!(bfa.total_burned(), Amount::from(burn_amt));
+    }
+
+    // burn the remaining allocation in full
+    wlt_1.burn_bfa(contract_id, asset_outpoints(&wlt_1), None);
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![], false);
+    {
+        let bfa = wlt_1.contract_wrapper::<BridgedFungibleAsset>(contract_id);
+        assert_eq!(bfa.total_burned(), Amount::from(mint_amt));
+        assert_eq!(bfa.burn_amounts().len(), 2);
+    }
+
+    // Retiring only the mint right is a legal burn with no OS_ASSET input at all, so no burned
+    // amount is recorded. This is the case that exercises the absent-`burnedAsset` path in
+    // `bfa_lib_burn`; under the old metadata-based schema it required an explicit zero.
+    wlt_1.burn_bfa(contract_id, vec![mint_right_outpoint(&wlt_1)], None);
+    let bfa = wlt_1.contract_wrapper::<BridgedFungibleAsset>(contract_id);
+    assert_eq!(bfa.total_burned(), Amount::from(mint_amt));
+    assert_eq!(bfa.burn_amounts().len(), 2, "a zero entry was recorded");
 }
 
 #[rstest]

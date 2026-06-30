@@ -412,12 +412,14 @@ impl BpTestWallet {
                     .add_owned_state_raw(*assignment_type, seal, Amount::from(change).into())
                     .unwrap();
             }
-            asset_transition_builder = asset_transition_builder
-                .add_metadata_raw(
-                    burn_meta_by_assignment(assignment_type),
-                    Amount::from(*burn_amt),
-                )
-                .unwrap();
+            if *burn_amt > 0 {
+                asset_transition_builder = asset_transition_builder
+                    .add_global_state(
+                        burn_global_by_assignment(assignment_type),
+                        Amount::from(*burn_amt),
+                    )
+                    .unwrap();
+            }
         }
         let transition = asset_transition_builder.complete_transition().unwrap();
         let opid = transition.id();
@@ -438,7 +440,293 @@ impl BpTestWallet {
         (consignment, tx)
     }
 
-    pub fn link_ifa(
+    pub fn mint_bfa(
+        &mut self,
+        contract_id: ContractId,
+        mint_amount: u64,
+        after_block: u64,
+    ) -> (Transfer, Tx) {
+        // Find the available mint right to consume
+        let mint_right_outpoint = {
+            let bfa = self.contract_wrapper::<BridgedFungibleAsset>(contract_id);
+            bfa.mint_rights(Filter::Wallet(&self.wallet))
+                .next()
+                .expect("no available mint right to consume")
+                .unwrap()
+                .seal
+                .outpoint()
+                .unwrap()
+        };
+
+        // A fresh UTXO funds the dedicated mint-right output.
+        // NOTE: any extra OS_ASSET state co-located at the mint-right UTXO is
+        // not handled here; callers must ensure that does not happen (e.g. by
+        // doing a transition-to-self before calling this method).
+        let anchor_utxo = self.get_utxo(None);
+
+        let asset_address = self.get_address();
+        let mint_right_address = self.get_address();
+        let (mut psbt, _) = self.construct_psbt(
+            vec![mint_right_outpoint, anchor_utxo],
+            vec![
+                (asset_address, None),
+                (mint_right_address, Some(MINT_RIGHT_SATS)),
+            ],
+            None,
+        );
+
+        psbt.set_opret_host();
+        psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+        psbt.sort_outputs_by(|output| !output.is_opret_host())
+            .unwrap();
+
+        let asset_vout = psbt
+            .outputs()
+            .find(|o| o.script == asset_address.script_pubkey())
+            .unwrap()
+            .vout()
+            .to_u32();
+        let mint_right_vout = psbt
+            .outputs()
+            .find(|o| o.script == mint_right_address.script_pubkey())
+            .unwrap()
+            .vout()
+            .to_u32();
+        let asset_seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(asset_vout));
+        let mint_right_seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(mint_right_vout));
+
+        let mut builder = self
+            .wallet
+            .stock()
+            .transition_builder(contract_id, "mint")
+            .unwrap();
+
+        let prev_outputs = psbt
+            .inputs()
+            .map(|txin| outpoint_bp_to_bitcoin(txin.previous_outpoint))
+            .collect::<HashSet<_>>();
+        for (_, opout_state_map) in self
+            .wallet
+            .stock()
+            .contract_assignments_for(contract_id, prev_outputs)
+            .unwrap()
+        {
+            for (opout, state) in opout_state_map {
+                if opout.ty == OS_MINT {
+                    builder = builder.add_input(opout, state).unwrap();
+                }
+            }
+        }
+
+        builder = builder
+            .add_metadata("afterBlock", BlockNumber::from(after_block))
+            .unwrap()
+            .add_global_state("issuedSupply", Amount::from(mint_amount))
+            .unwrap()
+            .add_fungible_state("assetOwner", asset_seal, mint_amount)
+            .unwrap()
+            .add_rights("mintRight", mint_right_seal)
+            .unwrap();
+        let transition = builder.complete_transition().unwrap();
+
+        psbt.push_rgb_transition(transition).unwrap();
+        psbt.set_as_unmodifiable();
+        let fascia = psbt.rgb_commit().unwrap();
+        let txid = psbt.txid();
+        let tx = self.sign_finalize_extract(&mut psbt);
+        self.broadcast_tx(&tx);
+        self.mine_tx(&psbt.get_txid(), false);
+        println!("mint txid: {}", txid);
+        self.sync();
+
+        let consignment_map = self.create_consignments(
+            bmap![contract_id => vec![asset_seal, mint_right_seal]],
+            txid,
+            &fascia,
+            None,
+        );
+        self.consume_fascia(fascia, txid);
+
+        let consignment = consignment_map.into_values().next().unwrap();
+        (consignment, tx)
+    }
+
+    /// burn `amount` of BFA assets on `utxos`, alongside all rights on them
+    pub fn burn_bfa(
+        &mut self,
+        contract_id: ContractId,
+        utxos: Vec<Outpoint>,
+        burn_amount: Option<u64>,
+    ) -> (Transfer, Tx) {
+        let address = self.get_address();
+        let (mut psbt, _) = self.construct_psbt(utxos, vec![(address, None)], None);
+        let mut builder = self
+            .wallet
+            .stock()
+            .transition_builder(contract_id, "burn")
+            .unwrap();
+        let prev_outputs = psbt
+            .inputs()
+            .map(|txin| outpoint_bp_to_bitcoin(txin.previous_outpoint))
+            .collect::<HashSet<_>>();
+        let mut asset_amt = 0;
+        for (_, opout_state_map) in self
+            .wallet
+            .stock()
+            .contract_assignments_for(contract_id, prev_outputs)
+            .unwrap()
+        {
+            for (opout, state) in opout_state_map {
+                if let AllocatedState::Amount(amt) = state {
+                    asset_amt += amt.as_u64();
+                }
+                builder = builder.add_input(opout, state).unwrap();
+            }
+        }
+        let burn_amt = burn_amount.unwrap_or(asset_amt);
+        let change = asset_amt - burn_amt;
+        if change > 0 {
+            let seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(0));
+            builder = builder
+                .add_owned_state_raw(OS_ASSET, seal, Amount::from(change).into())
+                .unwrap();
+        }
+        // NoneOrOnce global state: recorded only when something is actually burned
+        if burn_amt > 0 {
+            builder = builder
+                .add_global_state(burn_global_by_assignment(&OS_ASSET), Amount::from(burn_amt))
+                .unwrap();
+        }
+        let transition = builder.complete_transition().unwrap();
+        let opid = transition.id();
+        psbt.push_rgb_transition(transition).unwrap();
+        psbt.set_opret_host();
+        psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+        psbt.set_as_unmodifiable();
+        let fascia = psbt.rgb_commit().unwrap();
+        let txid = psbt.txid();
+        self.consume_fascia(fascia, txid);
+        let tx = self.sign_finalize_extract(&mut psbt);
+        self.broadcast_tx(&tx);
+        self.mine_tx(&psbt.get_txid(), false);
+        println!("bfa burn txid: {}", txid);
+        self.sync();
+        let consignment = self.consign_transfer(contract_id, [], [], [opid], Some(txid), None);
+        self.accept_transfer_bfa(consignment.clone(), |_anchor| true);
+        (consignment, tx)
+    }
+
+    /// Test-only helper: constructs a BFA `transfer` transition to self that
+    /// spends both the `OS_ASSET` allocation and the `OS_MINT` right and
+    /// reassigns both as outputs, producing a legitimate transition where
+    /// `OS_MINT` appears as both input and output. Used purely as a fixture
+    /// for `validation.rs`, which mutates a clone of this transition to drop
+    /// the `OS_MINT` output and exercise the hidden-burn check in
+    /// `bfa_lib_transfer` (see rgb-schemas `src/bfa.rs`).
+    pub fn bfa_transfer_with_mint_right(&mut self, contract_id: ContractId) -> (Transfer, Tx) {
+        let (asset_outpoint, asset_amount) = {
+            let bfa = self.contract_wrapper::<BridgedFungibleAsset>(contract_id);
+            let alloc = bfa
+                .allocations(Filter::Wallet(&self.wallet))
+                .next()
+                .expect("no available asset allocation to consume")
+                .unwrap();
+            (alloc.seal.outpoint().unwrap(), alloc.state.value())
+        };
+        let mint_right_outpoint = {
+            let bfa = self.contract_wrapper::<BridgedFungibleAsset>(contract_id);
+            bfa.mint_rights(Filter::Wallet(&self.wallet))
+                .next()
+                .expect("no available mint right to consume")
+                .unwrap()
+                .seal
+                .outpoint()
+                .unwrap()
+        };
+
+        let asset_address = self.get_address();
+        let mint_right_address = self.get_address();
+        let (mut psbt, _) = self.construct_psbt(
+            vec![asset_outpoint, mint_right_outpoint],
+            vec![
+                (asset_address, None),
+                (mint_right_address, Some(MINT_RIGHT_SATS)),
+            ],
+            None,
+        );
+
+        psbt.set_opret_host();
+        psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+        psbt.sort_outputs_by(|output| !output.is_opret_host())
+            .unwrap();
+
+        let asset_vout = psbt
+            .outputs()
+            .find(|o| o.script == asset_address.script_pubkey())
+            .unwrap()
+            .vout()
+            .to_u32();
+        let mint_right_vout = psbt
+            .outputs()
+            .find(|o| o.script == mint_right_address.script_pubkey())
+            .unwrap()
+            .vout()
+            .to_u32();
+        let asset_seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(asset_vout));
+        let mint_right_seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(mint_right_vout));
+
+        let mut builder = self
+            .wallet
+            .stock()
+            .transition_builder(contract_id, "transfer")
+            .unwrap();
+
+        let prev_outputs = psbt
+            .inputs()
+            .map(|txin| outpoint_bp_to_bitcoin(txin.previous_outpoint))
+            .collect::<HashSet<_>>();
+        for (_, opout_state_map) in self
+            .wallet
+            .stock()
+            .contract_assignments_for(contract_id, prev_outputs)
+            .unwrap()
+        {
+            for (opout, state) in opout_state_map {
+                if opout.ty == OS_ASSET || opout.ty == OS_MINT {
+                    builder = builder.add_input(opout, state).unwrap();
+                }
+            }
+        }
+
+        builder = builder
+            .add_fungible_state("assetOwner", asset_seal, asset_amount)
+            .unwrap()
+            .add_rights("mintRight", mint_right_seal)
+            .unwrap();
+        let transition = builder.complete_transition().unwrap();
+
+        psbt.push_rgb_transition(transition).unwrap();
+        psbt.set_as_unmodifiable();
+        let fascia = psbt.rgb_commit().unwrap();
+        let txid = psbt.txid();
+        let tx = self.sign_finalize_extract(&mut psbt);
+        self.broadcast_tx(&tx);
+        self.mine_tx(&psbt.get_txid(), false);
+        self.sync();
+
+        let consignment_map = self.create_consignments(
+            bmap![contract_id => vec![asset_seal, mint_right_seal]],
+            txid,
+            &fascia,
+            None,
+        );
+        self.consume_fascia(fascia, txid);
+
+        let consignment = consignment_map.into_values().next().unwrap();
+        (consignment, tx)
+    }
+
+    pub fn link_contract(
         &mut self,
         from_contract_id: ContractId,
         to_contract_id: ContractId,

@@ -2,12 +2,12 @@
   "version": "v1",
   "transfer": true,
   "terminals": {
-    "93297c074fd0e068d182ab76f95003f802fa6259a9583278fce437ac6d81680b": [
+    "369f1d2383b94fe5a9589365f89a3526547eef2989f6f13c1d3f32e5c9fbb47e": [
       {
         "revealed": {
           "txid": null,
           "vout": 1,
-          "blinding": 5154979763391526829
+          "blinding": 4960939967139956594
         }
       }
     ]
@@ -15,7 +15,7 @@
   "genesis": {
     "ffv": 0,
     "schemaId": "rgb:sch:RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU#remote-digital-pegasus",
-    "timestamp": 1785536377,
+    "timestamp": 1788793563,
     "issuer": "ssi:anonymous",
     "chainNet": "bitcoinRegtest",
     "sealClosingStrategy": "firstOpretOrTapret",
@@ -38,9 +38,9 @@
           {
             "seal": {
               "revealed": {
-                "txid": "3c7c980f47d6e9fb2c6cd0517339b86356b62e5161fe616838928d27fc01f8aa",
+                "txid": "e67e8d5dbf7500ffb2f12f2bd1f4c9529b55d2622c14993a20fc8f01750525e0",
                 "vout": 0,
-                "blinding": 11463358905823708198
+                "blinding": 13744732968092553713
               }
             },
             "state": 999
@@ -56,7 +56,7 @@
         "lock_time": 0,
         "input": [
           {
-            "previous_output": "3c7c980f47d6e9fb2c6cd0517339b86356b62e5161fe616838928d27fc01f8aa:0",
+            "previous_output": "e67e8d5dbf7500ffb2f12f2bd1f4c9529b55d2622c14993a20fc8f01750525e0:0",
             "script_sig": "",
             "sequence": 0,
             "witness": []
@@ -65,19 +65,19 @@
         "output": [
           {
             "value": 99999600,
-            "script_pubkey": "51206ae429c80c4c923261eb4bedc0177eeff821c130bdbdbaa863791918ee6e88da"
+            "script_pubkey": "5120703f0550966601aaedb3c1172f5f00d0ca294f3b906e483a16aea82ef4486845"
           }
         ]
       },
       "spvProof": null,
       "anchor": {
         "mpcProof": {
-          "pos": 4,
+          "pos": 1,
           "cofactor": 0,
           "path": [
-            "f0ad16e87a2fcced042100d607b4b042e8c3f2c11886f4ded54bb07f8d8da5ae",
-            "fcb720060809519e35cfcbf1f6dadca9384809a8123cccba4dbb7cec72f6fbe1",
-            "f086e20f617b529a2aba9094b6e8226fd4f1fb9c97d3be18c46574a3acc11475"
+            "ddc1e34de6c972273548991c9d631e7fb156a149a885fe8c8ee546e868bca357",
+            "68c4021d80c8f437269d1339122170bad33606315cf9eaf21c37e3984e76b2f5",
+            "dc692e927a047447a9b5e09a3b9d0f05ef7825b27d0ef79cebcb5f84371a1a0f"
           ]
         },
         "dbcProof": {
@@ -85,25 +85,25 @@
             "partnerNode": null,
             "nonce": 0
           },
-          "internalPk": "775003ed8d92415a9178e72b7216852256df939a83d385ce45449743dbefd82a"
+          "internalPk": "96fa2713093ea2144c3c26269bd36e8798eebb2c42f61ed809baeace9d8cd175"
         }
       },
       "bundle": {
         "inputMap": {
-          "d467e1bf3e52117edaf9a82d54a5e9a7d1cb579ea4fba0f24abdb03945affb02/4000/0": "283fe2e23dbdecb4190dbaa6ebdf85aa3803a4c568a1d482593f9760fc887759"
+          "59129ac0ca69f30b479697adf5e4b4dbabccce24232f0241dffa3c6fc2222f47/4000/0": "eebc34199a683465a1cef50d57906cf1769c80c6f7de7a80e7b16e859bc14277"
         },
         "knownTransitions": [
           {
-            "opid": "283fe2e23dbdecb4190dbaa6ebdf85aa3803a4c568a1d482593f9760fc887759",
+            "opid": "eebc34199a683465a1cef50d57906cf1769c80c6f7de7a80e7b16e859bc14277",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:1Gfhvz5S-EX7a_ag-tVKXpp9-HLV56k_-6DySr2w-OUWv_wI",
+              "contractId": "rgb:WRKawMpp-8wtHlpe-t9eS026-vMziQjL-wJB3~o8-b8IiL0c",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "d467e1bf3e52117edaf9a82d54a5e9a7d1cb579ea4fba0f24abdb03945affb02/4000/0"
+                "59129ac0ca69f30b479697adf5e4b4dbabccce24232f0241dffa3c6fc2222f47/4000/0"
               ],
               "assignments": {
                 "4000": {
@@ -114,7 +114,7 @@
                         "revealed": {
                           "txid": null,
                           "vout": 0,
-                          "blinding": 8825810808249692638
+                          "blinding": 17132249937415908835
                         }
                       },
                       "state": 333
@@ -122,9 +122,9 @@
                     {
                       "seal": {
                         "revealed": {
-                          "txid": "fa6e7a753941a54569963ae73cc40148df8d572710c5a09b89c6470046e654f6",
-                          "vout": 0,
-                          "blinding": 16439273164907042161
+                          "txid": "e55cc45a709c88d0c74b5e7ed8a7fbc161d462820aa2347cda48cb7cf1c4b727",
+                          "vout": 1,
+                          "blinding": 9735387551841441150
                         }
                       },
                       "state": 666
@@ -144,7 +144,7 @@
         "lock_time": 0,
         "input": [
           {
-            "previous_output": "fa6e7a753941a54569963ae73cc40148df8d572710c5a09b89c6470046e654f6:0",
+            "previous_output": "e55cc45a709c88d0c74b5e7ed8a7fbc161d462820aa2347cda48cb7cf1c4b727:1",
             "script_sig": "",
             "sequence": 0,
             "witness": []
@@ -153,23 +153,23 @@
         "output": [
           {
             "value": 99990600,
-            "script_pubkey": "51207ebc1487f0fcefe47780a4f97cac464056658fbfe2fc384c79b9981240c8ac95"
+            "script_pubkey": "51207c8a0a21e690d62588c2f03b4f33d4d22c5539d8deda44025d2fa7b6e3a6ba2d"
           },
           {
             "value": 9000,
-            "script_pubkey": "5120da524788e2afd88a9a2b24731ab7c6fd16341984ae27f9800a7d102942cdb644"
+            "script_pubkey": "5120c2cd6dc3336600b028748f8ed51e7e4f3ca3415ac98d8866bf2d1a90a9ce4c3e"
           }
         ]
       },
       "spvProof": null,
       "anchor": {
         "mpcProof": {
-          "pos": 4,
+          "pos": 1,
           "cofactor": 0,
           "path": [
-            "bac76be167f2eadf0340e959fcc455bd9a7b3d59cbe290a70461a82ffa6b89f0",
-            "2c44b634668ff1b2e941ea35fdd93584c259570c4e8921cd02d10ddefadea0aa",
-            "21cfc947220e1d1c0774400322c49062343d8702d20ce41637264b06ec0dd3b0"
+            "790b93f993bc0a8f728fcfdb47af42fdcd0800875f6404dd3524a53f03f166bc",
+            "cca2eac2223d95679c75dd4d2be29df52fad3e053e9cabeb83bd2c260eb85c4f",
+            "506a6a2aef4e068c532cb16014584e1938beb8cd669dc8a1b41ae46064df8f72"
           ]
         },
         "dbcProof": {
@@ -177,25 +177,25 @@
             "partnerNode": null,
             "nonce": 0
           },
-          "internalPk": "4a9e69a43ee28f1eb1f1745c4e9a9b424c51f1929b8fd201ef936fc28bf15cda"
+          "internalPk": "304b813c3eb1e1dd9ab2e81b66877101d1f1077a189519779e164d6e8f7df9ac"
         }
       },
       "bundle": {
         "inputMap": {
-          "283fe2e23dbdecb4190dbaa6ebdf85aa3803a4c568a1d482593f9760fc887759/4000/1": "d6253abd74f084d0e59ad377f599c7552a9aea6f05fbab950d28e9ca42616723"
+          "eebc34199a683465a1cef50d57906cf1769c80c6f7de7a80e7b16e859bc14277/4000/1": "29b12824013d89a286c238ab888d94dceed7382a852f50532a848a4ee00741f4"
         },
         "knownTransitions": [
           {
-            "opid": "d6253abd74f084d0e59ad377f599c7552a9aea6f05fbab950d28e9ca42616723",
+            "opid": "29b12824013d89a286c238ab888d94dceed7382a852f50532a848a4ee00741f4",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:1Gfhvz5S-EX7a_ag-tVKXpp9-HLV56k_-6DySr2w-OUWv_wI",
+              "contractId": "rgb:WRKawMpp-8wtHlpe-t9eS026-vMziQjL-wJB3~o8-b8IiL0c",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "283fe2e23dbdecb4190dbaa6ebdf85aa3803a4c568a1d482593f9760fc887759/4000/1"
+                "eebc34199a683465a1cef50d57906cf1769c80c6f7de7a80e7b16e859bc14277/4000/1"
               ],
               "assignments": {
                 "4000": {
@@ -206,7 +206,7 @@
                         "revealed": {
                           "txid": null,
                           "vout": 0,
-                          "blinding": 14640000248537833658
+                          "blinding": 18405125037355622786
                         }
                       },
                       "state": 366
@@ -216,7 +216,7 @@
                         "revealed": {
                           "txid": null,
                           "vout": 1,
-                          "blinding": 5154979763391526829
+                          "blinding": 4960939967139956594
                         }
                       },
                       "state": 300

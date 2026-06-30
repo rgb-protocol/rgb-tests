@@ -16,6 +16,7 @@ pub const ELECTRUM_SIGNET_URL: &str = "ssl://mempool.space:60602"; // no verbose
 pub const FAKE_TXID: &str = "e5a3e577309df31bd606f48049049d2e1e02b048206ba232944fcc053a176ccb:0";
 pub const UDA_FIXED_INDEX: u32 = 0;
 pub const DEFAULT_FEE_ABS: u64 = 400;
+pub const MINT_RIGHT_SATS: u64 = 2000;
 pub const MEDIA_FPATH: &str = "tests/fixtures/rgb_logo.jpeg";
 pub const REJECT_LIST_URL: &str = "example.xyz/rejectList";
 pub const PURPOSE_BIP84: u32 = 84;
@@ -61,8 +62,9 @@ pub use amplify::{
     ByteArray, Bytes64, From, Wrapper, bmap, bset, confinement,
     confinement::{
         Collection, Confined, LargeVec, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallBlob,
-        SmallOrdMap, TinyOrdMap, TinyOrdSet, U16, U32,
+        SmallOrdMap, TinyOrdMap, TinyOrdSet, TinyString, U16, U32,
     },
+    empty,
     hex::FromHex,
     map, none,
     num::u24,
@@ -139,7 +141,10 @@ pub use rgb::{
         hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1, taproot::LeafScript,
         taproot::LeafVersion, transaction::Version,
     },
-    containers::{ConsignmentVer, TerminalSeals, ValidContract, WitnessBundle, legacy::TransferV0},
+    containers::{
+        ConsignmentVer, TerminalSeals, ValidContract, WitnessBundle,
+        legacy::{ContainerVerV0, PubWitness, SecretSeals, TransferV0, WitnessBundleV0},
+    },
     contract::{
         AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, FilteredContractState,
         OpDirection, SchemaWrapper,
@@ -150,12 +155,15 @@ pub use rgb::{
     pay::{PsbtMeta, TxParams},
     persistence::{ContractAssignments, Stock, StockError},
     rgbasm,
-    stl::{ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl},
+    stl::{
+        BlockNumber, BridgeLocation, ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl,
+    },
     tapret::{TapretNodePartner, TapretRightBranch},
     validation::{
-        DbcProof, Failure, OpoutsDagData, ResolveWitness, SchemaDefError, SchemaDefinition,
-        SchemaRules, Scripts, SpvProof, Status, TypeLibs, ValidationConfig, ValidationError,
-        Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError, WitnessStatus,
+        DbcProof, ExternalAnchor, Failure, OpoutsDagData, ResolveWitness, SchemaDefError,
+        SchemaDefinition, SchemaRules, Scripts, SpvProof, Status, TypeLibs, ValidationConfig,
+        ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError,
+        WitnessStatus,
     },
     vm::{
         ContractStateAccess, ContractStateEvolve, GlobalStateEntry, GlobalsIter, RgbIsa,
@@ -213,11 +221,13 @@ pub use rgbstd::{
 };
 pub use rstest::rstest;
 pub use schemata::{
-    CFA_SCHEMA_ID, CollectibleFungibleAsset, ERRNO_BURN_MISMATCH, ERRNO_BURN_ZERO,
-    ERRNO_INFLATION_MISMATCH, ERRNO_ISSUED_MISMATCH, ERRNO_NON_EQUAL_IN_OUT, GS_ISSUED_SUPPLY,
-    IFA_SCHEMA_ID, IfaWrapper, InflatableFungibleAsset, MS_ALLOWED_INFLATION, NIA_SCHEMA_ID,
-    NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_LINK, PFA_SCHEMA_ID, PermissionedFungibleAsset,
-    TS_BURN, TS_INFLATION, TS_TRANSFER, UDA_SCHEMA_ID, UniqueDigitalAsset, burn_meta_by_assignment,
+    BFA_SCHEMA_ID, BfaWrapper, BridgedFungibleAsset, CFA_SCHEMA_ID, CollectibleFungibleAsset,
+    ERRNO_BURN_MISMATCH, ERRNO_BURN_ZERO, ERRNO_HIDDEN_BURN, ERRNO_INFLATION_MISMATCH,
+    ERRNO_ISSUED_MISMATCH, ERRNO_MISSING_INPUT, ERRNO_NON_EQUAL_IN_OUT, GS_BURNED_ASSET,
+    GS_BURNED_INFLATION, GS_ISSUED_SUPPLY, IFA_SCHEMA_ID, IfaWrapper, InflatableFungibleAsset,
+    MS_ALLOWED_INFLATION, NIA_SCHEMA_ID, NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_LINK,
+    OS_MINT, PFA_SCHEMA_ID, PermissionedFungibleAsset, TS_BURN, TS_INFLATION, TS_MINT, TS_TRANSFER,
+    UDA_SCHEMA_ID, UniqueDigitalAsset, burn_global_by_assignment,
 };
 pub use serde::{Deserialize, Serialize};
 pub use serde_json::{Value, json};

@@ -48,6 +48,7 @@ enum Scenario {
     B,
     C,
     D,
+    E,
 }
 
 impl fmt::Display for Scenario {
@@ -67,6 +68,11 @@ impl Scenario {
 
     fn resolver(&self) -> MockResolver {
         self.resolver_from(&self.txs_folder())
+    }
+
+    /// Whether this scenario has a v0 version
+    fn has_v0(&self) -> bool {
+        matches!(self, Scenario::A | Scenario::B | Scenario::D)
     }
 
     fn resolver_v0(&self) -> MockResolver {
@@ -138,6 +144,48 @@ fn replace_transition_in_bundle(
     update_anchor(witness_bundle, None)
 }
 
+/// Append a bundle carrying `transition` to a consignment.
+fn append_bundle(
+    consignment: &mut Transfer,
+    resolver: &MockResolver,
+    transition: Transition,
+) -> MockResolver {
+    let mut bundles = consignment.bundles.clone().release();
+    let parent = bundles.last().unwrap();
+    let opid = transition.id();
+    let input_map = transition
+        .inputs
+        .iter()
+        .map(|opout| (*opout, opid))
+        .collect::<BTreeMap<_, _>>();
+    let bundle = TransitionBundle {
+        input_map: NonEmptyOrdMap::from_checked(input_map),
+        known_transitions: NonEmptyVec::with(KnownTransition::new(opid, transition)),
+    };
+    let parent_txid = parent.tx.compute_txid();
+    let tx = Transaction {
+        input: (0..parent.tx.output.len() as u32)
+            .map(|vout| TxIn {
+                previous_output: bitcoin::OutPoint::new(parent_txid, vout),
+                ..Default::default()
+            })
+            .collect(),
+        ..parent.tx.clone()
+    };
+    let mut witness_bundle = WitnessBundle {
+        tx,
+        spv_proof: None,
+        anchor: parent.anchor.clone(),
+        bundle,
+    };
+    update_anchor(&mut witness_bundle, None);
+    let alt_resolver = resolver.with_new_transaction(witness_bundle.tx.clone());
+    bundles.push(witness_bundle);
+    consignment.bundles = LargeVec::from_checked(bundles);
+    consignment.terminals = empty!(); // terminals are now outdated
+    alt_resolver
+}
+
 fn update_anchor(witness_bundle: &mut WitnessBundle, contract_id: Option<ContractId>) {
     let contract_id = contract_id.unwrap_or(
         witness_bundle
@@ -188,7 +236,7 @@ fn update_anchor(witness_bundle: &mut WitnessBundle, contract_id: Option<Contrac
     witness_bundle.anchor = anchor;
 }
 
-/// Update children bundles to keep consistency with some modified transitions/transactions
+/// Update children bundles to keep consistency with some modified transitions
 fn update_transition_children(
     witness_bundles: &mut Vec<WitnessBundle>,
     changed_opids: HashMap<OpId, OpId>,
@@ -275,7 +323,7 @@ fn update_transition_children(
     }
 }
 
-/// Remove bundles that depend on some opids (optionally only ones spending a given allocation type)
+/// Remove bundles that depend on some opids, optionally only the ones spending a given allocation type
 fn remove_transition_children(
     witness_bundles: &mut Vec<WitnessBundle>,
     affected_opids: BTreeSet<OpId>,
@@ -333,6 +381,24 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
             None,
         );
         txes.push(tx);
+        return (consignment, txes);
+    }
+
+    if let Scenario::E = scenario {
+        let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+        let contract_id = wlt_1.issue_bfa();
+
+        let mut txes = vec![];
+
+        let mint_amt = 1000;
+        let (_consignment, tx) = wlt_1.mint_bfa(contract_id, mint_amt, 20_000_000);
+        txes.push(tx);
+
+        // Self-transfer moving both OS_ASSET and OS_MINT forward
+        let (consignment, tx) = wlt_1.bfa_transfer_with_mint_right(contract_id);
+        txes.push(tx);
+
         return (consignment, txes);
     }
 
@@ -465,6 +531,7 @@ fn validate_consignment_generate() {
         Ok(val) if val.to_uppercase() == Scenario::B.to_string() => Scenario::B,
         Ok(val) if val.to_uppercase() == Scenario::C.to_string() => Scenario::C,
         Ok(val) if val.to_uppercase() == Scenario::D.to_string() => Scenario::D,
+        Ok(val) if val.to_uppercase() == Scenario::E.to_string() => Scenario::E,
         Err(VarError::NotPresent) => Scenario::A,
         _ => panic!("invalid scenario"),
     };
@@ -529,9 +596,9 @@ fn validate_consignment_success() {
 
 #[test]
 fn validate_consignment_success_v0() {
-    for scenario in Scenario::iter() {
-        println!(" ---- {scenario}_v0");
+    for scenario in Scenario::iter().filter(Scenario::has_v0) {
         let resolver = scenario.resolver_v0();
+        println!(" ---- {scenario}_v0");
         let consignment = get_consignment_v0(scenario, &resolver);
         assert_consignment_valid(&consignment, &resolver);
     }
@@ -544,10 +611,22 @@ fn assert_consignment_valid(consignment: &Transfer, resolver: &impl ResolveWitne
         chain_net: ChainNet::BitcoinRegtest,
         ..Default::default()
     };
-    let res = consignment
-        .clone()
-        .validate(&asset_schema_rules, resolver, &validation_config)
-        .unwrap();
+    let res = if matches!(asset_schema, AssetSchema::Bfa) {
+        consignment
+            .clone()
+            .validate_bfa(
+                &asset_schema_rules,
+                resolver,
+                &validation_config,
+                |_anchor| true,
+            )
+            .unwrap()
+    } else {
+        consignment
+            .clone()
+            .validate(&asset_schema_rules, resolver, &validation_config)
+            .unwrap()
+    };
     let validation_status = res.validation_status();
     dbg!(&validation_status);
     assert!(validation_status.warnings.is_empty());
@@ -2558,6 +2637,474 @@ fn validate_consignment_logic_fail() {
     );
 }
 
+/// The last revealed transition of the consignment's last bundle.
+fn last_transition(consignment: &Transfer) -> Transition {
+    consignment
+        .bundles
+        .last()
+        .unwrap()
+        .bundle
+        .known_transitions
+        .last()
+        .unwrap()
+        .transition
+        .clone()
+}
+
+fn assert_bfa_valid(consignment: Transfer, rules: &SchemaRules, resolver: &MockResolver) {
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let res = consignment
+        .validate_bfa(rules, resolver, &validation_config, |_anchor| true)
+        .unwrap();
+    let validation_status = res.validation_status();
+    dbg!(&validation_status);
+    assert_eq!(validation_status.validity(), Validity::Valid);
+}
+
+/// Assert a BFA consignment is rejected by a schema script.
+fn assert_bfa_script_failure(
+    consignment: Transfer,
+    rules: &SchemaRules,
+    resolver: &MockResolver,
+    opid: OpId,
+    errno: u8,
+) {
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let res = consignment
+        .validate_bfa(rules, resolver, &validation_config, |_anchor| true)
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::ScriptFailure(opid, Some(errno), None))
+    );
+}
+
+#[test]
+fn validate_consignment_bfa_mint_right_transfer() {
+    fn bfa_mutated_transfer(
+        base_consignment: &Transfer,
+        resolver: &MockResolver,
+        mutate: impl FnOnce(&mut Transition),
+    ) -> (Transfer, MockResolver, OpId) {
+        let mut consignment = base_consignment.clone();
+        let mut bundles = consignment.bundles.release();
+        let witness_bundle = bundles.last_mut().unwrap();
+        let mut transition = witness_bundle
+            .bundle
+            .known_transitions
+            .last()
+            .unwrap()
+            .transition
+            .clone();
+        let old_opid = transition.id();
+        assert_eq!(
+            transition.transition_type, TS_TRANSFER,
+            "fixture must end with a transfer transition"
+        );
+        mutate(&mut transition);
+        let transition_id = transition.id();
+        assert_ne!(
+            transition_id, old_opid,
+            "mutation left the transition unchanged"
+        );
+        let inputs = transition.inputs.iter().copied().collect::<BTreeSet<_>>();
+        replace_transition_in_bundle(witness_bundle, old_opid, transition);
+        let input_map = witness_bundle
+            .bundle
+            .input_map
+            .clone()
+            .release()
+            .into_iter()
+            .filter(|(opout, opid)| *opid != transition_id || inputs.contains(opout))
+            .collect();
+        witness_bundle.bundle.input_map = NonEmptyOrdMap::from_checked(input_map);
+        update_anchor(witness_bundle, None);
+        let alt_resolver = resolver.with_new_transaction(witness_bundle.tx.clone());
+        consignment.bundles = LargeVec::from_checked(bundles);
+        consignment.terminals = empty!(); // terminals are now outdated
+        (consignment, alt_resolver, transition_id)
+    }
+
+    /// Count the `OS_MINT` inputs and outputs of a transition.
+    fn mint_right_counts(transition: &Transition) -> (usize, usize) {
+        let inputs = transition
+            .inputs
+            .iter()
+            .filter(|opout| opout.ty == OS_MINT)
+            .count();
+        let outputs = transition
+            .assignments
+            .get(&OS_MINT)
+            .map(|assigns| assigns.as_declarative().len())
+            .unwrap_or(0);
+        (inputs, outputs)
+    }
+
+    /// Drop the single `OS_MINT` input of a transition, leaving its other inputs untouched.
+    fn drop_mint_right_input(transition: &mut Transition) {
+        let remaining = transition
+            .inputs
+            .iter()
+            .copied()
+            .filter(|opout| opout.ty != OS_MINT)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            remaining.len() + 1,
+            transition.inputs.len(),
+            "fixture transition must carry exactly one OS_MINT input to drop"
+        );
+        transition.inputs = NonEmptyOrdSet::from_iter_checked(remaining).into();
+    }
+
+    /// Assign a second `OS_MINT` output to a transition which already has one.
+    fn split_mint_right_output(transition: &mut Transition) {
+        let mut rights = transition
+            .assignments
+            .get(&OS_MINT)
+            .expect("fixture transition must carry an OS_MINT output")
+            .as_declarative()
+            .to_vec();
+        rights.push(Assign::with(
+            BuilderSeal::Revealed(GraphSeal::new_random_vout(0)),
+            VoidState::strict_dumb(),
+        ));
+        transition
+            .assignments
+            .insert(
+                OS_MINT,
+                TypedAssigns::Declarative(NonEmptyVec::from_checked(rights).into()),
+            )
+            .unwrap();
+    }
+
+    /// Append a `transfer` bundle spending every assignment of the consignment's last transition
+    fn append_mint_right_spend(
+        consignment: &mut Transfer,
+        resolver: &MockResolver,
+        rights_out: usize,
+    ) -> (MockResolver, OpId) {
+        let parent_transition = last_transition(consignment);
+        let parent_opid = parent_transition.id();
+
+        // spend every assignment of the parent transition
+        let inputs = parent_transition
+            .assignments
+            .iter()
+            .flat_map(|(ty, assigns)| {
+                (0..assigns.len_u16()).map(|no| Opout::new(parent_opid, *ty, no))
+            })
+            .collect::<Vec<_>>();
+
+        // re-assign everything, keeping only `rights_out` of the mint rights
+        let mut rights = parent_transition
+            .assignments
+            .get(&OS_MINT)
+            .expect("parent transition must carry OS_MINT outputs")
+            .as_declarative()
+            .to_vec();
+        assert!(
+            rights_out <= rights.len(),
+            "parent transition carries fewer than {rights_out} OS_MINT outputs"
+        );
+        rights.truncate(rights_out);
+        let mut transition = Transition {
+            inputs: NonEmptyOrdSet::from_iter_checked(inputs).into(),
+            ..parent_transition
+        };
+        transition
+            .assignments
+            .insert(
+                OS_MINT,
+                TypedAssigns::Declarative(NonEmptyVec::from_checked(rights).into()),
+            )
+            .unwrap();
+        let opid = transition.id();
+        (append_bundle(consignment, resolver, transition), opid)
+    }
+    let scenario = Scenario::E;
+    let resolver = scenario.resolver();
+    let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema_rules = AssetSchema::from(base_consignment.schema_id()).schema_rules();
+
+    // valid, 1 -> 1: the unmutated fixture
+    let consignment = base_consignment.clone();
+    assert_eq!(mint_right_counts(&last_transition(&consignment)), (1, 1));
+    assert_bfa_valid(consignment, &asset_schema_rules, &resolver);
+
+    // valid, 1 -> 2: a right may be split
+    let (consignment, alt_resolver, _) =
+        bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
+            split_mint_right_output(transition);
+            assert_eq!(mint_right_counts(transition), (1, 2));
+        });
+    assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
+
+    // valid, 0 -> 0: a plain asset transfer, carrying no mint right
+    let (consignment, alt_resolver, _) =
+        bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
+            drop_mint_right_input(transition);
+            transition
+                .assignments
+                .remove(&OS_MINT)
+                .expect("fixture transition must carry an OS_MINT output");
+            assert_eq!(mint_right_counts(transition), (0, 0));
+        });
+    assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
+
+    // valid, 2 -> 2: two rights can be moved in the same transfer
+    let (mut consignment, alt_resolver, _) =
+        bfa_mutated_transfer(&base_consignment, &resolver, split_mint_right_output);
+    let (alt_resolver, _) = append_mint_right_spend(&mut consignment, &alt_resolver, 2);
+    assert_eq!(mint_right_counts(&last_transition(&consignment)), (2, 2));
+    assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
+
+    // ScriptFailure, 0 -> 1: a right may not be created from thin air
+    let (consignment, alt_resolver, transition_id) =
+        bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
+            drop_mint_right_input(transition);
+            assert_eq!(mint_right_counts(transition), (0, 1));
+        });
+    assert_bfa_script_failure(
+        consignment,
+        &asset_schema_rules,
+        &alt_resolver,
+        transition_id,
+        ERRNO_MISSING_INPUT,
+    );
+
+    // ScriptFailure, 1 -> 0: transfer doesn't allow hidden burn
+    let (consignment, alt_resolver, transition_id) =
+        bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
+            transition
+                .assignments
+                .remove(&OS_MINT)
+                .expect("fixture transition must carry an OS_MINT output to drop");
+            assert_eq!(mint_right_counts(transition), (1, 0));
+        });
+    assert_bfa_script_failure(
+        consignment,
+        &asset_schema_rules,
+        &alt_resolver,
+        transition_id,
+        ERRNO_HIDDEN_BURN,
+    );
+
+    // ScriptFailure, 2 -> 1: transfer doesn't allow hidden burn
+    let (mut consignment, alt_resolver, _) =
+        bfa_mutated_transfer(&base_consignment, &resolver, split_mint_right_output);
+    let (alt_resolver, transition_id) = append_mint_right_spend(&mut consignment, &alt_resolver, 1);
+    assert_eq!(mint_right_counts(&last_transition(&consignment)), (2, 1));
+    assert_bfa_script_failure(
+        consignment,
+        &asset_schema_rules,
+        &alt_resolver,
+        transition_id,
+        ERRNO_HIDDEN_BURN,
+    );
+}
+
+#[test]
+fn validate_consignment_bfa_burn() {
+    /// Append a `burn` bundle spending the `spend` assignment types of the consignment's last
+    /// transition.
+    fn append_burn(
+        consignment: &mut Transfer,
+        resolver: &MockResolver,
+        spend: &[AssignmentType],
+        burned: Option<u64>,
+        change: Option<u64>,
+    ) -> (MockResolver, OpId) {
+        let parent_transition = last_transition(consignment);
+        let parent_opid = parent_transition.id();
+        let inputs = spend
+            .iter()
+            .flat_map(|ty| {
+                let ty = *ty;
+                let count = parent_transition
+                    .assignments
+                    .get(&ty)
+                    .map(|assigns| assigns.len_u16())
+                    .unwrap_or(0);
+                (0..count).map(move |no| Opout::new(parent_opid, ty, no))
+            })
+            .collect::<Vec<_>>();
+
+        let mut globals = parent_transition.globals.clone();
+        if let Some(burned) = burned {
+            let val = Amount::from(burned)
+                .to_strict_serialized::<{ u16::MAX as usize }>()
+                .unwrap();
+            globals.add_state(GS_BURNED_ASSET, val.into()).unwrap();
+        }
+
+        // a burn transition defines no OS_MINT assignments: a right it spends is retired
+        let mut assignments = parent_transition.assignments.clone();
+        assignments.remove(&OS_MINT).unwrap();
+        match change {
+            Some(amount) => {
+                assignments
+                    .insert(
+                        OS_ASSET,
+                        TypedAssigns::Fungible(AssignVec::with(NonEmptyVec::with(
+                            AssignFungible::with(
+                                BuilderSeal::Revealed(GraphSeal::new_random_vout(0)),
+                                RevealedValue::new(amount),
+                            ),
+                        ))),
+                    )
+                    .unwrap();
+            }
+            None => {
+                assignments.remove(&OS_ASSET).unwrap();
+            }
+        }
+
+        let transition = Transition {
+            transition_type: TS_BURN,
+            inputs: NonEmptyOrdSet::from_iter_checked(inputs).into(),
+            globals,
+            assignments,
+            ..parent_transition
+        };
+        let opid = transition.id();
+        (append_bundle(consignment, resolver, transition), opid)
+    }
+
+    let scenario = Scenario::E;
+    let resolver = scenario.resolver();
+    let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema_rules = AssetSchema::from(base_consignment.schema_id()).schema_rules();
+
+    // the fixture ends with a transfer holding the whole bridged supply plus the mint right
+    let parent = last_transition(&base_consignment);
+    let supply = parent
+        .assignments
+        .get(&OS_ASSET)
+        .expect("fixture transition must carry an OS_ASSET output")
+        .as_fungible()
+        .iter()
+        .map(|assign| assign.as_state().as_u64())
+        .sum::<u64>();
+    assert_ne!(supply, 0);
+    assert_eq!(
+        parent
+            .assignments
+            .get(&OS_MINT)
+            .expect("fixture transition must carry an OS_MINT output")
+            .as_declarative()
+            .len(),
+        1
+    );
+
+    // valid: the whole allocation is burned, leaving no change
+    let mut consignment = base_consignment.clone();
+    let (alt_resolver, _) =
+        append_burn(&mut consignment, &resolver, &[OS_ASSET], Some(supply), None);
+    assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
+
+    // valid: a partial burn, the remainder carried over as change
+    let mut consignment = base_consignment.clone();
+    let burnt = supply / 4;
+    let (alt_resolver, _) = append_burn(
+        &mut consignment,
+        &resolver,
+        &[OS_ASSET],
+        Some(burnt),
+        Some(supply - burnt),
+    );
+    assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
+
+    // valid: the mint right alone is retired
+    let mut consignment = base_consignment.clone();
+    let (alt_resolver, _) = append_burn(&mut consignment, &resolver, &[OS_MINT], None, None);
+    let burn = last_transition(&consignment);
+    assert!(burn.inputs.iter().all(|opout| opout.ty == OS_MINT));
+    assert!(burn.globals.get(&GS_BURNED_ASSET).is_none());
+    assert!(burn.assignments.is_empty());
+    assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
+
+    // valid: asset and mint right retired by the same transition
+    let mut consignment = base_consignment.clone();
+    let (alt_resolver, _) = append_burn(
+        &mut consignment,
+        &resolver,
+        &[OS_ASSET, OS_MINT],
+        Some(supply),
+        None,
+    );
+    assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
+
+    // ScriptFailure: the reported burned amount must match what actually disappears
+    let mut consignment = base_consignment.clone();
+    let (alt_resolver, opid) = append_burn(
+        &mut consignment,
+        &resolver,
+        &[OS_ASSET],
+        Some(supply - 1),
+        None,
+    );
+    assert_bfa_script_failure(
+        consignment,
+        &asset_schema_rules,
+        &alt_resolver,
+        opid,
+        ERRNO_BURN_MISMATCH,
+    );
+
+    // ScriptFailure: an explicit zero is malformed state
+    let mut consignment = base_consignment.clone();
+    let (alt_resolver, opid) = append_burn(
+        &mut consignment,
+        &resolver,
+        &[OS_ASSET],
+        Some(0),
+        Some(supply),
+    );
+    assert_bfa_script_failure(
+        consignment,
+        &asset_schema_rules,
+        &alt_resolver,
+        opid,
+        ERRNO_BURN_MISMATCH,
+    );
+
+    // ScriptFailure: a burn transition may not inflate
+    let mut consignment = base_consignment.clone();
+    let (alt_resolver, opid) = append_burn(
+        &mut consignment,
+        &resolver,
+        &[OS_ASSET],
+        None,
+        Some(supply + 1),
+    );
+    assert_bfa_script_failure(
+        consignment,
+        &asset_schema_rules,
+        &alt_resolver,
+        opid,
+        ERRNO_BURN_MISMATCH,
+    );
+
+    // ScriptFailure: a burn transition cannot be used as a plain transfer
+    let mut consignment = base_consignment.clone();
+    let (alt_resolver, opid) =
+        append_burn(&mut consignment, &resolver, &[OS_ASSET], None, Some(supply));
+    assert_bfa_script_failure(
+        consignment,
+        &asset_schema_rules,
+        &alt_resolver,
+        opid,
+        ERRNO_BURN_ZERO,
+    );
+}
+
 #[test]
 fn validate_consignment_remove_scripts_code() {
     let scenario = Scenario::B;
@@ -2884,6 +3431,9 @@ fn validate_consignment_ifa() {
         .collect::<HashSet<_>>();
     assert_eq!(input_assignment_types, set![OS_ASSET, OS_INFLATION]);
     let assignment_types = [OS_ASSET, OS_INFLATION];
+    let ifa_schema = InflatableFungibleAsset::schema();
+    let burn_global_type =
+        |at: &AssignmentType| ifa_schema.global_type(burn_global_by_assignment(at));
 
     // Error: burn transitions can't inflate
     for assignment_type in assignment_types {
@@ -2936,13 +3486,15 @@ fn validate_consignment_ifa() {
             .find(|wb| wb.witness_id() == old_txid)
             .unwrap();
         let mut transition = base_transition.clone();
-        let metadata_type = burn_meta_by_assignment(&assignment_type);
-        let mut burn_meta = u64::from_le_bytes(
-            <[u8; 8]>::try_from(transition.metadata[&metadata_type].as_slice()).unwrap(),
-        );
-        burn_meta += 1;
-        *transition.metadata.get_mut(&metadata_type).unwrap() =
-            SmallBlob::from_iter_checked(burn_meta.to_le_bytes()).into();
+        let global_type = burn_global_type(&assignment_type);
+        let entry = transition
+            .globals
+            .get_mut(&global_type)
+            .unwrap()
+            .get_mut(0)
+            .unwrap();
+        let burn_amt = u64::from_le_bytes(<[u8; 8]>::try_from(entry.as_slice()).unwrap());
+        *entry = SmallBlob::from_iter_checked((burn_amt + 1).to_le_bytes()).into();
         let opid = transition.id();
         assert_ne!(opid, old_opid);
         replace_transition_in_bundle(wbundle, old_opid, transition);
@@ -2966,8 +3518,20 @@ fn validate_consignment_ifa() {
         );
     }
 
-    // Error: burn transitions need to burn a nonzero amount
-    for assignment_type in assignment_types {
+    // Error: burn transitions need to burn a nonzero amount.
+    // `zeroed` covers both ways of reporting that nothing was burned: an explicit zero, and - now
+    // that the burned amount is NoneOrOnce global state - the entry being absent altogether. Both
+    // are rejected, but for different reasons, so they report different errnos. An explicit zero
+    // is malformed state: absent is the only way to say "nothing of this type was burned", so the
+    // script rejects the entry before it ever reaches the economic check, with
+    // ERRNO_BURN_MISMATCH. An absent entry is well-formed, and it is the economic check that
+    // rejects it with ERRNO_BURN_ZERO: a pure transfer wearing a burn costume. That second case
+    // is what guards the check that used to be enforced by the schema requiring the metadata to
+    // be present.
+    for (assignment_type, zeroed) in assignment_types
+        .iter()
+        .flat_map(|at| [(*at, true), (*at, false)])
+    {
         let mut consignment = base_consignment.clone();
         let mut bundles = consignment.bundles.release();
         let wbundle = bundles
@@ -2975,9 +3539,10 @@ fn validate_consignment_ifa() {
             .find(|wb| wb.witness_id() == old_txid)
             .unwrap();
         let mut transition = base_transition.clone();
-        let metadata_type = burn_meta_by_assignment(&assignment_type);
+        let global_type = burn_global_type(&assignment_type);
         let burn_amt = u64::from_le_bytes(
-            <[u8; 8]>::try_from(transition.metadata[&metadata_type].as_slice()).unwrap(),
+            <[u8; 8]>::try_from(transition.globals[&global_type].first().unwrap().as_slice())
+                .unwrap(),
         );
         let chg_amt: u64 = if let Some(ta) = transition.assignments.get(&assignment_type) {
             ta.as_fungible().iter().map(|a| a.as_state().as_u64()).sum()
@@ -2994,8 +3559,16 @@ fn validate_consignment_ifa() {
                 )))),
             )
             .unwrap();
-        *transition.metadata.get_mut(&metadata_type).unwrap() =
-            SmallBlob::from_iter_checked([0; 8]).into();
+        if zeroed {
+            *transition
+                .globals
+                .get_mut(&global_type)
+                .unwrap()
+                .get_mut(0)
+                .unwrap() = SmallBlob::from_iter_checked([0; 8]).into();
+        } else {
+            transition.globals.remove(&global_type).unwrap();
+        }
         assert_ne!(burn_amt, 0);
         let opid = transition.id();
         assert_ne!(opid, old_opid);
@@ -3010,55 +3583,19 @@ fn validate_consignment_ifa() {
             .validate(&asset_schema_rules, &resolver, &validation_config)
             .unwrap_err();
         dbg!(&res);
-        assert_eq!(
-            res,
-            ValidationError::InvalidConsignment(Failure::ScriptFailure(
-                opid,
-                Some(ERRNO_BURN_ZERO),
-                None,
-            ))
-        );
-    }
-
-    // Error: even if an assignment type is not present, its meta type must be there
-    for assignment_type in assignment_types {
-        let mut consignment = base_consignment.clone();
-        let mut bundles = consignment.bundles.release();
-        let wbundle = bundles
-            .iter_mut()
-            .find(|wb| wb.witness_id() == old_txid)
-            .unwrap();
-        let mut transition = base_transition.clone();
-        transition.inputs = NonEmptyOrdSet::from_iter_checked(
-            transition
-                .inputs
-                .iter()
-                .filter(|i| i.ty != assignment_type)
-                .cloned(),
-        )
-        .into();
-        let meta_type = burn_meta_by_assignment(&assignment_type);
-        transition.metadata.remove(&meta_type).unwrap();
-        transition.assignments.remove(&assignment_type).unwrap();
-        let opid = transition.id();
-        assert_ne!(opid, old_opid);
-        replace_transition_in_bundle(wbundle, old_opid, transition);
-        remove_transition_children(&mut bundles, bset![old_opid], None);
-        consignment.bundles = LargeVec::from_checked(bundles);
-        let resolver = OfflineResolver {
-            consignment: &consignment,
+        let errno = if zeroed {
+            ERRNO_BURN_MISMATCH
+        } else {
+            ERRNO_BURN_ZERO
         };
-        let res = consignment
-            .clone()
-            .validate(&asset_schema_rules, &resolver, &validation_config)
-            .unwrap_err();
         assert_eq!(
             res,
-            ValidationError::InvalidConsignment(Failure::SchemaNoMetadata(opid, meta_type,))
+            ValidationError::InvalidConsignment(Failure::ScriptFailure(opid, Some(errno), None))
         );
     }
 
-    // Success: when an assignment type is missing, the corresponding metadata needs to be zero
+    // Success: when an assignment type is not burned, its burned amount is simply absent.
+    // Under NoneOrOnce this is legal where it previously required an explicit zero.
     for assignment_type in assignment_types {
         let mut consignment = base_consignment.clone();
         let mut bundles = consignment.bundles.release();
@@ -3067,7 +3604,7 @@ fn validate_consignment_ifa() {
             .find(|wb| wb.witness_id() == old_txid)
             .unwrap();
         let mut transition = base_transition.clone();
-        let metadata_type = burn_meta_by_assignment(&assignment_type);
+        let global_type = burn_global_type(&assignment_type);
         transition.inputs = NonEmptyOrdSet::from_iter_checked(
             transition
                 .inputs
@@ -3077,8 +3614,7 @@ fn validate_consignment_ifa() {
         )
         .into();
         transition.assignments.remove(&assignment_type).unwrap();
-        *transition.metadata.get_mut(&metadata_type).unwrap() =
-            SmallBlob::from_iter_checked([0; 8]).into();
+        transition.globals.remove(&global_type).unwrap();
         let opid = transition.id();
         assert_ne!(opid, old_opid);
         replace_transition_in_bundle(wbundle, old_opid, transition);
@@ -3182,7 +3718,7 @@ fn validate_consignment_tapret_partner() {
             "script":"6a20ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         }
     });
-    let spk = json!("5120924a409eddc85f2a2070bd5f90a0eb83d885c601a550edb8adac372ff5b26a10");
+    let spk = json!("5120266a61fb2f5fc8f33bb2dd5a823fda4019ebd8fcc558b147343d14b65ed90416");
     assert_eq!(
         gen_tapret_values(test_case),
         (partner_node.clone(), spk.clone())
@@ -3209,7 +3745,7 @@ fn validate_consignment_tapret_partner() {
             "script":"6a20ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         }
     });
-    let spk = json!("51208c04bd9c7bab98b2bc1ca44f8b430a1e8c59f6e0e18b01f0250495c6a21f27cf");
+    let spk = json!("5120ecc27afab08de13ae51763232588b580f98729fd2c042fdda1453f61bb5db4c5");
     assert_eq!(
         gen_tapret_values(test_case),
         (partner_node.clone(), spk.clone())
@@ -3249,7 +3785,7 @@ fn validate_consignment_tapret_partner() {
             "rightNodeHash": "fa02621f8168bda0ba049d71e82f1a341e38287c10127e009cd9e58c68e5050e"
         }
     });
-    let spk = json!("51200e230652e3a72ed0df3252d7c3227a6aefd43a1fd966fa504fd449e25741e366");
+    let spk = json!("51204d5833424e936fdcfc0a694903009a1a381d108b3c2093c1bb02095ba012a2ac");
     assert_eq!(
         gen_tapret_values(test_case),
         (partner_node.clone(), spk.clone())
@@ -3273,7 +3809,7 @@ fn validate_consignment_tapret_partner() {
     let partner_node = json!({
         "leftNode":"2fca1237a2b0915c3840cb035bf3d697c100bd131f1cacba734c46d2827dce90"
     });
-    let spk = json!("5120488034bd12042ef65b1be130dc97355948abf2cc70c184e5d8737e7e0391a69b");
+    let spk = json!("512040bc8c42b3abf1cdcf021d704b382526867b8409edb51cca296fa9d372bc15e8");
     assert_eq!(
         gen_tapret_values(test_case),
         (partner_node.clone(), spk.clone())
@@ -3300,7 +3836,7 @@ fn validate_consignment_tapret_partner() {
             "version": 192
         }
     });
-    let spk = json!("5120b693e0c28bf8df5eac414ff42a4df0083f9fffad697c2f6dcf9c9a68517502dd");
+    let spk = json!("5120c61bc67c5fbcd55870697490860b8b8e57f4b63221abdf3f463801bedc640fab");
     assert_eq!(
         gen_tapret_values(test_case),
         (partner_node.clone(), spk.clone())
@@ -3336,7 +3872,7 @@ fn validate_consignment_tapret_partner() {
             "rightNodeHash": "b2c459126150e0d47063ea7b6d0474a24c39e25908aae5740dd4787b67c6e19a"
         }
     });
-    let spk = json!("512029ee6642472242dddd5d572394b0674b8199a9910cf4dfdc16f6d71c77a19f6c");
+    let spk = json!("51207e8f35a70bb6c092135e8093eac763c2c80e349539536250733126e15b5d5491");
     assert_eq!(
         gen_tapret_values(test_case),
         (partner_node.clone(), spk.clone())
@@ -3371,7 +3907,7 @@ fn validate_consignment_tapret_partner() {
             "script":"6a20fdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd"
         }
     });
-    let spk = json!("5120548c71e6148b08566a35498a641d23f74469659a5e86a6ad1cb3fe776d6444bf");
+    let spk = json!("512039421e26fa3962eb4b270962ac292552bd34427c5a76d9f7abea11c0ec3f1915");
     assert_eq!(
         gen_tapret_values(test_case),
         (partner_node.clone(), spk.clone())
@@ -3406,7 +3942,7 @@ fn validate_consignment_tapret_partner() {
             "rightNodeHash": "cec6cd42645c3d426925940d320e3204fadba480aa7ffff98911d00f6e2124ff"
         }
     });
-    let spk = json!("5120488034bd12042ef65b1be130dc97355948abf2cc70c184e5d8737e7e0391a69b");
+    let spk = json!("512040bc8c42b3abf1cdcf021d704b382526867b8409edb51cca296fa9d372bc15e8");
     assert_eq!(
         gen_tapret_values(test_case),
         (partner_node.clone(), spk.clone())
@@ -3438,7 +3974,7 @@ fn validate_consignment_tapret_partner() {
     let partner_node = json!({
         "leftNode":"a1117afd36bd1195c7765e1fdecaa8ce511cce72874bfb8ff444639df34901af"
     });
-    let spk = json!("51200e230652e3a72ed0df3252d7c3227a6aefd43a1fd966fa504fd449e25741e366");
+    let spk = json!("51204d5833424e936fdcfc0a694903009a1a381d108b3c2093c1bb02095ba012a2ac");
     assert_eq!(
         gen_tapret_values(test_case),
         (partner_node.clone(), spk.clone())
