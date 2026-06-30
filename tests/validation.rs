@@ -381,6 +381,7 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
         let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id_2);
         let inflation_allocations = contract
             .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+            .map(|res| res.unwrap())
             .collect::<Vec<_>>();
         let inflation_outpoints = inflation_allocations
             .iter()
@@ -557,7 +558,7 @@ fn assert_consignment_valid(consignment: &Transfer, resolver: &impl ResolveWitne
 }
 
 #[test]
-fn consignment_data_reads_rules_from_the_stash() {
+fn consignment_data_reads_rules_from_the_store() {
     let scenario = Scenario::A;
     let resolver = scenario.resolver();
     let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
@@ -570,7 +571,7 @@ fn consignment_data_reads_rules_from_the_stash() {
         .validate(&asset_schema.schema_rules(), &resolver, &validation_config)
         .unwrap();
 
-    let mut stock = sql::open_in_memory().unwrap();
+    let mut stock = SqliteStock::in_memory().unwrap();
 
     // the schema is unknown until its definition is imported
     assert!(stock.consignment_data(&valid).is_err());
@@ -605,6 +606,85 @@ fn schema_definition_derives_the_type_system_from_its_libs() {
         assert_eq!(rules.types(), &asset_schema.types());
         assert_eq!(rules.schema_id(), asset_schema.schema().schema_id());
     }
+}
+
+/// A stock keeps a definition's type libraries, not the type system derived
+/// from them, so what it took in comes back out unchanged and the derivation is
+/// redone - and re-authenticated against the schema - on the way.
+#[test]
+fn stock_exports_the_schema_definition_it_imported() {
+    let mut stock = SqliteStock::in_memory().unwrap();
+    for asset_schema in AssetSchema::iter() {
+        let schema_def = asset_schema.schema_definition();
+        let schema_id = schema_def.schema_id();
+        stock
+            .import_schema_definition(schema_def.clone())
+            .expect("an honest definition must import");
+
+        assert_eq!(
+            stock.export_schema_definition(schema_id).unwrap(),
+            schema_def,
+            "a definition must survive the store whole"
+        );
+        // and the type system the store hands to the validator is the one the
+        // libraries derive, not one it was given
+        assert_eq!(
+            stock.schema_rules(schema_id).unwrap().types(),
+            &asset_schema.types()
+        );
+    }
+
+    // sharing between schemata is preserved: every definition still exports its
+    // own libraries, common ones included
+    let shared = AssetSchema::Nia.schema_definition().libs;
+    assert!(
+        shared
+            .keys()
+            .all(|id| AssetSchema::Uda.schema_definition().libs.contains_key(id)),
+        "the standard schemata must share their type libraries"
+    );
+}
+
+/// The derivation is what a cold read does, not something only the importing
+/// process has: a stock opened on a store it did not write rebuilds the rules
+/// from the stored type libraries.
+#[test]
+fn reopened_stock_rederives_the_schema_rules() {
+    let dir = std::env::temp_dir().join("rgb-tests-sdf-reopen");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("stock.db");
+
+    let schema_def = AssetSchema::Nia.schema_definition();
+    let schema_id = schema_def.schema_id();
+    {
+        let mut stock = SqliteStock::open(&path).unwrap();
+        stock.import_schema_definition(schema_def.clone()).unwrap();
+    }
+
+    let stock = SqliteStock::open(&path).unwrap();
+    assert_eq!(
+        stock.export_schema_definition(schema_id).unwrap(),
+        schema_def
+    );
+    assert_eq!(
+        stock.schema_rules(schema_id).unwrap().types(),
+        &AssetSchema::Nia.types()
+    );
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A schema which was never imported has no definition to export, and that is
+/// the user not having imported it rather than the store being broken.
+#[test]
+fn exporting_an_unknown_schema_definition_fails() {
+    let stock = SqliteStock::in_memory().unwrap();
+    let schema_id = AssetSchema::Nia.schema().schema_id();
+    assert!(matches!(
+        stock.export_schema_definition(schema_id),
+        Err(StockError::SchemaNotImported(id)) if id == schema_id
+    ));
 }
 
 /// Type libraries are keyed by their own commitment, so a definition cannot
@@ -666,8 +746,8 @@ fn schema_definition_rejects_tampered_type_lib() {
         "a tampered type library must not verify"
     );
 
-    // and a stash refuses to take it
-    let mut stock = sql::open_in_memory().unwrap();
+    // and a store refuses to take it
+    let mut stock = SqliteStock::in_memory().unwrap();
     assert!(stock.import_schema_definition(tampered).is_err());
     assert!(stock.import_schema_definition(schema_def).is_ok());
 }
@@ -3624,18 +3704,13 @@ fn validate_consignment_contract_state_evolve_fail() {
         }
     }
     impl ContractStateEvolve for SmallContractState {
-        type Error = MemError;
+        type Error = confinement::Error;
         type Context<'ctx> = String;
         fn init(_context: Self::Context<'_>) -> Self {
             Self()
         }
         fn evolve_state(&mut self, _op: rgb::vm::OrdOpRef) -> Result<(), Self::Error> {
-            use amplify::confinement;
-
-            Err(MemError::Confinement(confinement::Error::OutOfBoundary {
-                index: 3,
-                len: 6,
-            }))
+            Err(confinement::Error::OutOfBoundary { index: 3, len: 6 })
         }
     }
     let res = Validator::<SmallContractState, _, _>::validate(
@@ -3802,11 +3877,12 @@ fn validate_consignment_unknown_rgbisa_opcode() {
     let res = consignment
         .clone()
         .validate(
-            &SchemaRules::with(
+            &SchemaDefinition::new(
                 schema.clone(),
-                asset_schema.types(),
+                asset_schema.libs(),
                 tampered_scripts.clone(),
             )
+            .verify()
             .unwrap(),
             &resolver,
             &validation_config,
@@ -3924,7 +4000,7 @@ fn evolve_state_on_operations_without_validator() {
         test;
         ret;
     };
-    let lib = Lib::assemble::<Instr<RgbIsa<MemContract>>>(&code)
+    let lib = Lib::assemble::<Instr<RgbIsa<FilteredContractState>>>(&code)
         .expect("wrong BFA transfer validation script");
 
     let types = StandardTypes::with(rgb_contract_stl());
@@ -3973,7 +4049,6 @@ fn evolve_state_on_operations_without_validator() {
         },
         default_assignment: Some(OS_ASSET),
     };
-    let type_system = types.type_system(schema.clone());
     let scripts = Confined::from_checked(bmap! {lib.id() => lib});
     let schema_scripts = scripts.clone();
     let chain_net = ChainNet::BitcoinRegtest;
@@ -3983,7 +4058,9 @@ fn evolve_state_on_operations_without_validator() {
     let seal = BuilderSeal::Revealed(GenesisSeal::rand_from(outpoint));
     let contract_consignment = ContractBuilder::with(
         strict_dumb!(),
-        SchemaRules::with(schema.clone(), type_system.clone(), scripts).unwrap(),
+        SchemaDefinition::new(schema.clone(), types.libs(), scripts)
+            .verify()
+            .unwrap(),
         chain_net,
     )
     .add_global_state("someGlobal", Amount::from(12u64))
@@ -4061,7 +4138,8 @@ fn evolve_state_on_operations_without_validator() {
     consignment
         .clone()
         .validate(
-            &SchemaRules::with(schema.clone(), type_system.clone(), schema_scripts.clone())
+            &SchemaDefinition::new(schema.clone(), types.libs(), schema_scripts.clone())
+                .verify()
                 .unwrap(),
             &resolver,
             &validation_config,

@@ -6,8 +6,6 @@ mod bp;
 pub use bdk::*;
 pub use bp::*;
 
-pub type SqlWallet<W> = rgb::RgbWallet<W, SqlStash, SqlState, SqlIndex>;
-
 pub enum AllocationFilter {
     Stock,
     Wallet,
@@ -28,9 +26,9 @@ impl AllocationFilter {
 
 pub enum Filter<'w, W: WalletProvider> {
     NoWallet,
-    Wallet(&'w SqlWallet<W>),
-    WalletAll(&'w SqlWallet<W>),
-    WalletTentative(&'w SqlWallet<W>),
+    Wallet(&'w SqliteRgbWallet<W>),
+    WalletAll(&'w SqliteRgbWallet<W>),
+    WalletTentative(&'w SqliteRgbWallet<W>),
 }
 
 impl<W: WalletProvider> AssignmentsFilter for Filter<'_, W> {
@@ -969,7 +967,7 @@ pub fn uda_token_data(
 }
 
 pub struct TestWallet<W: WalletProvider, D> {
-    pub wallet: SqlWallet<W>,
+    pub wallet: SqliteRgbWallet<W>,
     aux: D,
     wallet_dir: PathBuf,
     instance: u8,
@@ -1092,7 +1090,7 @@ where
         broadcast_tx(tx, &self.indexer_url());
     }
 
-    /// Retrieves the SPV proof of `witness` from `resolver` and stores it in the stash,
+    /// Retrieves the SPV proof of `witness` from `resolver` and stores it in the store,
     /// returning it.
     pub fn store_spv_proof(&mut self, witness: Txid, resolver: &impl ResolveSpvProof) -> SpvProof {
         let proof = resolver.resolve_spv_proof(witness).unwrap();
@@ -1137,8 +1135,9 @@ where
     pub fn schema_id(&self, contract_id: ContractId) -> SchemaId {
         self.wallet
             .stock()
-            .as_stash_provider()
+            .as_store()
             .genesis(contract_id)
+            .unwrap()
             .unwrap()
             .schema_id
     }
@@ -1156,7 +1155,7 @@ where
     }
 
     /// Imports the schema definition of `asset_schema`, making its schema,
-    /// types and scripts known to this wallet's stash.
+    /// types and scripts known to this wallet's store.
     pub fn import_schema_definition(&mut self, asset_schema: AssetSchema) {
         self.wallet
             .stock_mut()
@@ -1189,7 +1188,7 @@ where
                 .collect()
         };
 
-        // build through the stock, so the schema is taken from the stash: a
+        // build through the stock, so the schema is taken from the store: a
         // contract can only be issued for a schema whose definition was imported
         let chain_net = self.chain_net();
         let mut builder = self
@@ -1327,6 +1326,35 @@ where
                 spv_resolver,
             )
             .unwrap()
+            .0
+    }
+
+    /// Composes a transfer and keeps the SPV proofs it had to retrieve, as a
+    /// wallet caching them would.
+    pub fn consign_transfer_storing_proofs(
+        &mut self,
+        contract_id: ContractId,
+        outputs: impl AsRef<[OutputSeal]>,
+        secret_seals: impl AsRef<[SecretSeal]>,
+        opids: impl IntoIterator<Item = OpId>,
+        witness_id: Option<BpTxid>,
+        spv_resolver: Option<&dyn ResolveSpvProof>,
+    ) -> (Transfer, usize) {
+        let witness_id = witness_id.map(txid_bp_to_bitcoin);
+        let (transfer, retrieved) = self
+            .wallet
+            .stock()
+            .transfer(
+                contract_id,
+                outputs,
+                secret_seals,
+                opids,
+                witness_id,
+                spv_resolver,
+            )
+            .unwrap();
+        let stored = self.stock_mut().store_spv_proofs(retrieved).unwrap();
+        (transfer, stored)
     }
 
     pub fn pay_invoice(
@@ -1466,14 +1494,21 @@ where
             .unwrap();
     }
 
-    pub fn contract_data(&self, contract_id: ContractId) -> ContractData<SqlContractReader> {
+    pub fn contract_data(&self, contract_id: ContractId) -> ContractData<ContractStateSnapshot> {
         self.wallet.stock().contract_data(contract_id).unwrap()
+    }
+
+    /// Drops the live SQLite connection and re-opens the stock database from
+    /// disk into a fresh connection.
+    pub fn reload_stock(&mut self) {
+        let stock = SqliteStock::open(self.wallet_dir.join("stock.db")).unwrap();
+        *self.wallet.stock_mut() = stock;
     }
 
     pub fn contract_wrapper<C: IssuerWrapper>(
         &self,
         contract_id: ContractId,
-    ) -> C::Wrapper<SqlContractReader> {
+    ) -> C::Wrapper<ContractStateSnapshot> {
         self.wallet
             .stock()
             .contract_wrapper::<C>(contract_id)
@@ -1492,15 +1527,15 @@ where
         };
         self.contract_data(contract_id)
             .fungible("assetOwner", filter)
+            .collect::<Result<_, _>>()
             .unwrap()
-            .collect()
     }
 
     pub fn contract_data_allocations(&self, contract_id: ContractId) -> Vec<DataAllocation> {
         self.contract_data(contract_id)
             .data("assetOwner", Filter::Wallet(&self.wallet))
+            .collect::<Result<_, _>>()
             .unwrap()
-            .collect()
     }
 
     pub fn get_contract_balance(&self, contract_id: ContractId) -> u64 {
@@ -1540,7 +1575,7 @@ where
         self.wallet
             .stock()
             .contracts()
-            .map(|r| r.expect("stash read"))
+            .map(|r| r.expect("store read"))
             .collect()
     }
 
@@ -1567,49 +1602,50 @@ where
         println!("\nOwned:");
         fn witness<S: KnownState>(
             allocation: &OutputAssignment<S>,
-            contract: &ContractData<SqlContractReader>,
+            contract: &ContractData<ContractStateSnapshot>,
         ) -> String {
             allocation
                 .witness
-                .and_then(|w| contract.witness_info(w))
+                .and_then(|w| {
+                    contract
+                        .witness_info(w)
+                        .expect("contract state is readable")
+                })
                 .map(|info| format!("{} ({})", info.id, info.ord))
                 .unwrap_or_else(|| s!("~"))
         }
         for details in contract.rules.schema().owned_types.values() {
             println!("  State      \t{:78}\tWitness", "Seal");
             println!("  {}:", details.name);
-            if let Ok(allocations) = contract.fungible(details.name.clone(), &filter) {
-                for allocation in allocations {
-                    println!(
-                        "    {: >9}\t{}\t{} {}",
-                        allocation.state.value(),
-                        allocation.seal,
-                        witness(&allocation, &contract),
-                        filter.comment(allocation.seal.to_outpoint())
-                    );
-                }
+            for allocation in contract.fungible(details.name.clone(), &filter) {
+                let allocation = allocation.unwrap();
+                println!(
+                    "    {: >9}\t{}\t{} {}",
+                    allocation.state.value(),
+                    allocation.seal,
+                    witness(&allocation, &contract),
+                    filter.comment(allocation.seal.to_outpoint())
+                );
             }
-            if let Ok(allocations) = contract.data(details.name.clone(), &filter) {
-                for allocation in allocations {
-                    println!(
-                        "    {: >9}\t{}\t{} {}",
-                        allocation.state,
-                        allocation.seal,
-                        witness(&allocation, &contract),
-                        filter.comment(allocation.seal.to_outpoint())
-                    );
-                }
+            for allocation in contract.data(details.name.clone(), &filter) {
+                let allocation = allocation.unwrap();
+                println!(
+                    "    {: >9}\t{}\t{} {}",
+                    allocation.state,
+                    allocation.seal,
+                    witness(&allocation, &contract),
+                    filter.comment(allocation.seal.to_outpoint())
+                );
             }
-            if let Ok(allocations) = contract.rights(details.name.clone(), &filter) {
-                for allocation in allocations {
-                    println!(
-                        "    {: >9}\t{}\t{} {}",
-                        "right",
-                        allocation.seal,
-                        witness(&allocation, &contract),
-                        filter.comment(allocation.seal.to_outpoint())
-                    );
-                }
+            for allocation in contract.rights(details.name.clone(), &filter) {
+                let allocation = allocation.unwrap();
+                println!(
+                    "    {: >9}\t{}\t{} {}",
+                    "right",
+                    allocation.seal,
+                    witness(&allocation, &contract),
+                    filter.comment(allocation.seal.to_outpoint())
+                );
             }
         }
 
@@ -1921,8 +1957,8 @@ where
                             if let Some(seal) = self
                                 .wallet
                                 .stock()
-                                .as_stash_provider()
-                                .seal_secret(assignment.to_confidential_seal())
+                                .as_store()
+                                .seal_of_secret(assignment.to_confidential_seal())
                                 .unwrap()
                             {
                                 a.reveal_seal(seal)

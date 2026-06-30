@@ -57,6 +57,47 @@ fn issue_nia(wallet_desc: DescriptorType) {
 }
 
 #[apply(descriptor)]
+fn reopen_persists_issued_state(wallet_desc: DescriptorType) {
+    println!("wallet_desc {wallet_desc:?}");
+
+    initialize();
+
+    let mut wallet = BpTestWallet::with_descriptor(&wallet_desc);
+
+    let issued_supply = 777;
+    let asset_info = AssetInfo::nia(
+        "TCKR",
+        "asset name",
+        2,
+        Some("some details"),
+        "Ricardian contract",
+        Some(MEDIA_FPATH),
+        vec![issued_supply],
+    );
+    let contract_id = wallet.issue_with_info(asset_info, vec![], None, None);
+
+    // State as seen by the live (still-open) connection.
+    let before = wallet.contract_fungible_allocations(contract_id, false);
+    assert_eq!(before.len(), 1);
+    assert_eq!(before[0].state, Amount::from(issued_supply));
+
+    // Drop the live SQLite connection and re-open the database from disk in a
+    // fresh connection. If writes weren't actually committed to disk, the
+    // reopened stock would not see the contract at all.
+    wallet.reload_stock();
+
+    // The contract and its computed state must survive the reload unchanged.
+    let contract = wallet.contract_wrapper::<NonInflatableAsset>(contract_id);
+    assert_eq!(contract.total_issued_supply().value(), issued_supply);
+
+    let after = wallet.contract_fungible_allocations(contract_id, false);
+    assert_eq!(after.len(), before.len());
+    assert_eq!(after[0].state, before[0].state);
+    assert_eq!(after[0].seal, before[0].seal);
+    assert_eq!(after[0].opout, before[0].opout);
+}
+
+#[apply(descriptor)]
 fn issue_uda(wallet_desc: DescriptorType) {
     println!("wallet_desc {wallet_desc:?}");
 
@@ -242,6 +283,7 @@ fn issue_ifa(wallet_desc: DescriptorType) {
     );
     let inflation_allocations = contract
         .inflation_allocations(FilterIncludeAll)
+        .map(|res| res.unwrap())
         .collect::<Vec<_>>();
     assert_eq!(
         inflation_allocations
@@ -490,6 +532,7 @@ fn contract_globals_order() {
         let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
         let inflation_allocations = contract
             .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+            .map(|res| res.unwrap())
             .collect::<Vec<_>>();
         let inflation_outpoints = inflation_allocations
             .iter()
@@ -519,7 +562,7 @@ fn contract_globals_order() {
         .get(&GS_ISSUED_SUPPLY)
         .unwrap();
     // nth consumes the iterator
-    let mut issuance_global_iter = contract_data.state.global(GS_ISSUED_SUPPLY).unwrap();
+    let mut issuance_global_iter = contract_data.state.global_all(GS_ISSUED_SUPPLY).unwrap();
     let mut idx = 0;
     for depth in [0, 3, 2, 0] {
         let entry = issuance_global_iter.nth(depth).unwrap().borrow().clone();
@@ -541,7 +584,7 @@ fn contract_globals_order() {
     }
     assert!(issuance_global_iter.next().is_none());
     // at_depth doesn't consume the iterator
-    let issuance_global_iter = contract_data.state.global(GS_ISSUED_SUPPLY).unwrap();
+    let issuance_global_iter = contract_data.state.global_all(GS_ISSUED_SUPPLY).unwrap();
     for depth in [0, 0, 1, 2, 4, 3, 1, amounts_len - 1, 5] {
         let entry = issuance_global_iter
             .at_depth(depth)

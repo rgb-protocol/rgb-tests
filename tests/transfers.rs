@@ -454,7 +454,7 @@ fn unknown_schema_definition(#[case] asset_schema: AssetSchema) {
         )
         .unwrap();
 
-    // ...but it cannot be accepted, since the receiver's stash has no schema
+    // ...but it cannot be accepted, since the receiver's store has no schema
     let resolver = wlt_2.get_resolver();
     let res = wlt_2
         .stock_mut()
@@ -585,7 +585,6 @@ fn rbf_transfer(#[case] same_bundle: bool, #[case] mine_original: bool) {
 /// A bundle anchored under several TXs: the consignment requested for one of them must carry
 /// that witness, whichever of them ranks first. Two same-bundle TXs are pending at once, the
 /// second sorting after the first, and the receiver is handed the consignment for each in turn.
-#[ignore = "the consignment carries the witness ranked first, not the requested one"]
 #[test]
 fn consign_requested_witness() {
     initialize();
@@ -727,7 +726,9 @@ fn same_bundle_listed_per_witness() {
     let listed = |wlt: &BpTestWallet| {
         wlt.contract_data(contract_id)
             .fungible("assetOwner", AllocationFilter::Stock.filter_for(wlt))
+            .collect::<Result<Vec<_>, _>>()
             .unwrap()
+            .into_iter()
             .filter_map(|fa| Some((fa.witness?, fa.seal.txid()?, fa.state.value())))
             .collect::<BTreeSet<_>>()
     };
@@ -1525,6 +1526,44 @@ fn send_to_oneself() {
 }
 
 #[test]
+fn reopen_persists_transfer_state() {
+    initialize();
+
+    let mut wlt = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let issue_supply = 600;
+    let contract_id = wlt.issue_nia(issue_supply, None);
+    let schema_id = wlt.schema_id(contract_id);
+
+    let amt = 200;
+    let invoice = wlt.invoice(contract_id, schema_id, amt, InvoiceType::Witness);
+    let (consignment, tx, _, _) = wlt.pay_full(invoice.clone(), None, None, true, None);
+    wlt.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+    wlt.accept_transfer(consignment, None);
+    wlt.sync();
+
+    let history_before = wlt.history(contract_id);
+    // only the issue operation is found, because self-transfers should not
+    // appear in history (see `send_to_oneself`)
+    assert_eq!(history_before.len(), 1);
+
+    // Drop the live SQLite connection and re-open the stock from disk. This
+    // exercises durability of everything a transfer writes beyond genesis:
+    // the transition bundle, seal witness, tapret commitment and the index
+    // edges (op->bundle, outpoint->opout, ...).
+    wlt.reload_stock();
+
+    // Owned-state allocations must read back identically through the fresh
+    // connection (the change + the self-transferred amount).
+    wlt.check_allocations(contract_id, schema_id, vec![amt, issue_supply - amt], true);
+
+    // History reads go through the persisted bundles/witnesses/index; they
+    // must survive the reopen unchanged.
+    let history_after = wlt.history(contract_id);
+    assert_eq!(history_after, history_before);
+}
+
+#[test]
 fn tapret_opret_same_utxo() {
     initialize();
 
@@ -1585,7 +1624,7 @@ fn tapret_opret_same_utxo() {
         .iter()
         .last()
         .unwrap();
-    let (alt_consignment, (opouts_dag, opouts_map)) = wlt_3
+    let (alt_consignment, (opouts_dag, opouts_map), _) = wlt_3
         .stock()
         .transfer_with_dag(contract_id_2, [], [], [last_opid], None, None)
         .unwrap();
@@ -1934,6 +1973,7 @@ fn ifa_inflation() {
     let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
     let inflation_allocations = contract
         .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+        .map(|res| res.unwrap())
         .collect::<Vec<_>>();
     let inflation_outpoints = inflation_allocations
         .iter()
@@ -1987,6 +2027,7 @@ fn ifa_inflation() {
     assert_eq!(max_supply, total_circulating);
     let inflation_allocations = contract
         .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+        .map(|res| res.unwrap())
         .collect::<Vec<_>>();
     let inflatable: u64 = inflation_allocations
         .iter()
@@ -2063,6 +2104,7 @@ fn ifa_move_inflation_right() {
     let contract = wlt_2.contract_wrapper::<InflatableFungibleAsset>(contract_id);
     let inflation_allocations = contract
         .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_2))
+        .map(|res| res.unwrap())
         .collect::<Vec<_>>();
     let inflation_outpoints = inflation_allocations
         .iter()
@@ -2094,6 +2136,7 @@ fn ifa_move_inflation_right() {
     let contract = wlt_1.contract_wrapper::<InflatableFungibleAsset>(contract_id);
     let inflation_change_utxo = contract
         .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_1))
+        .map(|res| res.unwrap())
         .map(|oa| oa.seal.outpoint().unwrap())
         .collect::<Vec<_>>()[0];
     let inflation_change = inflation_supply - inflation_moved;
@@ -2124,6 +2167,7 @@ fn ifa_move_inflation_right() {
     assert_eq!(max_supply, wlt_1_amt + inflation_moved);
     let inflation_allocations = contract
         .inflation_allocations(AllocationFilter::Wallet.filter_for(&wlt_2))
+        .map(|res| res.unwrap())
         .collect::<Vec<_>>();
     assert_eq!(
         inflation_allocations
@@ -3332,7 +3376,7 @@ fn spv_proofs() {
 /// A proof the receiver has already vetted survives a consignment it cannot check.
 ///
 /// Consuming a consignment re-checks the proofs it carries, and one which fails to verify
-/// must not reach the stash. A resolver with no access to block headers verifies none of
+/// must not reach the store. A resolver with no access to block headers verifies none of
 /// them, which is a statement about the resolver and not about the proofs: the receiver's
 /// own proof for that witness, checked when it was stored, must be left alone. Dropping it
 /// would strip the proofs exactly from the clients which have no indexer to fall back on,
@@ -3385,8 +3429,9 @@ fn unverifiable_proof_does_not_drop_the_stored_one() {
     assert_eq!(
         wlt_2
             .stock()
-            .as_stash_provider()
+            .as_store()
             .witness(witness_1)
+            .unwrap()
             .unwrap()
             .spv_proof
             .as_ref(),
@@ -3457,8 +3502,9 @@ fn reorg_with_spv_proofs() {
     assert!(
         wlt_2
             .stock()
-            .as_stash_provider()
+            .as_store()
             .witness(witness)
+            .unwrap()
             .unwrap()
             .spv_proof
             .is_none()
@@ -3530,22 +3576,24 @@ fn stale_spv_proof_is_refreshed_and_tolerated(#[case] receiver_stores_proofs: bo
     assert_eq!(
         wlt_2
             .stock()
-            .as_stash_provider()
+            .as_store()
             .witness(witness)
+            .unwrap()
             .unwrap()
             .spv_proof
             .as_ref(),
         Some(&stale)
     );
 
-    // updating the witnesses is what reconciles the stash with the chain: it finds the
+    // updating the witnesses is what reconciles the store with the chain: it finds the
     // proof refuted and drops it
     wlt_2.update_witnesses(1, vec![]);
     assert!(
         wlt_2
             .stock()
-            .as_stash_provider()
+            .as_store()
             .witness(witness)
+            .unwrap()
             .unwrap()
             .spv_proof
             .is_none()
@@ -3571,8 +3619,9 @@ fn stale_spv_proof_is_refreshed_and_tolerated(#[case] receiver_stores_proofs: bo
     assert_eq!(
         wlt_1
             .stock()
-            .as_stash_provider()
+            .as_store()
             .witness(witness)
+            .unwrap()
             .unwrap()
             .spv_proof
             .as_ref(),
@@ -3590,7 +3639,7 @@ fn stale_spv_proof_is_refreshed_and_tolerated(#[case] receiver_stores_proofs: bo
             .iter()
             .any(|wb| wb.witness_id() == witness && wb.spv_proof.as_ref() == Some(&stale))
     );
-    // the proof in the stash is the one which travels even when the transfer is composed
+    // the proof in the store is the one which travels even when the transfer is composed
     // with a resolver: it is shipped as is, without being checked against the chain
     let with_resolver =
         wlt_2.consign_transfer(contract_id, [], [secret_seal], [], None, Some(&resolver));
@@ -3633,8 +3682,9 @@ fn stale_spv_proof_is_refreshed_and_tolerated(#[case] receiver_stores_proofs: bo
     assert_eq!(
         wlt_1
             .stock()
-            .as_stash_provider()
+            .as_store()
             .witness(witness)
+            .unwrap()
             .unwrap()
             .spv_proof
             .as_ref(),
@@ -3643,7 +3693,7 @@ fn stale_spv_proof_is_refreshed_and_tolerated(#[case] receiver_stores_proofs: bo
     wlt_1.check_allocations(contract_id, schema_id, vec![200, 100], false);
 }
 
-/// A wallet which keeps no SPV proof in its stash can still hand its counterparty a
+/// A wallet which keeps no SPV proof in its store can still hand its counterparty a
 /// consignment carrying them, by passing a resolver when composing the transfer.
 ///
 /// The witness of the transfer being composed is the exception: the consignment is handed
@@ -3697,7 +3747,7 @@ fn spv_proofs_retrieved_while_composing_the_transfer() {
     );
     assert!(consignment.bundles.iter().all(|wb| wb.spv_proof.is_none()));
 
-    // composing the same transfer with one retrieves the proofs missing from the stash
+    // composing the same transfer with one retrieves the proofs missing from the store
     let resolver = wlt_2.get_resolver();
     let consignment =
         wlt_2.consign_transfer(contract_id, [], [secret_seal], [], None, Some(&resolver));
@@ -3713,15 +3763,63 @@ fn spv_proofs_retrieved_while_composing_the_transfer() {
         "an unmined witness has no proof to carry"
     );
 
-    // retrieval is per consignment: the stash is left alone
+    // retrieval is per consignment: the store is left alone
     assert!(
         wlt_2
             .stock()
-            .as_stash_provider()
+            .as_store()
             .witness(witness_1)
+            .unwrap()
             .unwrap()
             .spv_proof
             .is_none()
+    );
+
+    // a wallet which does want them kept stores exactly what composing retrieved,
+    // without the resolver being asked again
+    let (consignment, stored) = wlt_2.consign_transfer_storing_proofs(
+        contract_id,
+        [],
+        [secret_seal],
+        [],
+        None,
+        Some(&resolver),
+    );
+    assert_eq!(stored, 1, "only the mined witness had a proof to retrieve");
+    let kept = wlt_2
+        .stock()
+        .as_store()
+        .witness(witness_1)
+        .unwrap()
+        .unwrap()
+        .spv_proof;
+    assert_eq!(kept.as_ref(), proofs[&witness_1].as_ref());
+
+    // composing again now retrieves nothing: the proof comes out of the store, so
+    // there is nothing left to hand back or store
+    let (_, stored) = wlt_2.consign_transfer_storing_proofs(
+        contract_id,
+        [],
+        [secret_seal],
+        [],
+        None,
+        Some(&resolver),
+    );
+    assert_eq!(
+        stored, 0,
+        "a proof already in the store is not retrieved again"
+    );
+
+    // and now the proof travels without any resolver at all, which is what the
+    // storing bought: composing with `None` carries what the store holds
+    let consignment_from_store =
+        wlt_2.consign_transfer(contract_id, [], [secret_seal], [], None, None);
+    assert!(
+        consignment_from_store
+            .bundles
+            .iter()
+            .any(|wb| wb.witness_id() == witness_1 && wb.spv_proof == kept),
+        "the stored proof must be carried without a resolver"
     );
 
     // the retrieved proof is what lets wlt_1 accept without resolving the 1st witness
@@ -3735,7 +3833,7 @@ fn spv_proofs_retrieved_while_composing_the_transfer() {
 ///
 /// A resolver which serves no block headers cannot check one, and neither can any later
 /// [`Stock::update_witnesses`] through that same resolver, so storing it would leave the
-/// stash with a proof nothing ever vetted and shipping it to every later counterparty.
+/// store with a proof nothing ever vetted and shipping it to every later counterparty.
 /// Whether the proof is any good is beside the point: it is dropped for not having been
 /// checked, which is why the one used here is perfectly valid.
 #[rstest]
@@ -3800,8 +3898,9 @@ fn unvetted_spv_proof_is_not_stored(#[case] resolver_serves_headers: bool) {
     assert_eq!(
         wlt_1
             .stock()
-            .as_stash_provider()
+            .as_store()
             .witness(witness)
+            .unwrap()
             .unwrap()
             .spv_proof
             .as_ref(),

@@ -23,6 +23,8 @@ impl BpTestWallet {
         let bp_dir = wallet_dir.join(name);
         let mut wallet = if let Some(dt) = descriptor_type {
             // new wallet
+            let _ = std::fs::remove_dir_all(&wallet_dir);
+            std::fs::create_dir_all(&wallet_dir).unwrap();
             let xpub_account = match wallet_account {
                 WalletAccount::Private(ref xpriv_account) => xpriv_account.to_xpub_account(),
                 WalletAccount::Public(ref xpub_account) => xpub_account.clone(),
@@ -41,13 +43,13 @@ impl BpTestWallet {
             let bp_wallet_provider = FsTextStore::new(bp_dir).unwrap();
             bp_wallet.make_persistent(bp_wallet_provider, true).unwrap();
             bp_wallet.set_name(name.to_string());
-            let stock = sql::open(wallet_dir.join("stock.db")).unwrap();
-            SqlWallet::new(stock, bp_wallet)
+            let stock = SqliteStock::open(wallet_dir.join("stock.db")).unwrap();
+            SqliteRgbWallet::new(stock, bp_wallet)
         } else {
             // load wallet
-            let stock = sql::open(wallet_dir.join("stock.db")).unwrap();
+            let stock = SqliteStock::open(wallet_dir.join("stock.db")).unwrap();
             let bp_wallet = BpWallet::load(FsTextStore::new(bp_dir).unwrap(), true).unwrap();
-            SqlWallet::new(stock, bp_wallet)
+            SqliteRgbWallet::new(stock, bp_wallet)
         };
         println!(
             "wallet dir: {wallet_dir:?} ({})",
@@ -143,9 +145,19 @@ impl BpTestWallet {
             "[c32338a7/86h/0h/0h]xpub6CmiK1xc7YwL472qm4zxeURFX8yMCSasioXujBjVMMzA3AKZr6KLQEmkzDge1Ezn2p43ZUysyx6gfajFVVnhtQ1AwbXEHrioLioXXgj2xW5"
         ).unwrap();
 
+        // the wallet dir is wiped and rebuilt on each call, so it must be unique: concurrent tests
+        // sharing one dir would delete each other's stock.db while it's open
+        static COUNTER: AtomicU32 = AtomicU32::new(0);
+        let id = format!(
+            "{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+
         let wallet_dir = PathBuf::from(TEST_DATA_DIR)
             .join(INTEGRATION_DATA_DIR)
-            .join("mainnet");
+            .join("mainnet")
+            .join(id);
 
         Self::new(
             Some(&DescriptorType::Wpkh),
@@ -250,6 +262,7 @@ impl BpTestWallet {
         let contract = self.contract_wrapper::<InflatableFungibleAsset>(contract_id);
         let inflation_allocations = contract
             .inflation_allocations(Filter::Wallet(&self.wallet))
+            .map(|res| res.unwrap())
             .filter(|oa| inflation_outpoints.contains(&oa.seal.outpoint().unwrap()))
             .collect::<Vec<_>>();
         let inflation_supply: u64 = inflation_allocations
@@ -882,28 +895,13 @@ impl BpTestWallet {
             asset_beneficiaries.insert(contract_id, beneficiaries);
         }
 
-        let mut extra_state =
-            HashMap::<ContractId, HashMap<OutputSeal, HashMap<Opout, AllocatedState>>>::new();
         let previous_outpoints = prev_outputs.into_iter().collect::<Vec<_>>();
-        for id in self
+        let mut extra_state = self
             .wallet
             .stock()
-            .contracts_assigning(previous_outpoints.iter().copied())
-            .unwrap()
-        {
-            if coloring_info.asset_info_map.contains_key(&id) {
-                continue;
-            }
-            let state = self
-                .wallet
-                .stock()
-                .contract_assignments_for(id, previous_outpoints.iter().copied())
-                .unwrap();
-            let entry = extra_state.entry(id).or_default();
-            for (seal, assigns) in state {
-                entry.entry(seal).or_default().extend(assigns);
-            }
-        }
+            .assignments_by_contract(previous_outpoints.iter().copied())
+            .unwrap();
+        extra_state.retain(|id, _| !coloring_info.asset_info_map.contains_key(id));
 
         // construct transitions for extra state
         for (cid, seal_map) in extra_state {

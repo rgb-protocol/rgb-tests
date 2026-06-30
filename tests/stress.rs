@@ -756,7 +756,7 @@ fn random_transfers() {
                 //   summing amounts from multiple allocations on the same UTXO
                 let mut allocations: Allocations = vec![];
                 contract_state
-                    .fungible_all()
+                    .fungible_all(None)
                     .map(|r| r.expect("state read"))
                     .filter(|cf| utxos.contains_key(&cf.seal.outpoint().unwrap()))
                     .for_each(|cf| {

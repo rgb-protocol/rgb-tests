@@ -48,7 +48,7 @@ pub use std::{
     process::{Command, Stdio},
     str::FromStr,
     sync::Arc,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicU32, Ordering},
     sync::{Mutex, Once, OnceLock, RwLock},
     time::{Duration, Instant},
 };
@@ -58,7 +58,7 @@ pub use aluvm::{
     library::{Lib, LibSeg, LibSite},
 };
 pub use amplify::{
-    ByteArray, Bytes64, From, Wrapper, bmap, bset,
+    ByteArray, Bytes64, From, Wrapper, bmap, bset, confinement,
     confinement::{
         Collection, Confined, LargeVec, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallBlob,
         SmallOrdMap, TinyOrdMap, TinyOrdSet, U16, U32,
@@ -128,9 +128,9 @@ pub use rgb::{
     FungibleState, FungibleType, GenesisSchema, GenesisSeal, GlobalDetails, GlobalStateSchema,
     GraphSeal, Identity, KnownTransition, MetaDetails, MetaType, MetaValue, Occurrences,
     OccurrencesMismatch, OpFullType, OpId, Opout, Outpoint, OwnedStateSchema, RevealedData,
-    RevealedValue, RgbDescr, RgbWallet, StateType, TapretKey, TransferParams, Transition,
-    TransitionBundle, TransitionDetails, TransitionSchema, TransitionType, TypedAssigns, Vin,
-    VoidState, WalletProvider, WpkhDescr,
+    RevealedValue, RgbDescr, RgbWallet, SqliteRgbWallet, StateType, TapretKey, TransferParams,
+    Transition, TransitionBundle, TransitionDetails, TransitionSchema, TransitionType,
+    TypedAssigns, Vin, VoidState, WalletProvider, WpkhDescr,
     assignments::AssignVec,
     bitcoin::{self, Sequence, TxIn, TxOut, Witness, absolute::LockTime},
     bitcoin::{
@@ -141,13 +141,14 @@ pub use rgb::{
     },
     containers::{ConsignmentVer, TerminalSeals, ValidContract, WitnessBundle, legacy::TransferV0},
     contract::{
-        AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection, SchemaWrapper,
+        AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, FilteredContractState,
+        OpDirection, SchemaWrapper,
     },
     info::ContractInfo,
     invoice::{AddressPayload, Pay2Vout},
     opret::OpretProof,
     pay::{PsbtMeta, TxParams},
-    persistence::{ContractAssignments, MemContract, MemContractState, MemError, sql},
+    persistence::{ContractAssignments, Stock, StockError},
     rgbasm,
     stl::{ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl},
     tapret::{TapretNodePartner, TapretRightBranch},
@@ -191,8 +192,8 @@ pub use rgbstd::{
         Transfer, UncheckedTransfer,
     },
     contract::{
-        ContractBuilder, ContractData, DataAllocation, FilterExclude, FungibleAllocation,
-        IssuerWrapper, LinkableSchemaWrapper, TransitionBuilder,
+        ContractBuilder, ContractData, ContractStateRead, DataAllocation, FilterExclude,
+        FungibleAllocation, IssuerWrapper, LinkableSchemaWrapper, TransitionBuilder,
     },
     daggy::Walker,
     indexers::bitcoind_blocking::BitcoindClient,
@@ -201,9 +202,8 @@ pub use rgbstd::{
     indexers::{AnyResolver, ResolveSpvProof},
     invoice::{Beneficiary, RgbInvoice, RgbInvoiceBuilder, XChainNet},
     persistence::{
-        ContractStateRead, StashReadProvider, StockError,
-        fs::FsBinStore,
-        sql::{SqlContractReader, SqlIndex, SqlStash, SqlState, SqliteStock},
+        ContractStateSnapshot, RgbStore,
+        sqlite::{SqliteStock, SqliteStore},
     },
     schema::SchemaId,
     stl::{

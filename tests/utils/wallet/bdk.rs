@@ -37,6 +37,7 @@ impl BdkTestWallet {
         descriptor: String,
         change_descriptor: String,
     ) -> Self {
+        let _ = std::fs::remove_dir_all(&wallet_dir);
         std::fs::create_dir_all(&wallet_dir).unwrap();
         let db_path = wallet_dir.join("bdk.db");
         let mut db = Store::<ChangeSet>::create(b"RGB", db_path).unwrap();
@@ -46,9 +47,9 @@ impl BdkTestWallet {
             .create_wallet(&mut db)
             .unwrap();
 
-        let stock = sql::open(wallet_dir.join("stock.db")).unwrap();
+        let stock = SqliteStock::open(wallet_dir.join("stock.db")).unwrap();
 
-        let mut wallet = SqlWallet::new(stock, bdk_wallet);
+        let mut wallet = SqliteRgbWallet::new(stock, bdk_wallet);
 
         // Consignments carry only the schema id, so every schema this wallet
         // may issue or receive has to be known up-front, out-of-band.
