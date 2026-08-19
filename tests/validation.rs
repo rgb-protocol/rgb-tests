@@ -983,7 +983,7 @@ fn validate_consignment_bundles_fail() {
     dbg!(&res);
     assert!(matches!(
         res,
-        ValidationError::InvalidConsignment(Failure::SealNoPubWitness(_, _))
+        ValidationError::InvalidConsignment(Failure::SealsInvalid(_, _, _))
     ));
 }
 
@@ -3713,7 +3713,7 @@ fn validate_consignment_contract_state_evolve_fail() {
             Err(confinement::Error::OutOfBoundary { index: 3, len: 6 })
         }
     }
-    let res = Validator::<SmallContractState, _, _>::validate(
+    let res = Validator::<SmallContractState, _>::validate(
         &consignment,
         &asset_schema_rules,
         &resolver,
