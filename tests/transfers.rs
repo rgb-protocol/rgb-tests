@@ -4221,28 +4221,58 @@ fn bfa_mint_and_transfer(
         build_opouts_dag: true,
         ..Default::default()
     };
-    let validated_mint = mint_consignment
+    let mut pending_mint = mint_consignment
         .clone()
-        .validate_bfa(
-            &AssetSchema::Bfa.schema_rules(),
-            &wlt_1.get_resolver(),
-            &validation_config,
-            |anchor| match anchor {
-                ExternalAnchor::MintEvent {
-                    amount,
-                    after_block,
-                    ..
-                } => {
-                    assert_eq!(*after_block, after_block_1);
-                    if mint_amts.contains(amount) {
-                        true
-                    } else {
-                        panic!("unexpected amount: {amount}")
-                    }
-                }
-            },
-        )
+        .validate_deterministic(&AssetSchema::Bfa.schema_rules(), &validation_config)
         .unwrap();
+    // a resolver connected to another chain is refused before it can confirm anything
+    let wrong_chain_resolver = MockAnchorResolver::new(BFA_CHAIN_ID + 1, |_anchor| true);
+    assert_eq!(
+        pending_mint
+            .resolve_all_anchors(
+                BridgedFungibleAsset::bridge_location(pending_mint.consignment().genesis())
+                    .unwrap(),
+                &wrong_chain_resolver
+            )
+            .unwrap_err(),
+        AnchorResolverError::WrongChainId {
+            expected: BFA_CHAIN_ID,
+            actual: BFA_CHAIN_ID + 1,
+        }
+    );
+    assert_eq!(pending_mint.pending().unresolved_anchors().count(), 1);
+
+    let anchor_resolver = MockAnchorResolver::new(BFA_CHAIN_ID, |anchor| match anchor {
+        ExternalAnchor::MintEvent {
+            amount,
+            after_block,
+            ..
+        } => {
+            assert!(mint_amts.contains(amount), "unexpected amount: {amount}");
+            assert_eq!(*after_block, after_block_1);
+            true
+        }
+    });
+    let checked_anchor_resolver = CheckedAnchorResolver::with(
+        &anchor_resolver,
+        BridgedFungibleAsset::bridge_location(pending_mint.consignment().genesis()).unwrap(),
+    )
+    .unwrap();
+    for anchor in pending_mint
+        .pending()
+        .unresolved_anchors()
+        .cloned()
+        .collect::<Vec<_>>()
+    {
+        pending_mint
+            .resolve_anchor(&checked_anchor_resolver, &anchor)
+            .unwrap();
+    }
+    pending_mint
+        .pending()
+        .resolve_all(&wlt_1.get_resolver())
+        .unwrap();
+    let validated_mint = pending_mint.finalize();
     assert_eq!(
         validated_mint.into_validation_status().validity(),
         Validity::Valid
@@ -4269,31 +4299,35 @@ fn bfa_mint_and_transfer(
         build_opouts_dag: true,
         ..Default::default()
     };
-    let validated_mint_2 = mint_consignment_2
+    let mut pending_mint_2 = mint_consignment_2
         .clone()
-        .validate_bfa(
-            &AssetSchema::Bfa.schema_rules(),
-            &wlt_1.get_resolver(),
-            &validation_config_2,
-            |anchor| match anchor {
-                ExternalAnchor::MintEvent {
-                    amount,
-                    after_block,
-                    ..
-                } => {
-                    assert!(
-                        [after_block_1, after_block_2].contains(after_block),
-                        "unexpected afterBlock: {after_block}"
-                    );
-                    if mint_amts.contains(amount) {
-                        true
-                    } else {
-                        panic!("unexpected amount: {amount}")
-                    }
-                }
-            },
+        .validate_deterministic(&AssetSchema::Bfa.schema_rules(), &validation_config_2)
+        .unwrap();
+    let anchor_resolver_2 = MockAnchorResolver::new(BFA_CHAIN_ID, |anchor| match anchor {
+        ExternalAnchor::MintEvent {
+            amount,
+            after_block,
+            ..
+        } => {
+            assert!(mint_amts.contains(amount), "unexpected amount: {amount}");
+            assert!(
+                [after_block_1, after_block_2].contains(after_block),
+                "unexpected afterBlock: {after_block}"
+            );
+            true
+        }
+    });
+    pending_mint_2
+        .resolve_all_anchors(
+            BridgedFungibleAsset::bridge_location(pending_mint_2.consignment().genesis()).unwrap(),
+            &anchor_resolver_2,
         )
         .unwrap();
+    pending_mint_2
+        .pending()
+        .resolve_all(&wlt_1.get_resolver())
+        .unwrap();
+    let validated_mint_2 = pending_mint_2.finalize();
     assert_eq!(
         validated_mint_2.into_validation_status().validity(),
         Validity::Valid

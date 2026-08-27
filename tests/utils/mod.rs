@@ -147,7 +147,7 @@ pub use rgb::{
     },
     contract::{
         AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, FilteredContractState,
-        OpDirection, SchemaWrapper,
+        OpDirection, SchemaWrapper, UnfilteredContractState,
     },
     info::ContractInfo,
     invoice::{AddressPayload, Pay2Vout},
@@ -160,10 +160,10 @@ pub use rgb::{
     },
     tapret::{TapretNodePartner, TapretRightBranch},
     validation::{
-        DbcProof, ExternalAnchor, Failure, OpoutsDagData, ResolveWitness, SchemaDefError,
-        SchemaDefinition, SchemaRules, Scripts, SpvProof, Status, TypeLibs, ValidationConfig,
-        ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError,
-        WitnessStatus,
+        DbcProof, ExternalAnchor, Failure, OpoutsDagData, PendingValidation, ResolveWitness,
+        SchemaDefError, SchemaDefinition, SchemaRules, Scripts, SpvProof, Status, TypeLibs,
+        ValidationConfig, ValidationError, Validator, Validity, Warning, WitnessOrdProvider,
+        WitnessResolution, WitnessResolverError, WitnessSafety, WitnessStatus, WitnessTask,
     },
     vm::{
         ContractStateAccess, ContractStateEvolve, GlobalStateEntry, GlobalsIter, RgbIsa,
@@ -196,8 +196,9 @@ pub use rgbstd::{
     TokenIndex,
     TxoSeal,
     containers::{
-        BuilderSeal, Consignment, ConsignmentConstraintError, ConsignmentExt, Fascia, FileContent,
-        Transfer, UncheckedTransfer,
+        AnchorResolverError, BuilderSeal, CheckedAnchorResolver, Consignment,
+        ConsignmentConstraintError, ConsignmentExt, Fascia, FileContent, ResolveAnchor, Transfer,
+        UncheckedTransfer,
     },
     contract::{
         ContractBuilder, ContractData, ContractStateRead, DataAllocation, FilterExclude,
@@ -223,11 +224,12 @@ pub use rstest::rstest;
 pub use schemata::{
     BFA_SCHEMA_ID, BfaWrapper, BridgedFungibleAsset, CFA_SCHEMA_ID, CollectibleFungibleAsset,
     ERRNO_BURN_MISMATCH, ERRNO_BURN_ZERO, ERRNO_HIDDEN_BURN, ERRNO_INFLATION_MISMATCH,
-    ERRNO_ISSUED_MISMATCH, ERRNO_MISSING_INPUT, ERRNO_NON_EQUAL_IN_OUT, GS_BURNED_ASSET,
-    GS_BURNED_INFLATION, GS_ISSUED_SUPPLY, IFA_SCHEMA_ID, IfaWrapper, InflatableFungibleAsset,
-    MS_ALLOWED_INFLATION, NIA_SCHEMA_ID, NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_LINK,
-    OS_MINT, PFA_SCHEMA_ID, PermissionedFungibleAsset, TS_BURN, TS_INFLATION, TS_MINT, TS_TRANSFER,
-    UDA_SCHEMA_ID, UniqueDigitalAsset, burn_global_by_assignment,
+    ERRNO_ISSUED_MISMATCH, ERRNO_MISSING_INPUT, ERRNO_NON_EQUAL_IN_OUT, GS_BRIDGE_LOCATION,
+    GS_BURNED_ASSET, GS_BURNED_INFLATION, GS_ISSUED_SUPPLY, IFA_SCHEMA_ID, IfaWrapper,
+    InflatableFungibleAsset, MS_ALLOWED_INFLATION, NIA_SCHEMA_ID, NonInflatableAsset, OS_ASSET,
+    OS_INFLATION, OS_LINK, OS_MINT, PFA_SCHEMA_ID, PermissionedFungibleAsset, TS_BURN,
+    TS_INFLATION, TS_MINT, TS_TRANSFER, UDA_SCHEMA_ID, UniqueDigitalAsset,
+    burn_global_by_assignment,
 };
 pub use serde::{Deserialize, Serialize};
 pub use serde_json::{Value, json};

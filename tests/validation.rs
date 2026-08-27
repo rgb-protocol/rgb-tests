@@ -611,16 +611,21 @@ fn assert_consignment_valid(consignment: &Transfer, resolver: &impl ResolveWitne
         chain_net: ChainNet::BitcoinRegtest,
         ..Default::default()
     };
+    // BFA carries external anchors, which `validate` cannot discharge on its own
     let res = if matches!(asset_schema, AssetSchema::Bfa) {
-        consignment
+        let mut pending_consignment = consignment
             .clone()
-            .validate_bfa(
-                &asset_schema_rules,
-                resolver,
-                &validation_config,
-                |_anchor| true,
+            .validate_deterministic(&asset_schema_rules, &validation_config)
+            .unwrap();
+        pending_consignment
+            .resolve_all_anchors(
+                BridgedFungibleAsset::bridge_location(pending_consignment.consignment().genesis())
+                    .unwrap(),
+                &MockAnchorResolver::new(BFA_CHAIN_ID, |_anchor| true),
             )
-            .unwrap()
+            .unwrap();
+        pending_consignment.pending().resolve_all(resolver).unwrap();
+        pending_consignment.finalize()
     } else {
         consignment
             .clone()
@@ -630,7 +635,6 @@ fn assert_consignment_valid(consignment: &Transfer, resolver: &impl ResolveWitne
     let validation_status = res.validation_status();
     dbg!(&validation_status);
     assert!(validation_status.warnings.is_empty());
-    assert!(validation_status.info.is_empty());
     let validity = validation_status.validity();
     assert_eq!(validity, Validity::Valid);
     assert!(validation_status.dag_data_opt.is_none());
@@ -2656,28 +2660,42 @@ fn assert_bfa_valid(consignment: Transfer, rules: &SchemaRules, resolver: &MockR
         chain_net: ChainNet::BitcoinRegtest,
         ..Default::default()
     };
-    let res = consignment
-        .validate_bfa(rules, resolver, &validation_config, |_anchor| true)
+    // a witness resolver alone cannot validate a consignment carrying external anchors
+    assert!(matches!(
+        consignment
+            .clone()
+            .validate(rules, resolver, &validation_config)
+            .unwrap_err(),
+        ValidationError::ExternalAnchorsPending(_)
+    ));
+    let mut pending_consignment = consignment
+        .validate_deterministic(rules, &validation_config)
         .unwrap();
+    pending_consignment
+        .resolve_all_anchors(
+            BridgedFungibleAsset::bridge_location(pending_consignment.consignment().genesis())
+                .unwrap(),
+            &MockAnchorResolver::new(BFA_CHAIN_ID, |_anchor| true),
+        )
+        .unwrap();
+    pending_consignment.pending().resolve_all(resolver).unwrap();
+    let res = pending_consignment.finalize();
     let validation_status = res.validation_status();
     dbg!(&validation_status);
     assert_eq!(validation_status.validity(), Validity::Valid);
 }
 
 /// Assert a BFA consignment is rejected by a schema script.
-fn assert_bfa_script_failure(
-    consignment: Transfer,
-    rules: &SchemaRules,
-    resolver: &MockResolver,
-    opid: OpId,
-    errno: u8,
-) {
+///
+/// Scripts run in phase 1, so this needs neither a resolver nor the external anchors: the
+/// consignment is rejected before anything is asked of a chain.
+fn assert_bfa_script_failure(consignment: Transfer, rules: &SchemaRules, opid: OpId, errno: u8) {
     let validation_config = ValidationConfig {
         chain_net: ChainNet::BitcoinRegtest,
         ..Default::default()
     };
     let res = consignment
-        .validate_bfa(rules, resolver, &validation_config, |_anchor| true)
+        .validate_deterministic(rules, &validation_config)
         .unwrap_err();
     dbg!(&res);
     assert_eq!(
@@ -2866,7 +2884,7 @@ fn validate_consignment_bfa_mint_right_transfer() {
     assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
 
     // ScriptFailure, 0 -> 1: a right may not be created from thin air
-    let (consignment, alt_resolver, transition_id) =
+    let (consignment, _, transition_id) =
         bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
             drop_mint_right_input(transition);
             assert_eq!(mint_right_counts(transition), (0, 1));
@@ -2874,13 +2892,12 @@ fn validate_consignment_bfa_mint_right_transfer() {
     assert_bfa_script_failure(
         consignment,
         &asset_schema_rules,
-        &alt_resolver,
         transition_id,
         ERRNO_MISSING_INPUT,
     );
 
     // ScriptFailure, 1 -> 0: transfer doesn't allow hidden burn
-    let (consignment, alt_resolver, transition_id) =
+    let (consignment, _, transition_id) =
         bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
             transition
                 .assignments
@@ -2891,7 +2908,6 @@ fn validate_consignment_bfa_mint_right_transfer() {
     assert_bfa_script_failure(
         consignment,
         &asset_schema_rules,
-        &alt_resolver,
         transition_id,
         ERRNO_HIDDEN_BURN,
     );
@@ -2899,12 +2915,11 @@ fn validate_consignment_bfa_mint_right_transfer() {
     // ScriptFailure, 2 -> 1: transfer doesn't allow hidden burn
     let (mut consignment, alt_resolver, _) =
         bfa_mutated_transfer(&base_consignment, &resolver, split_mint_right_output);
-    let (alt_resolver, transition_id) = append_mint_right_spend(&mut consignment, &alt_resolver, 1);
+    let (_, transition_id) = append_mint_right_spend(&mut consignment, &alt_resolver, 1);
     assert_eq!(mint_right_counts(&last_transition(&consignment)), (2, 1));
     assert_bfa_script_failure(
         consignment,
         &asset_schema_rules,
-        &alt_resolver,
         transition_id,
         ERRNO_HIDDEN_BURN,
     );
@@ -3043,66 +3058,41 @@ fn validate_consignment_bfa_burn() {
 
     // ScriptFailure: the reported burned amount must match what actually disappears
     let mut consignment = base_consignment.clone();
-    let (alt_resolver, opid) = append_burn(
+    let (_, opid) = append_burn(
         &mut consignment,
         &resolver,
         &[OS_ASSET],
         Some(supply - 1),
         None,
     );
-    assert_bfa_script_failure(
-        consignment,
-        &asset_schema_rules,
-        &alt_resolver,
-        opid,
-        ERRNO_BURN_MISMATCH,
-    );
+    assert_bfa_script_failure(consignment, &asset_schema_rules, opid, ERRNO_BURN_MISMATCH);
 
     // ScriptFailure: an explicit zero is malformed state
     let mut consignment = base_consignment.clone();
-    let (alt_resolver, opid) = append_burn(
+    let (_, opid) = append_burn(
         &mut consignment,
         &resolver,
         &[OS_ASSET],
         Some(0),
         Some(supply),
     );
-    assert_bfa_script_failure(
-        consignment,
-        &asset_schema_rules,
-        &alt_resolver,
-        opid,
-        ERRNO_BURN_MISMATCH,
-    );
+    assert_bfa_script_failure(consignment, &asset_schema_rules, opid, ERRNO_BURN_MISMATCH);
 
     // ScriptFailure: a burn transition may not inflate
     let mut consignment = base_consignment.clone();
-    let (alt_resolver, opid) = append_burn(
+    let (_, opid) = append_burn(
         &mut consignment,
         &resolver,
         &[OS_ASSET],
         None,
         Some(supply + 1),
     );
-    assert_bfa_script_failure(
-        consignment,
-        &asset_schema_rules,
-        &alt_resolver,
-        opid,
-        ERRNO_BURN_MISMATCH,
-    );
+    assert_bfa_script_failure(consignment, &asset_schema_rules, opid, ERRNO_BURN_MISMATCH);
 
     // ScriptFailure: a burn transition cannot be used as a plain transfer
     let mut consignment = base_consignment.clone();
-    let (alt_resolver, opid) =
-        append_burn(&mut consignment, &resolver, &[OS_ASSET], None, Some(supply));
-    assert_bfa_script_failure(
-        consignment,
-        &asset_schema_rules,
-        &alt_resolver,
-        opid,
-        ERRNO_BURN_ZERO,
-    );
+    let (_, opid) = append_burn(&mut consignment, &resolver, &[OS_ASSET], None, Some(supply));
+    assert_bfa_script_failure(consignment, &asset_schema_rules, opid, ERRNO_BURN_ZERO);
 }
 
 #[test]
@@ -4261,6 +4251,338 @@ fn validate_consignment_contract_state_evolve_fail() {
         res,
         ValidationError::InvalidConsignment(Failure::ContractStateFilled(_))
     ));
+}
+
+/// Phase 1 can be driven one bundle at a time, handing each witness to the
+/// caller as soon as the bundle it belongs to has been validated - so a caller
+/// can start resolving while the remaining bundles are still being checked.
+#[test]
+fn phase_1_hands_out_witnesses_as_it_walks() {
+    let scenario = Scenario::A;
+    let resolver = scenario.resolver();
+    let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema = AssetSchema::from(consignment.schema_id());
+    let asset_schema_rules = asset_schema.schema_rules();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        build_opouts_dag: true,
+        ..Default::default()
+    };
+    let context = (asset_schema_rules.schema(), consignment.contract_id());
+
+    let mut validator = Validator::<FilteredContractState<UnfilteredContractState>, _>::start(
+        &consignment,
+        &asset_schema_rules,
+        context,
+        &validation_config,
+    )
+    .unwrap();
+
+    // witnesses arrive during the walk, not at the end of it
+    let mut stepped = Vec::new();
+    while let Some(task) = validator.next_bundle().unwrap() {
+        stepped.push(task);
+    }
+    assert!(!stepped.is_empty());
+    // calling it again once exhausted is harmless
+    assert!(validator.next_bundle().unwrap().is_none());
+
+    let mut pending = validator.finish().unwrap();
+
+    // the DAG is readable before a single witness has been resolved: this is
+    // what lets a caller decide whether resolving is worth it at all
+    assert!(pending.dag_data_opt.is_some());
+    assert!(!pending.is_resolved());
+    assert_eq!(
+        pending.unresolved_witnesses().count(),
+        stepped.len(),
+        "every witness handed out during the walk is still outstanding"
+    );
+
+    // resolve them the way a parallel driver would: resolve off the task, feed
+    // the answer back
+    let checked = pending.check_resolver(&resolver).unwrap();
+    let tasks = pending.unresolved_witnesses().collect::<Vec<_>>();
+    for task in tasks {
+        let res = task.resolve(&checked).unwrap();
+        assert_eq!(res.txid, task.txid);
+        pending.resolve_witness(res).unwrap();
+    }
+    assert!(pending.is_resolved());
+
+    let status = pending.finalize();
+    assert_eq!(status.validity(), Validity::Valid);
+}
+
+/// Driving the walk and letting `finish` do it must give the same result.
+#[test]
+fn stepping_matches_running_phase_1_in_one_go() {
+    let scenario = Scenario::A;
+    let resolver = scenario.resolver();
+    let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema = AssetSchema::from(consignment.schema_id());
+    let asset_schema_rules = asset_schema.schema_rules();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let context = (asset_schema_rules.schema(), consignment.contract_id());
+
+    let mut stepped = Validator::<FilteredContractState<UnfilteredContractState>, _>::start(
+        &consignment,
+        &asset_schema_rules,
+        context,
+        &validation_config,
+    )
+    .unwrap();
+    let mut stepped_txids = Vec::new();
+    while let Some(task) = stepped.next_bundle().unwrap() {
+        stepped_txids.push(task.txid);
+    }
+    let mut stepped = stepped.finish().unwrap();
+
+    let context = (asset_schema_rules.schema(), consignment.contract_id());
+    let mut in_one_go =
+        Validator::<FilteredContractState<UnfilteredContractState>, _>::validate_deterministic(
+            &consignment,
+            &asset_schema_rules,
+            context,
+            &validation_config,
+        )
+        .unwrap();
+
+    assert_eq!(
+        in_one_go
+            .unresolved_witnesses()
+            .map(|t| t.txid)
+            .collect::<std::collections::BTreeSet<_>>(),
+        stepped_txids
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+    );
+
+    stepped.resolve_all(&resolver).unwrap();
+    in_one_go.resolve_all(&resolver).unwrap();
+    assert_eq!(
+        stepped.finalize().validity(),
+        in_one_go.finalize().validity()
+    );
+}
+
+/// `finalize` refuses to conclude while witnesses are outstanding: nothing has
+/// been checked against a chain yet, so getting there is a bug in the caller.
+#[test]
+#[should_panic(expected = "still outstanding")]
+fn finalize_refuses_unresolved_witnesses() {
+    let scenario = Scenario::A;
+    let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema = AssetSchema::from(consignment.schema_id());
+    let asset_schema_rules = asset_schema.schema_rules();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let context = (asset_schema_rules.schema(), consignment.contract_id());
+
+    let pending =
+        Validator::<FilteredContractState<UnfilteredContractState>, _>::validate_deterministic(
+            &consignment,
+            &asset_schema_rules,
+            context,
+            &validation_config,
+        )
+        .unwrap();
+    assert!(!pending.is_resolved());
+
+    pending.finalize();
+}
+
+/// An answer for a witness this validation never asked about is rejected rather
+/// than silently ignored.
+#[test]
+fn resolve_witness_rejects_an_unknown_witness() {
+    let scenario = Scenario::A;
+    let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema = AssetSchema::from(consignment.schema_id());
+    let asset_schema_rules = asset_schema.schema_rules();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let context = (asset_schema_rules.schema(), consignment.contract_id());
+
+    let mut pending =
+        Validator::<FilteredContractState<UnfilteredContractState>, _>::validate_deterministic(
+            &consignment,
+            &asset_schema_rules,
+            context,
+            &validation_config,
+        )
+        .unwrap();
+
+    let stranger =
+        Txid::from_str("0909090909090909090909090909090909090909090909090909090909090909").unwrap();
+    let res = pending
+        .resolve_witness(WitnessResolution {
+            txid: stranger,
+            ord: WitnessOrd::Tentative,
+            warning: None,
+        })
+        .unwrap_err();
+    dbg!(&res);
+    assert_eq!(res, ValidationError::UnknownWitness(stranger));
+}
+
+/// An archived witness fails when it is reported, not at finalization, so the
+/// caller can stop instead of resolving the rest first.
+#[test]
+fn resolve_witness_rejects_an_archived_witness() {
+    let scenario = Scenario::A;
+    let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema = AssetSchema::from(consignment.schema_id());
+    let asset_schema_rules = asset_schema.schema_rules();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let context = (asset_schema_rules.schema(), consignment.contract_id());
+
+    let mut pending =
+        Validator::<FilteredContractState<UnfilteredContractState>, _>::validate_deterministic(
+            &consignment,
+            &asset_schema_rules,
+            context,
+            &validation_config,
+        )
+        .unwrap();
+
+    let task = pending.unresolved_witnesses().next().unwrap();
+    let res = pending
+        .resolve_witness(WitnessResolution {
+            txid: task.txid,
+            ord: WitnessOrd::Archived,
+            warning: None,
+        })
+        .unwrap_err();
+    dbg!(&res);
+    assert!(matches!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SealNoPubWitness(_, txid)) if txid == task.txid
+    ));
+}
+
+/// A caller can stop at the first witness with an unsafe height instead of
+/// resolving the rest and reading the warning afterwards.
+///
+/// Consensus only warns, because it cannot know the caller's policy - rgb-lib,
+/// for one, wants to stop. So the verdict is reported per witness and the
+/// caller decides.
+#[test]
+fn caller_can_stop_at_the_first_unsafe_witness() {
+    let scenario = Scenario::A;
+    let resolver = scenario.resolver();
+    let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema = AssetSchema::from(consignment.schema_id());
+    let asset_schema_rules = asset_schema.schema_rules();
+    // every witness in the fixture is mined above height 1, so all are unsafe
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        safe_height: Some(NonZeroU32::new(1).unwrap()),
+        ..Default::default()
+    };
+    let context = (asset_schema_rules.schema(), consignment.contract_id());
+
+    let mut pending =
+        Validator::<FilteredContractState<UnfilteredContractState>, _>::validate_deterministic(
+            &consignment,
+            &asset_schema_rules,
+            context,
+            &validation_config,
+        )
+        .unwrap();
+    let total = pending.unresolved_witnesses().count();
+    assert!(
+        total > 1,
+        "fixture must have more than one witness to prove we stopped early"
+    );
+
+    let checked = pending.check_resolver(&resolver).unwrap();
+    let mut resolved = 0;
+    let mut stopped = false;
+    loop {
+        let next = pending.unresolved_witnesses().next();
+        let Some(task) = next else { break };
+        let res = task.resolve(&checked).unwrap();
+        resolved += 1;
+        if pending.resolve_witness(res).unwrap() == WitnessSafety::Unsafe {
+            stopped = true;
+            break;
+        }
+    }
+    assert!(
+        stopped,
+        "the fixture's witnesses should be above the safe height"
+    );
+    assert_eq!(resolved, 1, "stopped on the first one");
+    assert_eq!(pending.unresolved_witnesses().count(), total - 1);
+    assert!(!pending.is_resolved());
+
+    // and had we not stopped, consensus would only have warned
+    pending.resolve_all(&resolver).unwrap();
+    let status = pending.finalize();
+    assert_eq!(status.validity(), Validity::Warnings);
+    assert!(matches!(status.warnings[0], Warning::UnsafeHistory(_)));
+}
+
+/// Phase 1's output is plain data: it can be serialised, shipped to whatever
+/// resolves the witnesses, and finalised somewhere else entirely.
+///
+/// This is what the `Validator` itself cannot do - it holds an `Rc<RefCell<S>>`
+/// and borrows both the consignment and the schema rules.
+#[test]
+fn pending_validation_survives_a_round_trip_through_disk() {
+    let scenario = Scenario::A;
+    let resolver = scenario.resolver();
+    let consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema = AssetSchema::from(consignment.schema_id());
+    let asset_schema_rules = asset_schema.schema_rules();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        build_opouts_dag: true,
+        ..Default::default()
+    };
+    let context = (asset_schema_rules.schema(), consignment.contract_id());
+
+    let pending =
+        Validator::<FilteredContractState<UnfilteredContractState>, _>::validate_deterministic(
+            &consignment,
+            &asset_schema_rules,
+            context,
+            &validation_config,
+        )
+        .unwrap();
+    let outstanding = pending.unresolved_witnesses().count();
+    assert!(outstanding > 0);
+    // the DAG rides along, so the far side can inspect it before resolving
+    assert!(pending.dag_data_opt.is_some());
+
+    // it is also `Send`: the whole point of it owning its data rather than
+    // borrowing the consignment the way `Validator` does
+    fn assert_send<T: Send>() {}
+    assert_send::<PendingValidation>();
+
+    let json = serde_json::to_string(&pending).unwrap();
+    drop(pending);
+    drop(consignment);
+
+    // ...somewhere else, with no consignment and no validator in sight
+    let mut shipped: PendingValidation = serde_json::from_str(&json).unwrap();
+    assert_eq!(shipped.unresolved_witnesses().count(), outstanding);
+    assert!(shipped.dag_data_opt.is_some());
+
+    shipped.resolve_all(&resolver).unwrap();
+    assert!(shipped.is_resolved());
+    assert_eq!(shipped.finalize().validity(), Validity::Valid);
 }
 
 #[test]

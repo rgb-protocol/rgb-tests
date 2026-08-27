@@ -128,6 +128,36 @@ impl<R: ResolveWitness> ResolveWitness for NoHeadersResolver<'_, R> {
     }
 }
 
+/// EVM chain ID the test BFA contracts commit to in their bridge location.
+pub const BFA_CHAIN_ID: u64 = 1;
+
+/// Anchor resolver standing in for a node of the EVM chain `chain_id`: `confirm` decides
+/// which anchors the bridge contract is said to have emitted.
+pub struct MockAnchorResolver<F: Fn(&ExternalAnchor) -> bool> {
+    pub chain_id: u64,
+    pub confirm: F,
+}
+
+impl<F: Fn(&ExternalAnchor) -> bool> MockAnchorResolver<F> {
+    pub fn new(chain_id: u64, confirm: F) -> Self {
+        Self { chain_id, confirm }
+    }
+}
+
+impl<F: Fn(&ExternalAnchor) -> bool> ResolveAnchor for MockAnchorResolver<F> {
+    fn evm_chain_id(&self) -> Result<u64, AnchorResolverError> {
+        Ok(self.chain_id)
+    }
+
+    fn is_confirmed(
+        &self,
+        _location: &BridgeLocation,
+        anchor: &ExternalAnchor,
+    ) -> Result<bool, AnchorResolverError> {
+        Ok((self.confirm)(anchor))
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DescriptorType {
     Wpkh,
@@ -1342,7 +1372,7 @@ where
     pub fn issue_bfa(&mut self) -> ContractId {
         let mint_right_outpoint = self.get_utxo(None);
         let bridge_location = BridgeLocation::Evm {
-            chain_id: 1,
+            chain_id: BFA_CHAIN_ID,
             address: TinyString::try_from("0x0".to_owned()).unwrap(),
         };
         let asset_info = AssetInfo::bfa(
@@ -1361,24 +1391,34 @@ where
     pub fn accept_transfer_bfa(
         &mut self,
         consignment: Transfer,
-        anchor_resolver: impl FnMut(&ExternalAnchor) -> bool,
+        anchor_resolver: impl Fn(&ExternalAnchor) -> bool,
     ) -> Status {
         let resolver = self.get_resolver();
         self.sync();
         let schema_rules = AssetSchema::Bfa.schema_rules();
-        let validated_consignment = consignment
+        let mut pending_consignment = consignment
             .clone()
-            .validate_bfa(
+            .validate_deterministic(
                 &schema_rules,
-                &resolver,
                 &ValidationConfig {
                     chain_net: self.chain_net(),
                     build_opouts_dag: true,
                     ..Default::default()
                 },
-                anchor_resolver,
             )
             .unwrap();
+        pending_consignment
+            .resolve_all_anchors(
+                BridgedFungibleAsset::bridge_location(pending_consignment.consignment().genesis())
+                    .unwrap(),
+                &MockAnchorResolver::new(BFA_CHAIN_ID, anchor_resolver),
+            )
+            .unwrap();
+        pending_consignment
+            .pending()
+            .resolve_all(&resolver)
+            .unwrap();
+        let validated_consignment = pending_consignment.finalize();
         let validation_status = validated_consignment.clone().into_validation_status();
         let validity = validation_status.validity();
         assert_eq!(validity, Validity::Valid);
