@@ -2293,7 +2293,6 @@ dependencies = [
  "amplify",
  "baid64",
  "blake3",
- "getrandom 0.3.4",
  "half",
  "rgb-ascii-armor",
  "rgb-strict-encoding",
@@ -2352,8 +2351,7 @@ dependencies = [
  "rgb-strict-encoding",
  "rgb-strict-types",
  "ripemd 0.2.0",
- "secp256k1 0.31.1",
- "secp256k1 0.32.0-beta.2",
+ "secp256k1 0.33.1",
  "serde",
  "sha2 0.11.0",
  "wasm-bindgen",
@@ -2750,24 +2748,12 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
-version = "0.31.1"
+version = "0.33.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c3c81b43dc2d8877c216a3fccf76677ee1ebccd429566d3e67447290d0c42b2"
-dependencies = [
- "bitcoin_hashes 0.14.101",
- "rand 0.9.5",
- "secp256k1-sys 0.11.0",
- "serde",
-]
-
-[[package]]
-name = "secp256k1"
-version = "0.32.0-beta.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c5fdc7d6e800869d3fd60ff857c479bf0a83ea7bf44b389e64461e844204994"
+checksum = "d7f404a8dab7a7a5a631e741d8699aa9c8e1d689fc26ccf897c7187565490b69"
 dependencies = [
  "rand 0.9.5",
- "secp256k1-sys 0.12.0",
+ "secp256k1-sys 0.14.1",
  "serde",
 ]
 
@@ -2782,18 +2768,9 @@ dependencies = [
 
 [[package]]
 name = "secp256k1-sys"
-version = "0.11.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcb913707158fadaf0d8702c2db0e857de66eb003ccfdda5924b5f5ac98efb38"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "secp256k1-sys"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d3be00697c88c00fe102af8dc316038cc2062eab8da646e7463f4c0e70ca9fd"
+checksum = "f6b2992d4a3cd244539a7d5d0966aadbe5ca7fb868a5d7e38c29499b9e709bbd"
 dependencies = [
  "cc",
 ]

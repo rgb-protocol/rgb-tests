@@ -166,7 +166,7 @@ pub use rgbcore::{
     dbc::tapret::{TapretCommitment, TapretProof},
     seals::txout::TxPtr,
     seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
-    secp256k1::{Message, Secp256k1, SecretKey},
+    secp256k1::{Message, SecretKey, generate_keypair},
 };
 pub use rgbstd::{
     Allocation, Amount, ChainNet, ContractId, GlobalStateType, KnownState, Layer1, Operation,

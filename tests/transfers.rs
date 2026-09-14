@@ -410,7 +410,7 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
         AssetSchema::Uda => (wlt_1.issue_uda(None), None),
         AssetSchema::Cfa => (wlt_1.issue_cfa(600, None), None),
         AssetSchema::Pfa => {
-            let (secret_key, public_key) = Secp256k1::new().generate_keypair(&mut rand::rng());
+            let (secret_key, public_key) = generate_keypair(&mut rand::rng());
             let pubkey = CompressedPublicKey::from_slice(&public_key.serialize()).unwrap();
             (wlt_1.issue_pfa(600, None, pubkey), Some(secret_key))
         }
@@ -1535,7 +1535,7 @@ fn pfa() {
     let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
     let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
-    let (secret_key, public_key) = Secp256k1::new().generate_keypair(&mut rand::rng());
+    let (secret_key, public_key) = generate_keypair(&mut rand::rng());
     let pubkey = CompressedPublicKey::from_slice(&public_key.serialize()).unwrap();
 
     let utxo = wlt_1.get_utxo(None);
