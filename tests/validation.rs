@@ -3502,3 +3502,211 @@ fn evolve_state_on_operations_without_validator() {
         .validate(&resolver, &validation_config)
         .unwrap();
 }
+
+/// `cng 42,a8[0]; ret;` as raw bytecode, so the test does not depend on the assembler
+const CNG_A8: &[u8] = &[0xc2, 0x2a, 0x00, 0x00, 0x07];
+
+const CHILD_CASE: &str = "RGB_TESTS_CHILD_CASE";
+
+/// Re-run `case` in a child process, so that a hard crash cannot take the test suite down.
+/// Returns `None` in the child, which then has to run the case itself.
+fn child_case(case: &str) -> Option<bool> {
+    if std::env::var(CHILD_CASE).as_deref() == Ok(case) {
+        return None;
+    }
+    let status = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "--include-ignored", "--test-threads", "1", case])
+        .env(CHILD_CASE, case)
+        .stdout(Stdio::null())
+        .status()
+        .unwrap();
+    Some(status.success())
+}
+
+/// Build a transfer under a schema whose transition validator is the given bytecode
+fn scripted_transfer(code: Vec<u8>, global_items: u16) -> (Transfer, TypeSystem) {
+    let global_type = GlobalStateType::with(42);
+    let lib = Lib::with("ALU", code, vec![], none!()).unwrap();
+
+    let types = StandardTypes::with(rgb_contract_stl());
+    let schema = Schema {
+        ffv: zero!(),
+        name: tn!("ScriptedAsset"),
+        meta_types: none!(),
+        global_types: tiny_bmap! {
+             global_type => GlobalDetails {
+                global_state_schema: GlobalStateSchema::many(types.get("RGBContract.Amount")),
+                name: fname!("someGlobal"),
+            },
+        },
+        owned_types: tiny_bmap! {
+            OS_ASSET => AssignmentDetails {
+                owned_state_schema: OwnedStateSchema::Fungible(FungibleType::Unsigned64Bit),
+                name: fname!("assetOwner"),
+                default_transition: TS_TRANSFER,
+            },
+        },
+        genesis: GenesisSchema {
+            metadata: none!(),
+            globals: none!(),
+            assignments: tiny_bmap! {
+                OS_ASSET => Occurrences::OnceOrMore,
+            },
+            validator: None,
+        },
+        transitions: tiny_bmap! {
+            TS_TRANSFER => TransitionDetails {
+                transition_schema: TransitionSchema {
+                    metadata: none!(),
+                    globals: tiny_bmap! {
+                        global_type => Occurrences::NoneOrMore,
+                    },
+                    inputs: tiny_bmap! {
+                        OS_ASSET => Occurrences::NoneOrMore,
+                    },
+                    assignments: none!(),
+                    validator: Some(LibSite::with(0, lib.id())),
+                },
+                name: fname!("transfer"),
+            },
+        },
+        default_assignment: Some(OS_ASSET),
+    };
+    let type_system = types.type_system(schema.clone());
+    let scripts = Confined::from_checked(bmap! {lib.id() => lib});
+    let chain_net = ChainNet::BitcoinRegtest;
+    let outpoint =
+        Outpoint::from_str("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0")
+            .unwrap();
+    let seal = BuilderSeal::Revealed(GenesisSeal::rand_from(outpoint));
+    let contract_consignment = ContractBuilder::with(
+        strict_dumb!(),
+        schema,
+        type_system.clone(),
+        scripts,
+        chain_net,
+    )
+    .add_fungible_state("assetOwner", seal, 14u64)
+    .unwrap()
+    .issue_contract_raw(42)
+    .unwrap()
+    .into_consignment();
+    let contract_id = contract_consignment.contract_id();
+    let opout = Opout::new(contract_consignment.genesis().id(), OS_ASSET, 0);
+
+    let mut globals = rgb::GlobalState::default();
+    for i in 0..global_items {
+        globals
+            .add_state(
+                global_type,
+                RevealedData::new(
+                    Amount::from(u64::from(i))
+                        .to_strict_serialized::<{ u16::MAX as usize }>()
+                        .unwrap(),
+                ),
+            )
+            .unwrap();
+    }
+
+    let transition = Transition {
+        contract_id,
+        transition_type: TS_TRANSFER,
+        globals,
+        inputs: NonEmptyOrdSet::with(opout).into(),
+        ..strict_dumb!()
+    };
+    let opid = transition.id();
+    let bundle = TransitionBundle {
+        input_map: NonEmptyOrdMap::with_key_value(opout, opid),
+        known_transitions: NonEmptyVec::with(KnownTransition::new(opid, transition)),
+    };
+    let mut psbt = Psbt::from_unsigned_tx(Transaction {
+        version: Version::ONE,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: outpoint,
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence(0),
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: bitcoin::Amount::ZERO,
+            script_pubkey: ScriptBuf::new_op_return([]),
+        }],
+    })
+    .unwrap();
+    psbt.inputs.get_mut(0).unwrap().witness_utxo = Some(TxOut {
+        value: bitcoin::Amount::from_sat(1000),
+        script_pubkey: ScriptBuf::new_p2a(),
+    });
+    let protocol_id = mpc::ProtocolId::from(contract_id);
+    psbt.outputs.get_mut(0).unwrap().set_opret_host();
+    psbt.outputs
+        .get_mut(0)
+        .unwrap()
+        .set_mpc_message(protocol_id, mpc::Message::from(bundle.bundle_id()))
+        .unwrap();
+    let (commitment, proof) = psbt.outputs.get_mut(0).unwrap().mpc_commit().unwrap();
+    psbt.outputs
+        .get_mut(0)
+        .unwrap()
+        .opret_commit(commitment)
+        .unwrap();
+    psbt.set_opret_commitment(0);
+    let tx = psbt.extract_tx().unwrap();
+    let anchor = Anchor::new(
+        proof.to_merkle_proof(protocol_id).unwrap(),
+        DbcProof::Opret(OpretProof::strict_dumb()),
+    );
+    let wbundle = WitnessBundle::with(PubWitness::Tx(tx), anchor, bundle);
+    let consignment = Consignment::<true> {
+        transfer: true,
+        bundles: Confined::from_checked(vec![wbundle]),
+        genesis: contract_consignment.genesis,
+        schema: contract_consignment.schema,
+        types: contract_consignment.types,
+        scripts: contract_consignment.scripts,
+        ..strict_dumb!()
+    };
+    (consignment, type_system)
+}
+
+/// Validate, discarding the verdict: the child process reports a crash through its exit status
+fn validate_quietly(consignment: Transfer, trusted_typesystem: TypeSystem) {
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem,
+        ..Default::default()
+    };
+    let resolver = OfflineResolver {
+        consignment: &consignment,
+    };
+    let _ = consignment.clone().validate(&resolver, &validation_config);
+}
+
+#[test]
+#[ignore = "CnG writes a u16 global state count into RegA::A8"]
+fn validate_consignment_global_state_count_overflow() {
+    let Some(completed) = child_case("validate_consignment_global_state_count_overflow") else {
+        let (consignment, type_system) = scripted_transfer(CNG_A8.to_vec(), 256);
+        validate_quietly(consignment, type_system);
+        return;
+    };
+    assert!(
+        completed,
+        "validating 256 global state items terminated the process"
+    );
+}
+
+#[test]
+fn validate_consignment_global_state_count_in_range() {
+    let Some(completed) = child_case("validate_consignment_global_state_count_in_range") else {
+        let (consignment, type_system) = scripted_transfer(CNG_A8.to_vec(), 255);
+        validate_quietly(consignment, type_system);
+        return;
+    };
+    assert!(
+        completed,
+        "validating 255 global state items terminated the process"
+    );
+}
