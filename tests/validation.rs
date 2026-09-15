@@ -3502,3 +3502,246 @@ fn evolve_state_on_operations_without_validator() {
         .validate(&resolver, &validation_config)
         .unwrap();
 }
+
+use rgbcore::commit_verify::MerkleHash;
+
+/// Rebuild the LNPBP-81 recursion from public constructors, to reach the depth-1 subtree roots
+fn merklize_subtree(
+    leaves: &[MerkleHash],
+    depth: u8,
+    branch_width: u32,
+    base_width: u32,
+) -> MerkleHash {
+    if branch_width <= 2 {
+        return match (leaves.first(), leaves.get(1)) {
+            (None, None) => MerkleHash::void(depth, base_width),
+            (Some(branch), None) => MerkleHash::single(depth, base_width, *branch),
+            (Some(branch1), Some(branch2)) => {
+                MerkleHash::branches(depth, base_width, *branch1, *branch2)
+            }
+            (None, Some(_)) => unreachable!(),
+        };
+    }
+    let div = (branch_width / 2 + branch_width % 2) as usize;
+    let (left, right) = leaves.split_at(div.min(leaves.len()));
+    MerkleHash::branches(
+        depth,
+        base_width,
+        merklize_subtree(left, depth + 1, div as u32, base_width),
+        merklize_subtree(right, depth + 1, branch_width - div as u32, base_width),
+    )
+}
+
+/// Build a transfer whose transition carries `globals` under global state type 2
+fn transfer_with_globals(
+    global_type: GlobalStateType,
+    blob_sem_id: SemId,
+    type_system: TypeSystem,
+    globals: rgb::GlobalState,
+) -> Transfer {
+    let schema = Schema {
+        ffv: zero!(),
+        name: tn!("BlobAsset"),
+        meta_types: none!(),
+        global_types: tiny_bmap! {
+             global_type => GlobalDetails {
+                global_state_schema: GlobalStateSchema::many(blob_sem_id),
+                name: fname!("someGlobal"),
+            },
+        },
+        owned_types: tiny_bmap! {
+            OS_ASSET => AssignmentDetails {
+                owned_state_schema: OwnedStateSchema::Fungible(FungibleType::Unsigned64Bit),
+                name: fname!("assetOwner"),
+                default_transition: TS_TRANSFER,
+            },
+        },
+        genesis: GenesisSchema {
+            metadata: none!(),
+            globals: none!(),
+            assignments: tiny_bmap! {
+                OS_ASSET => Occurrences::OnceOrMore,
+            },
+            validator: None,
+        },
+        transitions: tiny_bmap! {
+            TS_TRANSFER => TransitionDetails {
+                transition_schema: TransitionSchema {
+                    metadata: none!(),
+                    globals: tiny_bmap! {
+                        global_type => Occurrences::NoneOrMore,
+                    },
+                    inputs: tiny_bmap! {
+                        OS_ASSET => Occurrences::NoneOrMore,
+                    },
+                    assignments: none!(),
+                    validator: None,
+                },
+                name: fname!("transfer"),
+            },
+        },
+        default_assignment: Some(OS_ASSET),
+    };
+
+    let chain_net = ChainNet::BitcoinRegtest;
+    let outpoint =
+        Outpoint::from_str("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0")
+            .unwrap();
+    let seal = BuilderSeal::Revealed(GenesisSeal::rand_from(outpoint));
+    let contract_consignment = ContractBuilder::with(
+        strict_dumb!(),
+        schema,
+        type_system,
+        Confined::from_checked(bmap! {}),
+        chain_net,
+    )
+    .add_fungible_state("assetOwner", seal, 14u64)
+    .unwrap()
+    .issue_contract_raw(42)
+    .unwrap()
+    .into_consignment();
+    let contract_id = contract_consignment.contract_id();
+    let opout = Opout::new(contract_consignment.genesis().id(), OS_ASSET, 0);
+
+    let transition = Transition {
+        contract_id,
+        transition_type: TS_TRANSFER,
+        globals,
+        inputs: NonEmptyOrdSet::with(opout).into(),
+        ..strict_dumb!()
+    };
+    let opid = transition.id();
+    let bundle = TransitionBundle {
+        input_map: NonEmptyOrdMap::with_key_value(opout, opid),
+        known_transitions: NonEmptyVec::with(KnownTransition::new(opid, transition)),
+    };
+    let mut psbt = Psbt::from_unsigned_tx(Transaction {
+        version: Version::ONE,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: outpoint,
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence(0),
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: bitcoin::Amount::ZERO,
+            script_pubkey: ScriptBuf::new_op_return([]),
+        }],
+    })
+    .unwrap();
+    psbt.inputs.get_mut(0).unwrap().witness_utxo = Some(TxOut {
+        value: bitcoin::Amount::from_sat(1000),
+        script_pubkey: ScriptBuf::new_p2a(),
+    });
+    let protocol_id = mpc::ProtocolId::from(contract_id);
+    psbt.outputs.get_mut(0).unwrap().set_opret_host();
+    psbt.outputs
+        .get_mut(0)
+        .unwrap()
+        .set_mpc_message(protocol_id, mpc::Message::from(bundle.bundle_id()))
+        .unwrap();
+    let (commitment, proof) = psbt.outputs.get_mut(0).unwrap().mpc_commit().unwrap();
+    psbt.outputs
+        .get_mut(0)
+        .unwrap()
+        .opret_commit(commitment)
+        .unwrap();
+    psbt.set_opret_commitment(0);
+    let tx = psbt.extract_tx().unwrap();
+    let anchor = Anchor::new(
+        proof.to_merkle_proof(protocol_id).unwrap(),
+        DbcProof::Opret(OpretProof::strict_dumb()),
+    );
+    let wbundle = WitnessBundle::with(PubWitness::Tx(tx), anchor, bundle);
+    Consignment::<true> {
+        transfer: true,
+        bundles: Confined::from_checked(vec![wbundle]),
+        genesis: contract_consignment.genesis,
+        schema: contract_consignment.schema,
+        types: contract_consignment.types,
+        scripts: contract_consignment.scripts,
+        ..strict_dumb!()
+    }
+}
+
+#[test]
+#[ignore = "merkle leaf and node preimages are not domain-separated"]
+fn validate_consignment_substituted_operation() {
+    use rgbcore::GlobalCommitment;
+    use rgbcore::commit_verify::CommitId;
+    use strict_types::Ty;
+    use strict_types::ast::PrimitiveRef;
+
+    // state type 2 supplies NodeBranching::Branch and a zero depth, a 94-byte blob supplies a
+    // base width of 94 and, after 30 zero bytes, both child hashes
+    let global_type = GlobalStateType::with(2);
+    let blob_ty = Ty::<SemId>::Array(SemId::byte(), 94);
+    let blob_sem_id = blob_ty.sem_id_unnamed();
+    let type_system = TypeSystem::from(Confined::from_checked(bmap! {
+        blob_sem_id => blob_ty
+    }));
+
+    let mut many = rgb::GlobalState::default();
+    let mut leaves = vec![];
+    for i in 0u16..94 {
+        let mut blob = vec![0u8; 94];
+        blob[..2].copy_from_slice(&i.to_le_bytes());
+        let item = RevealedData::new(SmallBlob::from_checked(blob));
+        leaves.push(
+            GlobalCommitment {
+                ty: global_type,
+                state: item.clone(),
+            }
+            .commit_id(),
+        );
+        many.add_state(global_type, item).unwrap();
+    }
+
+    let consignment =
+        transfer_with_globals(global_type, blob_sem_id, type_system.clone(), many.clone());
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem: type_system,
+        ..Default::default()
+    };
+    let resolver = OfflineResolver {
+        consignment: &consignment,
+    };
+    consignment
+        .clone()
+        .validate(&resolver, &validation_config)
+        .unwrap();
+
+    // one item whose blob reproduces the node preimage of the 94-item tree
+    let (left, right) = leaves.split_at(47);
+    let mut blob = vec![0u8; 30];
+    blob.extend_from_slice(merklize_subtree(left, 1, 47, 94).as_slice());
+    blob.extend_from_slice(merklize_subtree(right, 1, 47, 94).as_slice());
+    let mut one = rgb::GlobalState::default();
+    one.add_state(
+        global_type,
+        RevealedData::new(SmallBlob::from_checked(blob)),
+    )
+    .unwrap();
+    assert_ne!(many, one);
+
+    // swap in the substituted operation, leaving the bundle, anchor and witness untouched
+    let mut substituted = consignment.clone();
+    let mut bundles = substituted.bundles.release();
+    let known = bundles[0].bundle.known_transitions.first().unwrap().clone();
+    let mut transition = known.transition.clone();
+    transition.globals = one;
+    bundles[0].bundle.known_transitions =
+        NonEmptyVec::with(KnownTransition::new(known.opid, transition));
+    substituted.bundles = LargeVec::from_checked(bundles);
+
+    let resolver = OfflineResolver {
+        consignment: &substituted,
+    };
+    let res = substituted.clone().validate(&resolver, &validation_config);
+    assert!(
+        res.is_err(),
+        "witness commitment does not bind the operation content"
+    );
+}
