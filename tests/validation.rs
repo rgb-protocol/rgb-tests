@@ -3502,3 +3502,116 @@ fn evolve_state_on_operations_without_validator() {
         .validate(&resolver, &validation_config)
         .unwrap();
 }
+
+/// Build a UDA contract whose `tokens` global state holds two attachments, under keys 1 and 2
+fn uda_contract_with_two_attachments() -> (Consignment<false>, GlobalStateType, Vec<u8>, usize) {
+    let att_a = attachment_from_fpath(MEDIA_FPATH);
+    let mut att_b = att_a.clone();
+    // same media type, so both encode to the same length and only the digest differs
+    att_b.digest = sha256::Hash::hash(b"rgb-tests: second attachment")
+        .to_byte_array()
+        .into();
+    let att_len = att_b.to_strict_serialized::<U16>().unwrap().len();
+
+    let token_data = TokenData {
+        index: TokenIndex::from(UDA_FIXED_INDEX),
+        attachments: Confined::try_from(bmap! { 1u8 => att_a, 2u8 => att_b }).unwrap(),
+        ..Default::default()
+    };
+    let canonical = token_data.to_strict_serialized::<U16>().unwrap().release();
+
+    let builder = ContractBuilder::with(
+        strict_dumb!(),
+        UniqueDigitalAsset::schema(),
+        UniqueDigitalAsset::types(),
+        UniqueDigitalAsset::scripts(),
+        ChainNet::BitcoinRegtest,
+    );
+    let gs_tokens = builder.global_type("tokens");
+    let outpoint =
+        Outpoint::from_str("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0")
+            .unwrap();
+    let seal = BuilderSeal::Revealed(GenesisSeal::rand_from(outpoint));
+    let contract = builder
+        .add_global_state(
+            "spec",
+            AssetSpec::with("TKN", "Token", Precision::try_from(0).unwrap(), None).unwrap(),
+        )
+        .unwrap()
+        .add_global_state(
+            "terms",
+            ContractTerms {
+                text: RicardianContract::from_str("terms").unwrap(),
+                media: None,
+            },
+        )
+        .unwrap()
+        .add_global_state("tokens", token_data)
+        .unwrap()
+        .add_data(
+            "assetOwner",
+            seal,
+            Allocation::with(UDA_FIXED_INDEX, OwnedFraction::from(1)),
+        )
+        .unwrap()
+        .issue_contract_raw(0)
+        .unwrap()
+        .into_consignment();
+
+    (contract, gs_tokens, canonical, att_len)
+}
+
+#[test]
+#[ignore = "map decoding checks neither key order nor uniqueness"]
+fn validate_consignment_noncanonical_global_state_map() {
+    use rgbstd::GlobalValues;
+
+    let (contract, gs_tokens, canonical, att_len) = uda_contract_with_two_attachments();
+
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem: UniqueDigitalAsset::types(),
+        ..Default::default()
+    };
+
+    // control: the canonically encoded contract is valid
+    let resolver = OfflineResolver {
+        consignment: &contract,
+    };
+    contract
+        .clone()
+        .validate(&resolver, &validation_config)
+        .unwrap();
+
+    // the second key sits one attachment plus its own key byte from the end, ahead of `reserves`
+    let pos = canonical.len() - att_len - 2;
+    assert_eq!(canonical[pos], 2, "unexpected TokenData encoding layout");
+
+    for (case, patched_key) in [("duplicate key", 1u8), ("descending keys", 0u8)] {
+        let mut blob = canonical.clone();
+        blob[pos] = patched_key;
+        let blob = SmallBlob::from_checked(blob);
+
+        assert!(
+            TokenData::from_strict_serialized::<U16>(blob.clone()).is_err(),
+            "{case}: the canonical decoder unexpectedly accepted the blob"
+        );
+
+        let mut malicious = contract.clone();
+        let _ = malicious
+            .genesis
+            .globals
+            .insert(gs_tokens, GlobalValues::with(RevealedData::new(blob)))
+            .unwrap();
+
+        let resolver = OfflineResolver {
+            consignment: &malicious,
+        };
+        let res = malicious.clone().validate(&resolver, &validation_config);
+        assert!(
+            res.is_err(),
+            "{case}: validator accepted global state that the canonical strict-encoding decoder \
+             rejects"
+        );
+    }
+}
