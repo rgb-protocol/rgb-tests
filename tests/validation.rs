@@ -3502,3 +3502,207 @@ fn evolve_state_on_operations_without_validator() {
         .validate(&resolver, &validation_config)
         .unwrap();
 }
+
+/// `st.a a8[0]; ret;`: a validator body that succeeds
+const PASSING_CODE: &[u8] = &[0x1e, 0x01, 0x07];
+
+/// Build a transfer whose transition validator is `validator`, while it carries `shipped`
+fn transfer_with_script(validator: aluvm::library::LibId, shipped: Lib) -> (Transfer, TypeSystem) {
+    let global_type = GlobalStateType::with(42);
+
+    let types = StandardTypes::with(rgb_contract_stl());
+    let schema = Schema {
+        ffv: zero!(),
+        name: tn!("ScriptedAsset"),
+        meta_types: none!(),
+        global_types: tiny_bmap! {
+             global_type => GlobalDetails {
+                global_state_schema: GlobalStateSchema::many(types.get("RGBContract.Amount")),
+                name: fname!("someGlobal"),
+            },
+        },
+        owned_types: tiny_bmap! {
+            OS_ASSET => AssignmentDetails {
+                owned_state_schema: OwnedStateSchema::Fungible(FungibleType::Unsigned64Bit),
+                name: fname!("assetOwner"),
+                default_transition: TS_TRANSFER,
+            },
+        },
+        genesis: GenesisSchema {
+            metadata: none!(),
+            globals: none!(),
+            assignments: tiny_bmap! {
+                OS_ASSET => Occurrences::OnceOrMore,
+            },
+            validator: None,
+        },
+        transitions: tiny_bmap! {
+            TS_TRANSFER => TransitionDetails {
+                transition_schema: TransitionSchema {
+                    metadata: none!(),
+                    globals: tiny_bmap! {
+                        global_type => Occurrences::NoneOrMore,
+                    },
+                    inputs: tiny_bmap! {
+                        OS_ASSET => Occurrences::NoneOrMore,
+                    },
+                    assignments: none!(),
+                    validator: Some(LibSite::with(0, validator)),
+                },
+                name: fname!("transfer"),
+            },
+        },
+        default_assignment: Some(OS_ASSET),
+    };
+    let type_system = types.type_system(schema.clone());
+    let scripts = Confined::from_checked(bmap! {shipped.id() => shipped});
+    let chain_net = ChainNet::BitcoinRegtest;
+    let outpoint =
+        Outpoint::from_str("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0")
+            .unwrap();
+    let seal = BuilderSeal::Revealed(GenesisSeal::rand_from(outpoint));
+    let contract_consignment = ContractBuilder::with(
+        strict_dumb!(),
+        schema,
+        type_system.clone(),
+        scripts,
+        chain_net,
+    )
+    .add_fungible_state("assetOwner", seal, 14u64)
+    .unwrap()
+    .issue_contract_raw(42)
+    .unwrap()
+    .into_consignment();
+    let contract_id = contract_consignment.contract_id();
+    let opout = Opout::new(contract_consignment.genesis().id(), OS_ASSET, 0);
+
+    let transition = Transition {
+        contract_id,
+        transition_type: TS_TRANSFER,
+        inputs: NonEmptyOrdSet::with(opout).into(),
+        ..strict_dumb!()
+    };
+    let opid = transition.id();
+    let bundle = TransitionBundle {
+        input_map: NonEmptyOrdMap::with_key_value(opout, opid),
+        known_transitions: NonEmptyVec::with(KnownTransition::new(opid, transition)),
+    };
+    let mut psbt = Psbt::from_unsigned_tx(Transaction {
+        version: Version::ONE,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: outpoint,
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence(0),
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: bitcoin::Amount::ZERO,
+            script_pubkey: ScriptBuf::new_op_return([]),
+        }],
+    })
+    .unwrap();
+    psbt.inputs.get_mut(0).unwrap().witness_utxo = Some(TxOut {
+        value: bitcoin::Amount::from_sat(1000),
+        script_pubkey: ScriptBuf::new_p2a(),
+    });
+    let protocol_id = mpc::ProtocolId::from(contract_id);
+    psbt.outputs.get_mut(0).unwrap().set_opret_host();
+    psbt.outputs
+        .get_mut(0)
+        .unwrap()
+        .set_mpc_message(protocol_id, mpc::Message::from(bundle.bundle_id()))
+        .unwrap();
+    let (commitment, proof) = psbt.outputs.get_mut(0).unwrap().mpc_commit().unwrap();
+    psbt.outputs
+        .get_mut(0)
+        .unwrap()
+        .opret_commit(commitment)
+        .unwrap();
+    psbt.set_opret_commitment(0);
+    let tx = psbt.extract_tx().unwrap();
+    let anchor = Anchor::new(
+        proof.to_merkle_proof(protocol_id).unwrap(),
+        DbcProof::Opret(OpretProof::strict_dumb()),
+    );
+    let wbundle = WitnessBundle::with(PubWitness::Tx(tx), anchor, bundle);
+    let consignment = Consignment::<true> {
+        transfer: true,
+        bundles: Confined::from_checked(vec![wbundle]),
+        genesis: contract_consignment.genesis,
+        schema: contract_consignment.schema,
+        types: contract_consignment.types,
+        scripts: contract_consignment.scripts,
+        ..strict_dumb!()
+    };
+    (consignment, type_system)
+}
+
+/// Build two libraries whose `LibId` preimages coincide
+///
+/// The second absorbs the first's code-length prefix and its first 254 code bytes into its own
+/// ISAE segment, which the one-byte length prefix then reports as 259 - 256 = 3. The first 254
+/// code bytes are therefore laid out as ISAE text: ascending, deduplicated, space separated names
+/// of two to eight characters starting with a capital letter, so that `IsaSeg` renders them back
+/// unchanged.
+fn colliding_libraries(payload: &[u8]) -> (Lib, Lib) {
+    // 0x4120 little-endian is " A": a separator followed by the start of a name
+    const CODE_A_LEN: usize = 0x4120;
+    const CODE_B_LEN: usize = CODE_A_LEN - 0x100;
+
+    let mut isa_tail = String::from("ZAAAAAA "); // completes the name "AZAAAAAA"
+    for c in b'A'..=b'Z' {
+        isa_tail.push_str(&format!("B{}AAAAAA ", c as char));
+    }
+    isa_tail.push_str("CAAAAAAA ZZZ");
+    assert_eq!(isa_tail.len(), 254);
+
+    let mut code_a = isa_tail.clone().into_bytes();
+    code_a.extend_from_slice(&(CODE_B_LEN as u16).to_le_bytes());
+    code_a.extend_from_slice(payload);
+    code_a.resize(CODE_A_LEN, 0x00);
+
+    let isae_b = format!(
+        "ALU{}{isa_tail}",
+        String::from_utf8((CODE_A_LEN as u16).to_le_bytes().to_vec()).unwrap()
+    );
+    let lib_reviewed = Lib::with("ALU", code_a.clone(), vec![], none!()).unwrap();
+    let lib_substituted = Lib::with(&isae_b, code_a[0x100..].to_vec(), vec![], none!()).unwrap();
+    assert_eq!(
+        lib_substituted.isae_segment(),
+        isae_b,
+        "ISAE segment must round trip"
+    );
+    (lib_reviewed, lib_substituted)
+}
+
+#[test]
+#[ignore = "LibId truncates the ISAE segment length to one byte"]
+fn lib_id_is_injective() {
+    let (lib_reviewed, lib_substituted) = colliding_libraries(PASSING_CODE);
+
+    assert_ne!(lib_reviewed.isae_segment(), lib_substituted.isae_segment());
+    assert_ne!(lib_reviewed.code_segment(), lib_substituted.code_segment());
+    assert_ne!(lib_reviewed.id(), lib_substituted.id());
+}
+
+#[test]
+#[ignore = "LibId truncates the ISAE segment length to one byte"]
+fn validate_consignment_substituted_script() {
+    let (lib_reviewed, lib_substituted) = colliding_libraries(PASSING_CODE);
+    let (consignment, type_system) = transfer_with_script(lib_reviewed.id(), lib_substituted);
+
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        trusted_typesystem: type_system,
+        ..Default::default()
+    };
+    let resolver = OfflineResolver {
+        consignment: &consignment,
+    };
+    let res = consignment.clone().validate(&resolver, &validation_config);
+    assert!(
+        res.is_err(),
+        "a library the schema does not commit to was executed"
+    );
+}
