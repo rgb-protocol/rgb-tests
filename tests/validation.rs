@@ -3502,3 +3502,80 @@ fn evolve_state_on_operations_without_validator() {
         .validate(&resolver, &validation_config)
         .unwrap();
 }
+
+const CHILD_CASE: &str = "RGB_TESTS_CHILD_CASE";
+
+/// Re-run `case` in a child process, so that a hard crash cannot take the test suite down.
+/// Returns `None` in the child, which then has to run the case itself.
+fn child_case(case: &str) -> Option<bool> {
+    if std::env::var(CHILD_CASE).as_deref() == Ok(case) {
+        return None;
+    }
+    let status = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "--include-ignored", "--test-threads", "1", case])
+        .env(CHILD_CASE, case)
+        .stdout(Stdio::null())
+        .status()
+        .unwrap();
+    Some(status.success())
+}
+
+/// Pad `scripts` with maxed-out libraries until the consignment exceeds the ASCII armor bound
+fn oversized_consignment() -> Transfer {
+    const PAD_LIBS: u16 = 140;
+
+    let mut consignment = get_consignment_from_json("consignment_B");
+    let base_lib = consignment.scripts.clone().release().pop_first().unwrap();
+    let mut libs = BTreeSet::new();
+    for i in 0..PAD_LIBS {
+        let mut lib = base_lib.clone();
+        let mut data = vec![0u8; u16::MAX as usize];
+        data[..2].copy_from_slice(&i.to_le_bytes()); // keep every library distinct
+        lib.code = SmallBlob::from_checked(vec![0u8; u16::MAX as usize]);
+        lib.data = SmallBlob::from_checked(data);
+        libs.insert(lib);
+    }
+    consignment.scripts = Confined::from_checked(libs);
+    consignment
+}
+
+#[test]
+#[ignore = "armor encode cap is below the container decode cap, ~40s"]
+fn oversized_consignment_armoring() {
+    let Some(completed) = child_case("oversized_consignment_armoring") else {
+        let consignment = oversized_consignment();
+        let size = consignment
+            .to_strict_serialized::<{ usize::MAX }>()
+            .unwrap()
+            .release()
+            .len();
+        assert!(size > u24::MAX.to_usize(), "padding insufficient: {size}");
+
+        // refusing the container on save, refusing it on load and rendering it are all
+        // acceptable; only terminating the process is not
+        let mut container = Vec::<u8>::new();
+        if consignment.save(&mut container).is_ok()
+            && let Ok(transfer) = Transfer::load(&container[..])
+        {
+            assert!(!transfer.to_string().is_empty());
+        }
+        return;
+    };
+    assert!(
+        completed,
+        "armoring an oversized consignment terminated the process"
+    );
+}
+
+#[test]
+fn normal_consignment_armoring() {
+    let consignment = get_consignment_from_json("consignment_B");
+    assert!(
+        consignment
+            .to_string()
+            .starts_with("-----BEGIN RGB CONSIGNMENT-----")
+    );
+    let mut container = Vec::<u8>::new();
+    consignment.save(&mut container).unwrap();
+    assert_eq!(Transfer::load(&container[..]).unwrap(), consignment);
+}
