@@ -597,9 +597,13 @@ fn accept_0conf() {
 }
 
 #[rstest]
-#[case(false)]
-#[case(true)]
-fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
+#[case(false, false)]
+#[case(true, false)]
+#[case(false, true)]
+fn ln_transfers(
+    #[case] update_witnesses_before_htlc: bool,
+    #[case] mine_first_same_bundle_witness: bool,
+) {
     initialize();
 
     let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
@@ -653,6 +657,7 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
         wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info.clone(), None);
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
+    let psbt_same_bundle_1 = psbt.clone();
     let txid_same_bundle_1 = psbt.txid();
     let witness_info_0_same_bundle = witness_info_0;
     let witness_info_1_same_bundle = witness_info_1;
@@ -758,14 +763,14 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     let mut offset = 0;
     // this will make sure that in select_valid_witness the first TXID will be the one with
     // WitnessOrd::Ignored, when we want the one with WitnessOrd::Mined to be selected instead
-    while txid_same_bundle_1 > txid_same_bundle_2 {
+    while (txid_same_bundle_1 > txid_same_bundle_2) != mine_first_same_bundle_witness {
         psbt.fallback_locktime = BpLockTime::from_height(offset);
         txid_same_bundle_2 = psbt.txid();
         offset += 1;
     }
     fascia.update_pub_witness(PubWitness::with(psbt.unsigned_tx()));
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
-    let mut old_psbt = psbt.clone();
+    let old_psbt = psbt.clone();
 
     println!("\n5. fake commitment TX (1 HTLC)");
     let htlc_rgb_amt = 180;
@@ -890,7 +895,12 @@ fn ln_transfers(#[case] update_witnesses_before_htlc: bool) {
     wlt_1.debug_logs(contract_id, AllocationFilter::WalletAll);
 
     println!("\n8. broadcast old PSBT");
-    let tx = wlt_1.sign_finalize_extract(&mut old_psbt);
+    let mut psbt_to_mine = if mine_first_same_bundle_witness {
+        psbt_same_bundle_1
+    } else {
+        old_psbt
+    };
+    let tx = wlt_1.sign_finalize_extract(&mut psbt_to_mine);
     wlt_1.broadcast_tx(&tx);
     let txid = txid_bp_to_bitcoin(tx.txid());
     wlt_1.mine_tx(&txid, false);
