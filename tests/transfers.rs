@@ -543,6 +543,103 @@ fn rbf_transfer(#[case] same_bundle: bool, #[case] mine_original: bool) {
     );
 }
 
+/// A bundle anchored under several TXs: the consignment requested for one of them must carry
+/// that witness, whichever of them ranks first. Two same-bundle TXs are pending at once, the
+/// second sorting after the first, and the receiver is handed the consignment for each in turn.
+#[ignore = "the consignment carries the witness ranked first, not the requested one"]
+#[test]
+fn consign_requested_witness() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let issue_supply = 600;
+    let utxo = wlt_1.get_utxo(Some(10_000));
+    let asset_info = AssetInfo::default_nia(vec![issue_supply]);
+    let contract_id = wlt_1.issue_with_info(asset_info, vec![Some(utxo)], None, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+    let amount = 400;
+    let witness_info_2 = wlt_2.get_witness_info(Some(2000), None);
+    let witness_info_1 = wlt_1.get_witness_info(None, None);
+    let beneficiaries = vec![
+        witness_info_2.btc_beneficiary(),
+        witness_info_1.btc_beneficiary(),
+    ];
+    let coloring_info = ColoringInfo {
+        asset_info_map: HashMap::from([(
+            contract_id,
+            AssetColoringInfo {
+                input_outpoints: vec![utxo],
+                assignments: vec![
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_2),
+                        amount,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_1),
+                        amount: issue_supply - amount,
+                    },
+                ],
+            },
+        )]),
+        static_blinding: Some(666),
+        nonce: Some(u64::MAX),
+        close_method: CloseMethod::OpretFirst,
+    };
+
+    stop_mining();
+    // a witness for the bundle whose txid sorts after `after`, so that it is not the one ranked
+    // first among the bundle's witnesses, with the consignment requested for it
+    let mut consign = |mut fee: u64, after: Option<Txid>| -> (Txid, Transfer) {
+        loop {
+            let (mut psbt, mut meta) =
+                wlt_1.construct_psbt(vec![utxo], beneficiaries.clone(), Some(fee));
+            let (fascia, asset_beneficiaries, _, _) =
+                wlt_1.color_psbt(&mut psbt, &mut meta, coloring_info.clone(), None);
+            let txid = txid_bp_to_bitcoin(psbt.txid());
+            if after.is_some_and(|a| txid < a) {
+                fee += 1;
+                continue;
+            }
+            let tx = wlt_1.sign_finalize_extract(&mut psbt);
+            wlt_1.broadcast_tx(&tx);
+            wlt_1.consume_fascia(fascia, tx.txid());
+            let vout = match asset_beneficiaries[&contract_id][0] {
+                BuilderSeal::Revealed(seal) => seal.vout,
+                BuilderSeal::Concealed(_) => unreachable!(),
+            };
+            let consignment = wlt_1.consign_transfer(
+                contract_id,
+                vec![ExplicitSeal::with(txid, vout)],
+                vec![],
+                [],
+                Some(tx.txid()),
+            );
+            return (txid, consignment);
+        }
+    };
+    let mut accept = |txid: Txid, consignment: Transfer| {
+        assert_eq!(consignment.bundles[0].witness_id(), txid);
+        wlt_2.accept_transfer(consignment, None);
+    };
+    let (txid_1, consignment_1) = consign(500, None);
+    accept(txid_1, consignment_1);
+    let (txid_2, consignment_2) = consign(1000, Some(txid_1));
+    accept(txid_2, consignment_2);
+
+    // the replacement confirms: the receiver holds the allocation at its outpoint
+    wlt_1.mine_tx(&txid_2, true);
+    wlt_2.sync_and_update_witnesses(None);
+    wlt_2.check_allocations(contract_id, schema_id, vec![amount], false);
+    assert!(
+        wlt_2
+            .contract_fungible_allocations(contract_id, false)
+            .iter()
+            .all(|fa| fa.seal.txid() == Some(txid_2))
+    );
+}
+
 #[rstest]
 #[case(TransferType::Blinded)]
 #[case(TransferType::Witness)]
