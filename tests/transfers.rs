@@ -640,6 +640,91 @@ fn consign_requested_witness() {
     );
 }
 
+/// A bundle anchored under several TXs is listed under every witness that is not archived, on
+/// both sides of the transfer: which of the TXs stands is not known until the witnesses are
+/// told apart, and a filter on owned outpoints decides, not the listing. Once one witness is
+/// archived only the other is listed.
+#[test]
+fn same_bundle_listed_per_witness() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let issue_supply = 600;
+    let utxo = wlt_1.get_utxo(Some(10_000));
+    let asset_info = AssetInfo::default_nia(vec![issue_supply]);
+    let contract_id = wlt_1.issue_with_info(asset_info, vec![Some(utxo)], None, None);
+    let amount = 400;
+    let change = issue_supply - amount;
+    let witness_info_2 = wlt_2.get_witness_info(Some(2000), None);
+    let witness_info_1 = wlt_1.get_witness_info(None, None);
+    // the same transition both times: same seals through static blinding, same nonce
+    let coloring_info = ColoringInfo {
+        asset_info_map: HashMap::from([(
+            contract_id,
+            AssetColoringInfo {
+                input_outpoints: vec![utxo],
+                assignments: vec![
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_2),
+                        amount,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_1),
+                        amount: change,
+                    },
+                ],
+            },
+        )]),
+        static_blinding: Some(666),
+        nonce: Some(u64::MAX),
+        close_method: CloseMethod::OpretFirst,
+    };
+
+    // the transition allocations the stock lists, whichever outpoint they land on, as
+    // (witness, seal txid, amount)
+    let listed = |wlt: &BpTestWallet| {
+        wlt.contract_data(contract_id)
+            .fungible("assetOwner", AllocationFilter::Stock.filter_for(wlt))
+            .unwrap()
+            .filter_map(|fa| Some((fa.witness?, fa.seal.txid()?, fa.state.value())))
+            .collect::<BTreeSet<_>>()
+    };
+
+    stop_mining();
+    let [txid_1, txid_2] = [500, 1000].map(|fee| {
+        let (consignments, tx, _, _) =
+            wlt_1.pay_full_flexible(coloring_info.clone(), Some(fee), None);
+        for consignment in consignments.into_values() {
+            wlt_2.accept_transfer(consignment, None);
+        }
+        txid_bp_to_bitcoin(tx.txid())
+    });
+    resume_mining();
+
+    // the receiver holds the change too: a revealed seal in the terminal transition
+    let expected = bset![
+        (txid_1, txid_1, amount),
+        (txid_1, txid_1, change),
+        (txid_2, txid_2, amount),
+        (txid_2, txid_2, change),
+    ];
+    assert_eq!(listed(&wlt_1), expected);
+    assert_eq!(listed(&wlt_2), expected);
+
+    // the first TX is replaced for good: nothing is listed under it any more
+    for wlt in [&mut wlt_1, &mut wlt_2] {
+        wlt.wallet
+            .stock_mut()
+            .upsert_witness(txid_1, WitnessOrd::Archived)
+            .unwrap();
+    }
+    let expected = bset![(txid_2, txid_2, amount), (txid_2, txid_2, change)];
+    assert_eq!(listed(&wlt_1), expected);
+    assert_eq!(listed(&wlt_2), expected);
+}
+
 #[rstest]
 #[case(TransferType::Blinded)]
 #[case(TransferType::Witness)]
