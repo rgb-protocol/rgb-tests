@@ -437,37 +437,96 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
     }
 }
 
-#[test]
-fn rbf_transfer() {
+#[rstest]
+#[case(false, false)]
+#[case(false, true)]
+#[case(true, false)]
+#[case(true, true)]
+fn rbf_transfer(#[case] same_bundle: bool, #[case] mine_original: bool) {
     initialize();
 
     let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
     let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
     let issue_supply = 600;
-    let contract_id = wlt_1.issue_nia(issue_supply, None);
+    let utxo = wlt_1.get_utxo(Some(10_000));
+    let asset_info = AssetInfo::default_nia(vec![issue_supply]);
+    let contract_id = wlt_1.issue_with_info(asset_info, vec![Some(utxo)], None, None);
     let schema_id = wlt_1.schema_id(contract_id);
+    let amount = 400;
+
+    // paying the invoice again blinds the witness seals anew, so the replacement carries a new
+    // bundle; coloring a PSBT with static blinding and nonce keeps the transition identical, so
+    // the fee bump only changes the witness: one bundle anchored under two TXs
+    let invoice = wlt_2.invoice(contract_id, schema_id, amount, InvoiceType::Witness);
+    let witness_info_2 = wlt_2.get_witness_info(Some(2000), None);
+    let witness_info_1 = wlt_1.get_witness_info(None, None);
+    let coloring_info = ColoringInfo {
+        asset_info_map: HashMap::from([(
+            contract_id,
+            AssetColoringInfo {
+                input_outpoints: vec![utxo],
+                assignments: vec![
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_2),
+                        amount,
+                    },
+                    AssetAssignment {
+                        destination: AssetDestination::Witness(witness_info_1),
+                        amount: issue_supply - amount,
+                    },
+                ],
+            },
+        )]),
+        static_blinding: Some(666),
+        nonce: Some(u64::MAX),
+        close_method: CloseMethod::OpretFirst,
+    };
 
     stop_mining();
     let initial_height = get_height();
-
-    let amount = 400;
-    let invoice = wlt_2.invoice(contract_id, schema_id, amount, InvoiceType::Witness);
-    let (consignment, _, _, _) = wlt_1.pay_full(invoice.clone(), None, Some(500), true, None);
-
-    wlt_2.accept_transfer(consignment.clone(), None);
+    let mut transfer = |fee: u64| -> (Tx, Transfer) {
+        if same_bundle {
+            let (mut consignments, tx, _, _) =
+                wlt_1.pay_full_flexible(coloring_info.clone(), Some(fee), None);
+            (tx, consignments.remove(&contract_id).unwrap())
+        } else {
+            let (consignment, tx, _, _) =
+                wlt_1.pay_full(invoice.clone(), None, Some(fee), true, None);
+            (tx, consignment)
+        }
+    };
+    let (tx_original, consignment_original) = transfer(500);
+    wlt_2.accept_transfer(consignment_original.clone(), None);
 
     // retry with higher fees, TX hasn't been mined
-    let mid_height = get_height();
-    assert_eq!(initial_height, mid_height);
+    assert_eq!(get_height(), initial_height);
+    let (tx_replacement, consignment_replacement) = transfer(1000);
+    wlt_2.accept_transfer(consignment_replacement.clone(), None);
+    assert_eq!(get_height(), initial_height);
 
-    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, Some(1000), true, None);
+    let bundle_id = |consignment: &Transfer| consignment.bundles[0].bundle.bundle_id();
+    assert_eq!(
+        bundle_id(&consignment_original) == bundle_id(&consignment_replacement),
+        same_bundle
+    );
+    let txid_original = txid_bp_to_bitcoin(tx_original.txid());
+    let txid_replacement = txid_bp_to_bitcoin(tx_replacement.txid());
+    assert_ne!(txid_original, txid_replacement);
 
-    let final_height = get_height();
-    assert_eq!(initial_height, final_height);
-
-    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), true);
-    wlt_2.accept_transfer(consignment.clone(), None);
+    let txid_mined = if mine_original {
+        // the replacement evicted the original from the mempool, but a miner still confirms the
+        // original: the witness stored first is the one that ends up valid
+        mine_txs(&[tx_original]);
+        txid_original
+    } else {
+        wlt_1.mine_tx(&txid_replacement, true);
+        txid_replacement
+    };
+    assert!(matches!(
+        wlt_1.get_witness_ord(&txid_mined),
+        WitnessOrd::Mined(_)
+    ));
     wlt_1.sync_and_update_witnesses(None);
     wlt_2.sync_and_update_witnesses(None);
 

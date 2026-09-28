@@ -45,11 +45,17 @@ pub fn initialize() {
     });
 }
 
-static MINER: Lazy<RwLock<Miner>> = Lazy::new(|| RwLock::new(Miner { no_mine_count: 0 }));
+static MINER: Lazy<RwLock<Miner>> = Lazy::new(|| {
+    RwLock::new(Miner {
+        no_mine_count: 0,
+        force_mine_waiters: 0,
+    })
+});
 
 #[derive(Clone, Debug)]
 pub struct Miner {
     no_mine_count: u32,
+    force_mine_waiters: u32,
 }
 
 fn _service_base_name() -> String {
@@ -130,6 +136,20 @@ impl Miner {
         true
     }
 
+    fn force_mine_txs(&self, instance: u8, txs: &[Tx]) {
+        let address = _bitcoin_cli_cmd(instance, vec!["-rpcwallet=miner", "getnewaddress"]);
+        let txs = txs
+            .iter()
+            .map(|tx| format!("\"{tx:x}\""))
+            .collect::<Vec<_>>()
+            .join(",");
+        _bitcoin_cli_cmd(
+            instance,
+            vec!["generateblock", &address, &format!("[{txs}]")],
+        );
+        _wait_indexer_sync(instance);
+    }
+
     fn stop_mining(&mut self) {
         self.no_mine_count += 1;
     }
@@ -207,6 +227,39 @@ pub fn stop_mining_when_alone() {
 
 pub fn resume_mining() {
     MINER.write().unwrap().resume_mining()
+}
+
+/// Mine a block containing exactly `txs`, whatever the mempool holds (e.g. a TX evicted by a
+/// higher-fee replacement).
+///
+/// The caller must have called `stop_mining` beforehand, so that nobody mines a conflicting TX
+/// first. This waits until every other test keeping mining stopped is also waiting here, mines
+/// the block and then resumes mining.
+pub fn mine_txs(txs: &[Tx]) {
+    {
+        let mut miner = MINER.write().unwrap();
+        assert!(
+            miner.no_mine_count > 0,
+            "mine_txs requires the caller to stop mining first"
+        );
+        miner.force_mine_waiters += 1;
+    }
+    let t_0 = OffsetDateTime::now_utc();
+    loop {
+        let miner = MINER.read().unwrap();
+        if miner.no_mine_count <= miner.force_mine_waiters {
+            miner.force_mine_txs(INSTANCE_1, txs);
+            break;
+        }
+        drop(miner);
+        if (OffsetDateTime::now_utc() - t_0).as_seconds_f32() > 120.0 {
+            panic!("other tests keep mining stopped");
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    let mut miner = MINER.write().unwrap();
+    miner.force_mine_waiters -= 1;
+    miner.resume_mining();
 }
 
 fn _get_connection_tuple() -> Vec<(u8, String)> {
