@@ -1036,7 +1036,6 @@ fn schema_definition_checks_script_reachability() {
 /// Otherwise the VM stops at the first undecodable instruction and what follows
 /// - typically the final `test` - never runs.
 #[test]
-#[ignore = "the PFA transition script can't be decoded past vts"]
 fn schema_scripts_decode_completely() {
     type RgbInstr = Instr<RgbIsa<FilteredContractState>>;
 
