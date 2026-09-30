@@ -6000,7 +6000,6 @@ fn validate_consignment_script_status_merge_in_range() {
 const TRUNCATED_JMP: &[u8] = &[0x02, 0x00];
 
 #[test]
-#[ignore = "Lib::exec halts as if successful on an instruction it can't decode"]
 fn validate_consignment_undecodable_script() {
     let (consignment, rules) = scripted_transfer(TRUNCATED_JMP.to_vec(), 0);
     let opid = consignment.bundles[0].bundle.known_transitions[0].opid;
