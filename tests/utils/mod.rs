@@ -55,8 +55,8 @@ pub use std::{
 };
 
 pub use aluvm::{
-    isa::Instr,
-    library::{Lib, LibSeg, LibSite},
+    isa::{Bytecode, ControlFlowOp, Instr},
+    library::{Cursor, Lib, LibSeg, LibSite, Read as _},
 };
 pub use amplify::{
     ByteArray, Bytes64, From, Wrapper, bmap, bset, confinement,

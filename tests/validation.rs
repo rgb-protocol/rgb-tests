@@ -1030,6 +1030,76 @@ fn schema_definition_checks_script_reachability() {
         .expect("a library reachable from a validator must be kept");
 }
 
+/// The VM decodes one instruction at a time from wherever it stands, so the
+/// bytecode of a shipped script must decode from start to end, and every
+/// validator entrypoint and jump target must land on an instruction boundary.
+/// Otherwise the VM stops at the first undecodable instruction and what follows
+/// - typically the final `test` - never runs.
+#[test]
+#[ignore = "the PFA transition script can't be decoded past vts"]
+fn schema_scripts_decode_completely() {
+    type RgbInstr = Instr<RgbIsa<FilteredContractState>>;
+
+    for asset_schema in AssetSchema::iter() {
+        let schema_def = asset_schema.schema_definition();
+        let entrypoints = schema_def
+            .schema
+            .genesis
+            .validator
+            .into_iter()
+            .chain(
+                schema_def
+                    .schema
+                    .transitions
+                    .values()
+                    .filter_map(|t| t.transition_schema.validator),
+            )
+            .collect::<Vec<_>>();
+
+        for (lib_id, lib) in &schema_def.scripts {
+            let mut cursor = Cursor::with(&lib.code, &lib.data, &lib.libs);
+            let mut boundaries = BTreeSet::new();
+            let mut jump_targets = Vec::new();
+            while !cursor.is_eof() {
+                let pos = cursor.pos();
+                boundaries.insert(pos);
+                let instr = RgbInstr::decode(&mut cursor).unwrap_or_else(|_| {
+                    panic!("{asset_schema} script {lib_id} can't be decoded at byte {pos}")
+                });
+                if let Instr::ControlFlow(
+                    ControlFlowOp::Jmp(target)
+                    | ControlFlowOp::Jif(target)
+                    | ControlFlowOp::Routine(target),
+                ) = instr
+                {
+                    jump_targets.push((pos, target));
+                }
+            }
+            assert_eq!(
+                cursor.offset().1.to_u8(),
+                0,
+                "{asset_schema} script {lib_id} ends in the middle of a byte"
+            );
+
+            for (pos, target) in jump_targets {
+                assert!(
+                    boundaries.contains(&target),
+                    "{asset_schema} script {lib_id} jumps from byte {pos} to byte {target}, \
+                     which is not an instruction boundary"
+                );
+            }
+            for entrypoint in entrypoints.iter().filter(|site| site.lib == *lib_id) {
+                assert!(
+                    boundaries.contains(&entrypoint.pos),
+                    "{asset_schema} script {lib_id} entrypoint at byte {} is not an instruction \
+                     boundary",
+                    entrypoint.pos
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn validate_consignment_chain_fail() {
     let scenario = Scenario::A;
