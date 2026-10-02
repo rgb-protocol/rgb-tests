@@ -2,27 +2,27 @@
   "version": "v1",
   "transfer": true,
   "terminals": {
-    "fa154ee579ef409214d813df5db87d0ed421d019b9aa401e1e6caf8874b9a425": [
+    "a5be7afbe685a498576c6fdfe07256004d6de409905c9d796326fa6e1f843fcd": [
       {
         "revealed": {
           "txid": null,
           "vout": 1,
-          "blinding": 4605982409543760845
+          "blinding": 7893370131225760946
         }
       },
       {
         "revealed": {
           "txid": null,
           "vout": 2,
-          "blinding": 8784657165716557382
+          "blinding": 16100955873251664041
         }
       }
     ]
   },
   "genesis": {
     "ffv": 0,
-    "schemaId": "rgb:sch:SrIchyt1Ykw2UsT0XFgmmx7UjF7MAhaAanCsWzbCjGM#trilogy-initial-south",
-    "timestamp": 1789634697,
+    "schemaId": "rgb:sch:Ryl5eQZ3IHrU05e3AWdQZJR4FB5GvxZPy96cwhJiApc#amazon-norway-harris",
+    "timestamp": 1790950300,
     "issuer": "ssi:anonymous",
     "chainNet": "bitcoinRegtest",
     "sealClosingStrategy": "firstOpretOrTapret",
@@ -35,7 +35,10 @@
         "0900424641207465726d7300"
       ],
       "3008": [
-        "00010000000000000003307830"
+        "0001000000000000000000000000000000000000000000000000000000"
+      ],
+      "3010": [
+        "0016006578616d706c652e78797a2f72656a6563744c697374"
       ]
     },
     "assignments": {
@@ -45,9 +48,9 @@
           {
             "seal": {
               "revealed": {
-                "txid": "3f5dc29b8ab3e8a7444d1acf178f97eaa7cbd7d48f0eb93e60180cd9e60127ed",
-                "vout": 0,
-                "blinding": 5133609945045335031
+                "txid": "b6e8a70acc6fe45e3a6bc659ac9070996d0d21293970aaeb0ec0cf8b6d933d97",
+                "vout": 1,
+                "blinding": 59761455855604785
               }
             },
             "state": null
@@ -63,13 +66,13 @@
         "lock_time": 0,
         "input": [
           {
-            "previous_output": "3f5dc29b8ab3e8a7444d1acf178f97eaa7cbd7d48f0eb93e60180cd9e60127ed:0",
+            "previous_output": "b6e8a70acc6fe45e3a6bc659ac9070996d0d21293970aaeb0ec0cf8b6d933d97:1",
             "script_sig": "",
             "sequence": 0,
             "witness": []
           },
           {
-            "previous_output": "86b034ea2e05c1b8eec655e3e6eae39a36742c08476232069b7c544d6091d94d:0",
+            "previous_output": "1eca6df95a2808b8db5c5ffc59f9ef3bc33877cade8ec388f16c69092190e790:0",
             "script_sig": "",
             "sequence": 0,
             "witness": []
@@ -78,41 +81,41 @@
         "output": [
           {
             "value": 0,
-            "script_pubkey": "6a20a9a288c878ec05c0b6b3b7cfed97ffbd916534e7de9cf3a3d95e4a36dca739ae"
+            "script_pubkey": "6a2095d0567e9e5c16b12a6da42e6e28fd9047fc3f660566f2b0fad463fb78c5de45"
           },
           {
             "value": 199997600,
-            "script_pubkey": "0014702cb70b58f6a6c5a63254fcf274dc3ddc2a8fb8"
+            "script_pubkey": "0014b8f479bd7770a07b346cfb6b5b433a1722eb50cf"
           },
           {
             "value": 2000,
-            "script_pubkey": "00147ab99fc1ac07ef38593e1a29cb5b3b47048f3d06"
+            "script_pubkey": "0014ec510a78bf1615076c7ade2b7f22d18eae1e77f8"
           }
         ]
       },
       "spvProof": null,
       "anchor": {
         "mpcProof": {
-          "pos": 5,
+          "pos": 0,
           "cofactor": 0,
           "path": [
-            "ae17e76a540982d81e1159495d4b3bca30caed3163d760e65bfbe78db141fbdd",
-            "bac5cd1b8a9fd317f9db341d3ec0dfbc2b9fd8875f9b2d6327ce8a4fa2b9b0d8",
-            "94308c77dc96d5323dfa957af8f4a290ec9b22986b18d341d066ebec1714dec7"
+            "18f793ab08116f2ffed21a56fbca3d7dde788f96fb8815e7b7f0c70304028bc8",
+            "eb203d0e82b5c3abf002ae2cdde68700d80eab9faa47ca6243a0a4ebfa2daad7",
+            "7aab6424dd16ad97e2b72fdf9b893060625e722891f85f35956676166e012a59"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "9d3581fb231a9fcd361ad49dbbb4da188e203783c8ba2ecfb24431005be2b1b0/4013/0": "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d"
+          "784ac8e64a50552643aa07b6a2dc45e855adddb96c66c43ca5e7f42eb0bf3bb3/4013/0": "2d59a2edeeb71d2c8e75360e2a5eaf8488f3daac6e1333896959e6ccddfcd353"
         },
         "knownTransitions": [
           {
-            "opid": "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d",
+            "opid": "2d59a2edeeb71d2c8e75360e2a5eaf8488f3daac6e1333896959e6ccddfcd353",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:nTWB_yMa-n802GtS-du7TaGI-4gN4PIu-i7PskQx-AFvisbA",
+              "contractId": "rgb:eErI5kpQ-VSZDqge-2otxF6F-Wt3blsZ-sQ8pef0-LrC~O7M",
               "nonce": 18446744073709551615,
               "transitionType": 8013,
               "metadata": {
@@ -124,7 +127,7 @@
                 ]
               },
               "inputs": [
-                "9d3581fb231a9fcd361ad49dbbb4da188e203783c8ba2ecfb24431005be2b1b0/4013/0"
+                "784ac8e64a50552643aa07b6a2dc45e855adddb96c66c43ca5e7f42eb0bf3bb3/4013/0"
               ],
               "assignments": {
                 "4000": {
@@ -135,7 +138,7 @@
                         "revealed": {
                           "txid": null,
                           "vout": 1,
-                          "blinding": 17802485008863792598
+                          "blinding": 4786518969509608112
                         }
                       },
                       "state": 1000
@@ -150,7 +153,7 @@
                         "revealed": {
                           "txid": null,
                           "vout": 2,
-                          "blinding": 16934344757390080269
+                          "blinding": 10879936274504831364
                         }
                       },
                       "state": null
@@ -170,13 +173,13 @@
         "lock_time": 0,
         "input": [
           {
-            "previous_output": "1b4f5779a1d2fea6071827d2ba3136e281f354c4e2dad558ab6f15b9f18ce492:1",
+            "previous_output": "00431b380282177302f11130dfdb0cb6de7144a4a3cdee1240879b0ab15ee506:1",
             "script_sig": "",
             "sequence": 0,
             "witness": []
           },
           {
-            "previous_output": "1b4f5779a1d2fea6071827d2ba3136e281f354c4e2dad558ab6f15b9f18ce492:2",
+            "previous_output": "00431b380282177302f11130dfdb0cb6de7144a4a3cdee1240879b0ab15ee506:2",
             "script_sig": "",
             "sequence": 0,
             "witness": []
@@ -185,49 +188,49 @@
         "output": [
           {
             "value": 0,
-            "script_pubkey": "6a20f1b9f4b89e63a0c7ee66e38844c81a780ff1c7ec6994904026c0a039796255d5"
+            "script_pubkey": "6a20460122264cf3ac6456d72f685619441db05d0956e29fb8b92b68f01222775f67"
           },
           {
             "value": 199997200,
-            "script_pubkey": "0014cb87e370b8bb272e3d5488c6c82ce8b16d6f5917"
+            "script_pubkey": "0014e808c8b72331b493778ae07ef29c649b42851aa2"
           },
           {
             "value": 2000,
-            "script_pubkey": "001467435affd4c4ae9772f07d0b296cbed617f4550e"
+            "script_pubkey": "00144fc3e861bddfc050e6a17ff930c6fbe71b884442"
           }
         ]
       },
       "spvProof": null,
       "anchor": {
         "mpcProof": {
-          "pos": 5,
+          "pos": 0,
           "cofactor": 0,
           "path": [
-            "b1e6074eb0141f2c73057044457c03c61545b835a48665a2ac888903d21cb912",
-            "b023e328f1c96ae0be994c139ee02f73857e7dc15bfa9917dc2cd89579241522",
-            "32c416d91de3cfee308e0100cd38a7fff9af0b23ba25f1a854cc06e5ced8f1b5"
+            "276744ab75866119f162f5e2a6b9ce7e9f333f321d12dac00671731137f5bf4a",
+            "f66a0011cbee90603ae0d6a838140a624668ecff86398b88fc06475a849461cd",
+            "ac0a97c5a5d0810ad794e9df85028363f318fe102c3f1dbd2af79ea34ab152b2"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d/4000/0": "f8911504a034c488509173d8d83b18259cdc7710fd38f96dfdfba818d6574257",
-          "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d/4013/0": "f8911504a034c488509173d8d83b18259cdc7710fd38f96dfdfba818d6574257"
+          "2d59a2edeeb71d2c8e75360e2a5eaf8488f3daac6e1333896959e6ccddfcd353/4000/0": "ad002ecff5fcfd5dd8f76964e6f8a92568611ac47bf601bf29824b7adee52e80",
+          "2d59a2edeeb71d2c8e75360e2a5eaf8488f3daac6e1333896959e6ccddfcd353/4013/0": "ad002ecff5fcfd5dd8f76964e6f8a92568611ac47bf601bf29824b7adee52e80"
         },
         "knownTransitions": [
           {
-            "opid": "f8911504a034c488509173d8d83b18259cdc7710fd38f96dfdfba818d6574257",
+            "opid": "ad002ecff5fcfd5dd8f76964e6f8a92568611ac47bf601bf29824b7adee52e80",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:nTWB_yMa-n802GtS-du7TaGI-4gN4PIu-i7PskQx-AFvisbA",
+              "contractId": "rgb:eErI5kpQ-VSZDqge-2otxF6F-Wt3blsZ-sQ8pef0-LrC~O7M",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d/4000/0",
-                "4731b7bf56b38bd92f25ed7773b7470b7db2253e32880acceaf2dddb6f48085d/4013/0"
+                "2d59a2edeeb71d2c8e75360e2a5eaf8488f3daac6e1333896959e6ccddfcd353/4000/0",
+                "2d59a2edeeb71d2c8e75360e2a5eaf8488f3daac6e1333896959e6ccddfcd353/4013/0"
               ],
               "assignments": {
                 "4000": {
@@ -238,7 +241,7 @@
                         "revealed": {
                           "txid": null,
                           "vout": 1,
-                          "blinding": 4605982409543760845
+                          "blinding": 7893370131225760946
                         }
                       },
                       "state": 1000
@@ -253,7 +256,7 @@
                         "revealed": {
                           "txid": null,
                           "vout": 2,
-                          "blinding": 8784657165716557382
+                          "blinding": 16100955873251664041
                         }
                       },
                       "state": null

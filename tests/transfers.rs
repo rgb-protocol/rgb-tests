@@ -3261,10 +3261,11 @@ fn contract_linking() {
         None,
         "BFA terms",
         None,
-        BridgeLocation::Evm {
+        BridgeLocation::Evm(EvmContract {
             chain_id: 1,
-            address: TinyString::try_from("0x0".to_owned()).unwrap(),
-        },
+            address: EvmAddress::default(),
+        }),
+        None,
         mint_right_utxo,
     );
     if let AssetInfo::Bfa {

@@ -301,6 +301,40 @@ fn issue_ifa(wallet_desc: DescriptorType) {
     assert_eq!(allocation.state, Amount::from(issued_supply));
 }
 
+#[rstest]
+#[case(None)]
+#[case(Some(RejectListLocation::Url(RejectListUrl::try_from(REJECT_LIST_URL.to_owned()).unwrap())))]
+#[case(Some(RejectListLocation::Evm(EvmContract {
+    chain_id: BFA_CHAIN_ID,
+    address: EvmAddress::from_str("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef").unwrap(),
+})))]
+fn issue_bfa(#[case] reject_list: Option<RejectListLocation>) {
+    initialize();
+
+    let mut wallet = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let bridge_location = BridgeLocation::Evm(EvmContract {
+        chain_id: BFA_CHAIN_ID,
+        address: EvmAddress::default(),
+    });
+    let asset_info = AssetInfo::bfa(
+        "BFATCKR",
+        "BFA asset name",
+        2,
+        None,
+        "BFA terms",
+        None,
+        bridge_location.clone(),
+        reject_list.clone(),
+        wallet.get_utxo(None),
+    );
+    let contract_id = wallet.issue_with_info(asset_info, vec![], None, None);
+
+    let contract = wallet.contract_wrapper::<BridgedFungibleAsset>(contract_id);
+    assert_eq!(contract.bridge_location(), bridge_location);
+    assert_eq!(contract.reject_list(), reject_list);
+}
+
 #[apply(descriptor)]
 fn issue_nia_multiple_utxos(wallet_desc: DescriptorType) {
     println!("wallet_desc {wallet_desc:?}");

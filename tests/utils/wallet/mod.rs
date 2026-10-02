@@ -463,6 +463,7 @@ pub enum AssetInfo {
         spec: AssetSpec,
         terms: ContractTerms,
         bridge_location: BridgeLocation,
+        reject_list: Option<RejectListLocation>,
         mint_right_outpoint: Outpoint,
         link_info: (Option<ContractId>, Option<Outpoint>),
     },
@@ -579,6 +580,7 @@ impl AssetInfo {
         terms_text: &str,
         terms_media_fpath: Option<&str>,
         bridge_location: BridgeLocation,
+        reject_list: Option<RejectListLocation>,
         mint_right_outpoint: Outpoint,
     ) -> Self {
         let spec = AssetSpec::with(
@@ -598,6 +600,7 @@ impl AssetInfo {
             spec,
             terms,
             bridge_location,
+            reject_list,
             mint_right_outpoint,
             link_info: (None, None),
         }
@@ -853,6 +856,7 @@ impl AssetInfo {
                 spec,
                 terms,
                 bridge_location,
+                reject_list,
                 link_info,
                 ..
             } => {
@@ -863,6 +867,11 @@ impl AssetInfo {
                     .unwrap()
                     .add_global_state("bridgeLocation", bridge_location.clone())
                     .unwrap();
+                if let Some(reject_list) = reject_list {
+                    builder = builder
+                        .add_global_state("rejectList", reject_list.clone())
+                        .unwrap()
+                }
                 if let (Some(linked_from_contract), _) = link_info {
                     builder = builder
                         .add_global_state("linkedFromContract", *linked_from_contract)
@@ -1371,10 +1380,10 @@ where
 
     pub fn issue_bfa(&mut self) -> ContractId {
         let mint_right_outpoint = self.get_utxo(None);
-        let bridge_location = BridgeLocation::Evm {
+        let bridge_location = BridgeLocation::Evm(EvmContract {
             chain_id: BFA_CHAIN_ID,
-            address: TinyString::try_from("0x0".to_owned()).unwrap(),
-        };
+            address: EvmAddress::default(),
+        });
         let asset_info = AssetInfo::bfa(
             "BFATCKR",
             "BFA asset name",
@@ -1383,6 +1392,9 @@ where
             "BFA terms",
             None,
             bridge_location,
+            Some(RejectListLocation::Url(
+                RejectListUrl::try_from(REJECT_LIST_URL.to_owned()).unwrap(),
+            )),
             mint_right_outpoint,
         );
         self.issue_with_info(asset_info, vec![], None, None)

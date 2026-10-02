@@ -156,7 +156,8 @@ pub use rgb::{
     persistence::{ContractAssignments, Stock, StockError},
     rgbasm,
     stl::{
-        BlockNumber, BridgeLocation, ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl,
+        BlockNumber, BridgeLocation, ContractTerms, EvmAddress, EvmContract, RejectListLocation,
+        RejectListUrl, StandardTypes, rgb_contract_stl,
     },
     tapret::{TapretNodePartner, TapretRightBranch},
     validation::{
