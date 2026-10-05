@@ -344,6 +344,42 @@ pub fn get_resolver(indexer_url: &str) -> AnyResolver {
     }
 }
 
+/// URL of the Bitcoin Core RPC of the regtest node for the given `instance`.
+///
+/// Only available under the `electrum` profile, whose bitcoind nodes expose their RPC.
+pub fn bitcoind_url(instance: u8) -> String {
+    match instance {
+        INSTANCE_1 => *BITCOIND_1_REGTEST_URL,
+        INSTANCE_2 => *BITCOIND_2_REGTEST_URL,
+        INSTANCE_3 => *BITCOIND_3_REGTEST_URL,
+        _ => unreachable!(),
+    }
+    .to_string()
+}
+
+/// Credentials the bitcoind test image accepts by default.
+fn bitcoind_auth() -> BitcoindAuth {
+    BitcoindAuth::UserPass("user".to_string(), "default_password".to_string())
+}
+
+/// [`AnyResolver`] backed by the Bitcoin Core RPC of the regtest node for `instance`.
+pub fn get_bitcoind_resolver(instance: u8) -> AnyResolver {
+    AnyResolver::bitcoind_blocking(&bitcoind_url(instance), bitcoind_auth()).unwrap()
+}
+
+/// [`AnyResolver`] backed by the regtest node which runs without a transaction index.
+///
+/// It follows the chain of [`INSTANCE_1`], so it sees the same blocks, but it can only
+/// serve block headers: see `BitcoindClient`.
+pub fn get_bitcoind_no_txindex_resolver() -> AnyResolver {
+    AnyResolver::bitcoind_blocking(&BITCOIND_NO_TXINDEX_REGTEST_URL, bitcoind_auth()).unwrap()
+}
+
+/// [`BitcoindClient`] for the given RPC URL, to reach the methods [`AnyResolver`] hides.
+pub fn get_bitcoind_client(url: &str) -> BitcoindClient {
+    BitcoindClient::new(BitcoindRpc::new(url, bitcoind_auth()).unwrap())
+}
+
 fn _wait_indexer_sync(instance: u8) {
     let t_0 = OffsetDateTime::now_utc();
     let blockcount = get_height_custom(instance);

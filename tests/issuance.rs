@@ -353,9 +353,7 @@ fn issue_on_different_layers(#[case] scenario: &str) {
     };
     let mut builder = ContractBuilder::with(
         Identity::default(),
-        asset_info.schema(),
-        asset_info.types(),
-        asset_info.scripts(),
+        asset_info.schema_rules(),
         contract_chainnet,
     );
 
@@ -515,7 +513,8 @@ fn contract_globals_order() {
     let amounts_len = issue_amounts.len();
     let contract_data = wlt_1.contract_data(contract_id);
     let global_details = contract_data
-        .schema
+        .rules
+        .schema()
         .global_types
         .get(&GS_ISSUED_SUPPLY)
         .unwrap();
@@ -525,7 +524,8 @@ fn contract_globals_order() {
     for depth in [0, 3, 2, 0] {
         let entry = issuance_global_iter.nth(depth).unwrap().borrow().clone();
         let strict_val = contract_data
-            .types
+            .rules
+            .types()
             .strict_deserialize_type(
                 global_details.global_state_schema.sem_id,
                 entry.data().as_slice(),
@@ -549,7 +549,8 @@ fn contract_globals_order() {
             .borrow()
             .clone();
         let strict_val = contract_data
-            .types
+            .rules
+            .types()
             .strict_deserialize_type(
                 global_details.global_state_schema.sem_id,
                 entry.data().as_slice(),

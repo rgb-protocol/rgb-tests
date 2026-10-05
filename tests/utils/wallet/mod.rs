@@ -65,6 +65,69 @@ impl<W: WalletProvider> Filter<'_, W> {
     }
 }
 
+/// Resolver which can fetch block headers but refuses to resolve the given witnesses,
+/// leaving their SPV proofs as the only way to resolve them.
+///
+/// Everything else is delegated to `fallback`, so a consignment can mix witnesses which
+/// have to go through the SPV path with witnesses which do not.
+pub struct SpvOnlyResolver<'a, R: ResolveWitness> {
+    pub spv_witnesses: BTreeSet<Txid>,
+    pub fallback: &'a R,
+}
+
+impl<'a, R: ResolveWitness> SpvOnlyResolver<'a, R> {
+    pub fn with(fallback: &'a R, spv_witnesses: impl IntoIterator<Item = Txid>) -> Self {
+        Self {
+            spv_witnesses: spv_witnesses.into_iter().collect(),
+            fallback,
+        }
+    }
+}
+
+impl<R: ResolveWitness> ResolveWitness for SpvOnlyResolver<'_, R> {
+    fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
+        if self.spv_witnesses.contains(&witness_id) {
+            return Ok(WitnessStatus::Unresolved);
+        }
+        self.fallback.resolve_witness(witness_id)
+    }
+
+    fn get_block_header(&self, height: NonZeroU32) -> Result<BlockHeader, WitnessResolverError> {
+        self.fallback.get_block_header(height)
+    }
+
+    fn check_chain_net(&self, chain_net: ChainNet) -> Result<(), WitnessResolverError> {
+        self.fallback.check_chain_net(chain_net)
+    }
+}
+
+/// Resolver which resolves witnesses but cannot serve block headers, as a client with no
+/// access to them: every SPV proof it is handed is left unchecked, neither verified nor
+/// refuted.
+pub struct NoHeadersResolver<'a, R: ResolveWitness> {
+    pub fallback: &'a R,
+}
+
+impl<'a, R: ResolveWitness> NoHeadersResolver<'a, R> {
+    pub fn with(fallback: &'a R) -> Self {
+        Self { fallback }
+    }
+}
+
+impl<R: ResolveWitness> ResolveWitness for NoHeadersResolver<'_, R> {
+    fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
+        self.fallback.resolve_witness(witness_id)
+    }
+
+    fn get_block_header(&self, _: NonZeroU32) -> Result<BlockHeader, WitnessResolverError> {
+        Err(WitnessResolverError::NotSupported)
+    }
+
+    fn check_chain_net(&self, chain_net: ChainNet) -> Result<(), WitnessResolverError> {
+        self.fallback.check_chain_net(chain_net)
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DescriptorType {
     Wpkh,
@@ -247,7 +310,7 @@ impl fmt::Display for AssetSchema {
 }
 
 impl AssetSchema {
-    fn schema(&self) -> Schema {
+    pub fn schema(&self) -> Schema {
         match self {
             Self::Nia => NonInflatableAsset::schema(),
             Self::Uda => UniqueDigitalAsset::schema(),
@@ -257,7 +320,7 @@ impl AssetSchema {
         }
     }
 
-    fn scripts(&self) -> Scripts {
+    pub fn scripts(&self) -> Scripts {
         match self {
             Self::Nia => NonInflatableAsset::scripts(),
             Self::Uda => UniqueDigitalAsset::scripts(),
@@ -267,22 +330,32 @@ impl AssetSchema {
         }
     }
 
-    pub fn types(&self) -> TypeSystem {
+    pub fn libs(&self) -> TypeLibs {
         match self {
-            Self::Nia => NonInflatableAsset::types(),
-            Self::Uda => UniqueDigitalAsset::types(),
-            Self::Cfa => CollectibleFungibleAsset::types(),
-            Self::Pfa => PermissionedFungibleAsset::types(),
-            Self::Ifa => InflatableFungibleAsset::types(),
+            Self::Nia => NonInflatableAsset::libs(),
+            Self::Uda => UniqueDigitalAsset::libs(),
+            Self::Cfa => CollectibleFungibleAsset::libs(),
+            Self::Pfa => PermissionedFungibleAsset::libs(),
+            Self::Ifa => InflatableFungibleAsset::libs(),
         }
     }
 
-    fn get_valid_kit(&self) -> ValidKit {
-        let mut kit = Kit::default();
-        kit.schemata.push(self.schema()).unwrap();
-        kit.scripts.extend(self.scripts().into_values()).unwrap();
-        kit.types = self.types();
-        kit.validate().unwrap()
+    /// The [`SchemaDefinition`] of this asset schema: the schema, type
+    /// libraries and scripts, in the form that gets serialized.
+    pub fn schema_definition(&self) -> SchemaDefinition {
+        SchemaDefinition::new(self.schema(), self.libs(), self.scripts())
+    }
+
+    /// The verified [`SchemaRules`] of this asset schema: what issuance and
+    /// validation run against.
+    pub fn schema_rules(&self) -> SchemaRules {
+        self.schema_definition()
+            .verify()
+            .expect("inconsistent asset schema definition")
+    }
+
+    pub fn types(&self) -> TypeSystem {
+        self.schema_rules().types().clone()
     }
 
     pub fn default_state_type(&self) -> StateType {
@@ -372,6 +445,18 @@ impl AssetInfo {
 
     pub fn types(&self) -> TypeSystem {
         self.asset_schema().types()
+    }
+
+    pub fn libs(&self) -> TypeLibs {
+        self.asset_schema().libs()
+    }
+
+    pub fn schema_definition(&self) -> SchemaDefinition {
+        self.asset_schema().schema_definition()
+    }
+
+    pub fn schema_rules(&self) -> SchemaRules {
+        self.asset_schema().schema_rules()
     }
 
     pub fn issued_amt(&self) -> u64 {
@@ -994,8 +1079,25 @@ where
         get_resolver(&self.indexer_url())
     }
 
+    /// [`AnyResolver`] backed by the wallet's regtest Bitcoin Core node.
+    ///
+    /// Only available under the `electrum` profile, see [`get_bitcoind_resolver`].
+    pub fn get_bitcoind_resolver(&self) -> AnyResolver {
+        get_bitcoind_resolver(self.instance)
+    }
+
     pub fn broadcast_tx(&self, tx: &Tx) {
         broadcast_tx(tx, &self.indexer_url());
+    }
+
+    /// Retrieves the SPV proof of `witness` from `resolver` and stores it in the stash,
+    /// returning it.
+    pub fn store_spv_proof(&mut self, witness: Txid, resolver: &impl ResolveSpvProof) -> SpvProof {
+        let proof = resolver.resolve_spv_proof(witness).unwrap();
+        self.stock_mut()
+            .store_spv_proof(witness, proof.clone())
+            .unwrap();
+        proof
     }
 
     pub fn get_witness_ord(&self, txid: &Txid) -> WitnessOrd {
@@ -1047,6 +1149,19 @@ where
         self.wallet.stock()
     }
 
+    pub fn stock_mut(&mut self) -> &mut Stock {
+        self.wallet.stock_mut()
+    }
+
+    /// Imports the schema definition of `asset_schema`, making its schema,
+    /// types and scripts known to this wallet's stash.
+    pub fn import_schema_definition(&mut self, asset_schema: AssetSchema) {
+        self.wallet
+            .stock_mut()
+            .import_schema_definition(asset_schema.schema_definition())
+            .unwrap();
+    }
+
     pub fn import_contract(&mut self, contract: &ValidContract, resolver: impl ResolveWitness) {
         self.wallet
             .stock_mut()
@@ -1072,13 +1187,17 @@ where
                 .collect()
         };
 
-        let mut builder = ContractBuilder::with(
-            Identity::default(),
-            asset_info.schema(),
-            asset_info.types(),
-            asset_info.scripts(),
-            self.chain_net(),
-        );
+        // build through the stock, so the schema is taken from the stash: a
+        // contract can only be issued for a schema whose definition was imported
+        let chain_net = self.chain_net();
+        let mut builder = self
+            .stock()
+            .contract_builder(
+                Identity::default(),
+                asset_info.schema().schema_id(),
+                chain_net,
+            )
+            .unwrap();
         builder = asset_info.add_global_state(builder);
         builder = asset_info.add_asset_owner(builder, outpoints, blinding);
         builder = asset_info.add_inflation_allowance(builder, blinding);
@@ -1192,11 +1311,19 @@ where
         secret_seals: impl AsRef<[SecretSeal]>,
         opids: impl IntoIterator<Item = OpId>,
         witness_id: Option<BpTxid>,
+        spv_resolver: Option<&dyn ResolveSpvProof>,
     ) -> Transfer {
         let witness_id = witness_id.map(txid_bp_to_bitcoin);
         self.wallet
             .stock()
-            .transfer(contract_id, outputs, secret_seals, opids, witness_id)
+            .transfer(
+                contract_id,
+                outputs,
+                secret_seals,
+                opids,
+                witness_id,
+                spv_resolver,
+            )
             .unwrap()
     }
 
@@ -1290,13 +1417,14 @@ where
     ) -> Status {
         self.sync();
         let validate_start = Instant::now();
+        let schema_rules = AssetSchema::from(consignment.schema_id()).schema_rules();
         let validated_consignment = consignment
             .clone()
             .validate(
+                &schema_rules,
                 &resolver,
                 &ValidationConfig {
                     chain_net: self.chain_net(),
-                    trusted_typesystem: AssetSchema::from(consignment.schema_id()).types(),
                     build_opouts_dag: true,
                     ..Default::default()
                 },
@@ -1381,7 +1509,8 @@ where
             .stock()
             .contract_data(contract_id)
             .unwrap()
-            .schema
+            .rules
+            .schema()
             .schema_id()
             .into();
         match asset_schema {
@@ -1425,7 +1554,7 @@ where
         let contract = self.contract_data(contract_id);
 
         println!("Global:");
-        for global_details in contract.schema.global_types.values() {
+        for global_details in contract.rules.schema().global_types.values() {
             let values = contract.global(global_details.name.clone());
             for val in values {
                 println!("  {} := {}", global_details.name, val);
@@ -1443,7 +1572,7 @@ where
                 .map(|info| format!("{} ({})", info.id, info.ord))
                 .unwrap_or_else(|| s!("~"))
         }
-        for details in contract.schema.owned_types.values() {
+        for details in contract.rules.schema().owned_types.values() {
             println!("  State      \t{:78}\tWitness", "Seal");
             println!("  {}:", details.name);
             if let Ok(allocations) = contract.fungible(details.name.clone(), &filter) {
@@ -1729,6 +1858,7 @@ where
         asset_beneficiaries: AssetBeneficiariesMap,
         witness_id: BpTxid,
         fascia: &Fascia,
+        spv_resolver: Option<&dyn ResolveSpvProof>,
     ) -> ConsignmentsMap {
         let witness_id = txid_bp_to_bitcoin(witness_id);
         let mut consignments_map = ConsignmentsMap::new();
@@ -1757,6 +1887,7 @@ where
                         beneficiaries_blinded,
                         [],
                         fascia,
+                        spv_resolver,
                     )
                     .unwrap()
                     .0,

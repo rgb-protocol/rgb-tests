@@ -55,13 +55,13 @@ pub use std::{
 
 pub use aluvm::{
     isa::Instr,
-    library::{Lib, LibSite},
+    library::{Lib, LibSeg, LibSite},
 };
 pub use amplify::{
     ByteArray, Bytes64, From, Wrapper, bmap, bset,
     confinement::{
         Collection, Confined, LargeVec, NonEmptyOrdMap, NonEmptyOrdSet, NonEmptyVec, SmallBlob,
-        SmallOrdMap, TinyOrdMap, TinyOrdSet, U16,
+        SmallOrdMap, TinyOrdMap, TinyOrdSet, U16, U32,
     },
     hex::FromHex,
     map, none,
@@ -134,11 +134,12 @@ pub use rgb::{
     assignments::AssignVec,
     bitcoin::{self, Sequence, TxIn, TxOut, Witness, absolute::LockTime},
     bitcoin::{
-        Address, CompressedPublicKey, Network, Psbt, ScriptBuf, TapLeafHash, TapNodeHash,
-        Transaction, constants::ChainHash, hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1,
-        taproot::LeafScript, taproot::LeafVersion, transaction::Version,
+        Address, BlockHash, CompressedPublicKey, Network, Psbt, ScriptBuf, TapLeafHash,
+        TapNodeHash, Transaction, block::Header as BlockHeader, constants::ChainHash,
+        hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1, taproot::LeafScript,
+        taproot::LeafVersion, transaction::Version,
     },
-    containers::{PubWitness, ValidContract, WitnessBundle},
+    containers::{ConsignmentVer, TerminalSeals, ValidContract, WitnessBundle, legacy::TransferV0},
     contract::{
         AllocatedState, AssignmentsFilter, ContractOp, FilterIncludeAll, OpDirection, SchemaWrapper,
     },
@@ -151,9 +152,9 @@ pub use rgb::{
     stl::{ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl},
     tapret::{TapretNodePartner, TapretRightBranch},
     validation::{
-        DbcProof, Failure, OpoutsDagData, ResolveWitness, Scripts, Status, ValidationConfig,
-        ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError,
-        WitnessStatus,
+        DbcProof, Failure, OpoutsDagData, ResolveWitness, SchemaDefError, SchemaDefinition,
+        SchemaRules, Scripts, SpvProof, Status, TypeLibs, ValidationConfig, ValidationError,
+        Validator, Validity, Warning, WitnessOrdProvider, WitnessResolverError, WitnessStatus,
     },
     vm::{
         ContractStateAccess, ContractStateEvolve, GlobalStateEntry, GlobalsIter, RgbIsa,
@@ -169,19 +170,35 @@ pub use rgbcore::{
     secp256k1::{Message, SecretKey, generate_keypair},
 };
 pub use rgbstd::{
-    Allocation, Amount, ChainNet, ContractId, GlobalStateType, KnownState, Layer1, Operation,
-    OutputAssignment, OutputSeal, OwnedFraction, Precision, Schema, SecretSeal, TokenIndex,
+    Allocation,
+    Amount,
+    ChainNet,
+    ContractId,
+    GlobalStateType,
+    KnownState,
+    Layer1,
+    Operation,
+    OutputAssignment,
+    OutputSeal,
+    OwnedFraction,
+    Precision,
+    Schema,
+    SecretSeal,
+    TokenIndex,
     TxoSeal,
     containers::{
         BuilderSeal, Consignment, ConsignmentConstraintError, ConsignmentExt, Fascia, FileContent,
-        Kit, Transfer, UncheckedTransfer, ValidKit,
+        Transfer, UncheckedTransfer,
     },
     contract::{
         ContractBuilder, ContractData, DataAllocation, FilterExclude, FungibleAllocation,
         IssuerWrapper, LinkableSchemaWrapper, TransitionBuilder,
     },
     daggy::Walker,
-    indexers::AnyResolver,
+    indexers::bitcoind_blocking::BitcoindClient,
+    indexers::bitcoind_blocking::bitcoincore_rpc::{Auth as BitcoindAuth, Client as BitcoindRpc},
+    // `Indexer` is aliased since `utils::chain` has an enum by that name
+    indexers::{AnyResolver, ResolveSpvProof},
     invoice::{Beneficiary, RgbInvoice, RgbInvoiceBuilder, XChainNet},
     persistence::{ContractStateRead, StashReadProvider, StockError, fs::FsBinStore},
     schema::SchemaId,
@@ -204,9 +221,10 @@ pub use serial_test::serial;
 pub use signal_hook::consts::{SIGINT, SIGTERM};
 pub use signal_hook::flag::register;
 pub use strict_encoding::{FieldName, StrictSerialize, TypeName, fname, strict_dumb, tn};
+pub use strict_types::ast::{Field, NamedFields};
 pub use strict_types::{
-    SemId, StrictDecode, StrictDeserialize, StrictDumb, StrictEncode, StrictType, StrictVal,
-    TypeSystem,
+    LibRef, SemId, StrictDecode, StrictDeserialize, StrictDumb, StrictEncode, StrictType,
+    StrictVal, Ty, TypeLibId, TypeSystem,
 };
 pub use strum::{EnumIter, IntoEnumIterator};
 pub use time::OffsetDateTime;
@@ -258,6 +276,34 @@ lazy_static! {
             "http://esplora_3:80/regtest/api"
         } else {
             "http://127.0.0.1:8096/regtest/api"
+        }
+    };
+    pub static ref BITCOIND_1_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "http://bitcoind_1:18443"
+        } else {
+            "http://127.0.0.1:18443"
+        }
+    };
+    pub static ref BITCOIND_2_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "http://bitcoind_2:18443"
+        } else {
+            "http://127.0.0.1:18453"
+        }
+    };
+    pub static ref BITCOIND_3_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "http://bitcoind_3:18443"
+        } else {
+            "http://127.0.0.1:18463"
+        }
+    };
+    pub static ref BITCOIND_NO_TXINDEX_REGTEST_URL: &'static str = {
+        if running_in_docker() {
+            "http://bitcoind_no_txindex:18443"
+        } else {
+            "http://127.0.0.1:18473"
         }
     };
     pub static ref ELECTRUM_SIGNET_CUSTOM_URL: &'static str = {

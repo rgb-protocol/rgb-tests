@@ -114,7 +114,7 @@ elif [ "$PROFILE" == "electrum" ]; then
     BCLI_1="$COMPOSE exec -T -u blits bitcoind_1 bitcoin-cli -regtest"
     BCLI_2="$COMPOSE exec -T -u blits bitcoind_2 bitcoin-cli -regtest"
     BCLI_3="$COMPOSE exec -T -u blits bitcoind_3 bitcoin-cli -regtest"
-    EXPOSED_PORTS=(50001 50002 50003 50007)
+    EXPOSED_PORTS=(50001 50002 50003 50007 18443 18453 18463 18473)
 else
     _die "invalid profile"
 fi

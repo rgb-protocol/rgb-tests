@@ -1,9 +1,10 @@
 {
   "version": 2,
-  "inputs": [
+  "lock_time": 0,
+  "input": [
     {
-      "prevOutput": "20e727d06223ddb2c33e52f24b900a6dc1c81bd30f7f420e2d9cb94c5cea6ccb:1",
-      "sigScript": "",
+      "previous_output": "20e727d06223ddb2c33e52f24b900a6dc1c81bd30f7f420e2d9cb94c5cea6ccb:1",
+      "script_sig": "",
       "sequence": 0,
       "witness": [
         "3044022045270cd95bd3db196c453fea2c151171fab1fc06967cb58b002aebf93298f097022072d7830c9da3230a18e1965533665c49f7ab1414edfd258522dcd92ff0cad59f01",
@@ -11,19 +12,18 @@
       ]
     }
   ],
-  "outputs": [
+  "output": [
     {
       "value": 49999800,
-      "scriptPubkey": "0014a211a31d7765ebbf4bb345acb0472923150c7549"
+      "script_pubkey": "0014a211a31d7765ebbf4bb345acb0472923150c7549"
     },
     {
       "value": 49999800,
-      "scriptPubkey": "00141ba0a1c903a53a38a9616c9b0e843402b2415ee9"
+      "script_pubkey": "00141ba0a1c903a53a38a9616c9b0e843402b2415ee9"
     },
     {
       "value": 0,
-      "scriptPubkey": "6a207a846cc2418649b2865d3aac4ee532c5a2a9c9c62005adcad9f6c1b31d52a099"
+      "script_pubkey": "6a207a846cc2418649b2865d3aac4ee532c5a2a9c9c62005adcad9f6c1b31d52a099"
     }
-  ],
-  "lockTime": 0
+  ]
 }

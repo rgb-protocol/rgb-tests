@@ -397,12 +397,13 @@ fn transfer_loop_impl<W1, D1, W2, D2>(
 #[case(AS::Uda)]
 #[case(AS::Pfa)]
 #[case(AS::Ifa)]
-fn unknown_kit(#[case] asset_schema: AssetSchema) {
+fn unknown_schema_definition(#[case] asset_schema: AssetSchema) {
     println!("asset_schema {asset_schema:?}");
 
     initialize();
 
-    let mut wlt_1 = BpTestWallet::with(&DescriptorType::Wpkh, None, false);
+    // the issuer knows the schema definition, the receiver does not
+    let mut wlt_1 = BpTestWallet::with(&DescriptorType::Wpkh, None, true);
     let mut wlt_2 = BpTestWallet::with(&DescriptorType::Wpkh, None, false);
 
     let (contract_id, secret_key) = match asset_schema {
@@ -417,24 +418,62 @@ fn unknown_kit(#[case] asset_schema: AssetSchema) {
         AssetSchema::Ifa => (wlt_1.issue_ifa(600, None, vec![]), None),
     };
 
-    if asset_schema == AssetSchema::Pfa {
-        wlt_1.send_pfa(
-            &mut wlt_2,
-            TransferType::Blinded,
-            contract_id,
-            1,
-            secret_key.unwrap(),
-        );
-    } else {
-        wlt_1.send(
-            &mut wlt_2,
-            TransferType::Blinded,
-            contract_id,
-            1,
-            2000,
-            None,
-        );
+    let invoice = wlt_2.invoice(
+        contract_id,
+        asset_schema.schema().schema_id(),
+        1,
+        InvoiceType::Blinded(None),
+    );
+    let (mut consignment, tx, _, _) = wlt_1.pay_full(invoice, Some(2000), None, true, None);
+    if let Some(secret_key) = secret_key {
+        // permissioned assets require the issuer's signature on each transition
+        consignment.modify_bundle(txid_bp_to_bitcoin(tx.txid()), |witness_bundle| {
+            for KnownTransition { opid, transition } in
+                witness_bundle.bundle_mut().known_transitions.iter_mut()
+            {
+                let msg = Message::from_digest(opid.as_ref().into_inner());
+                let signature = secret_key.sign_ecdsa(msg);
+                transition.signature =
+                    Some(Bytes64::from_array(signature.serialize_compact()).into());
+            }
+        });
     }
+
+    // a consignment carries only its schema id, so it still validates against
+    // the schema supplied out-of-band...
+    let schema_rules = asset_schema.schema_rules();
+    let validated = consignment
+        .clone()
+        .validate(
+            &schema_rules,
+            &wlt_2.get_resolver(),
+            &ValidationConfig {
+                chain_net: wlt_2.chain_net(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    // ...but it cannot be accepted, since the receiver's stash has no schema
+    let resolver = wlt_2.get_resolver();
+    let res = wlt_2
+        .stock_mut()
+        .accept_transfer(validated.clone(), &resolver)
+        .unwrap_err();
+    assert!(
+        matches!(
+            res,
+            StockError::SchemaNotImported(id) if id == asset_schema.schema().schema_id()
+        ),
+        "unexpected error: {res:?}"
+    );
+
+    // after importing the schema definition the same consignment is accepted
+    wlt_2.import_schema_definition(asset_schema);
+    wlt_2
+        .stock_mut()
+        .accept_transfer(validated, &resolver)
+        .unwrap();
 }
 
 #[rstest]
@@ -615,6 +654,7 @@ fn consign_requested_witness() {
                 vec![],
                 [],
                 Some(tx.txid()),
+                None,
             );
             return (txid, consignment);
         }
@@ -1009,7 +1049,7 @@ fn ln_transfers(
         txid_same_bundle_2 = psbt.txid();
         offset += 1;
     }
-    fascia.update_pub_witness(PubWitness::with(psbt.unsigned_tx()));
+    fascia.update_witness_tx(psbt.unsigned_tx());
     wlt_1.consume_fascia_custom_resolver(fascia.clone(), LNFasciaResolver {});
     let old_psbt = psbt.clone();
 
@@ -1308,10 +1348,10 @@ fn collaborative_transfer() {
     let tx = wlt_2.sign_finalize_extract(&mut psbt);
     wlt_1.broadcast_tx(&tx);
 
-    let consignments = wlt_1.create_consignments(beneficiaries.clone(), tx.txid(), &fascia);
+    let consignments = wlt_1.create_consignments(beneficiaries.clone(), tx.txid(), &fascia, None);
     assert_eq!(
         consignments,
-        wlt_2.create_consignments(beneficiaries, tx.txid(), &fascia)
+        wlt_2.create_consignments(beneficiaries, tx.txid(), &fascia, None)
     );
     wlt_1.consume_fascia(fascia.clone(), tx.txid());
     wlt_2.consume_fascia(fascia, tx.txid());
@@ -1374,7 +1414,7 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
             self.consignment
                 .bundled_witnesses()
                 .find(|bw| bw.witness_id() == witness_id)
-                .and_then(|p| p.pub_witness.tx().cloned())
+                .map(|p| p.tx.clone())
                 .map_or_else(
                     || self.fallback.resolve_witness(witness_id),
                     |tx| Ok(WitnessStatus::Resolved(tx, WitnessOrd::Tentative)),
@@ -1400,14 +1440,18 @@ fn receive_from_unbroadcasted_transfer_to_blinded() {
     wlt_2.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
 
     // consignment validation fails because it notices an unbroadcasted TX in the history
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let asset_schema = AssetSchema::from(consignment.schema_id());
+    let asset_schema_rules = asset_schema.schema_rules();
     let validation_config = ValidationConfig {
         chain_net: wlt_3.chain_net(),
-        trusted_typesystem,
         ..Default::default()
     };
     let res = consignment
-        .validate(&wlt_3.get_resolver(), &validation_config)
+        .validate(
+            &asset_schema_rules,
+            &wlt_3.get_resolver(),
+            &validation_config,
+        )
         .unwrap_err();
     assert!(matches!(
         res,
@@ -1543,7 +1587,7 @@ fn tapret_opret_same_utxo() {
         .unwrap();
     let (alt_consignment, (opouts_dag, opouts_map)) = wlt_3
         .stock()
-        .transfer_with_dag(contract_id_2, [], [], [last_opid], None)
+        .transfer_with_dag(contract_id_2, [], [], [last_opid], None, None)
         .unwrap();
     // alt_consignment is created without access to invoice, so it has no terminals
     let mut consignment = consignment;
@@ -2188,10 +2232,12 @@ fn extra_known_transition() {
     let schema_id = wlt_1.schema_id(contract_id);
     let contract = wlt_1.stock().contract_data(contract_id).unwrap();
     let assignment_type = contract
-        .schema
+        .rules
+        .schema()
         .assignment_types_for_state(asset_schema.default_state_type())[0];
     let transition_type = contract
-        .schema
+        .rules
+        .schema()
         .default_transition_for_assignment(assignment_type);
 
     let utxo_1 = wlt_1.get_utxo(Some(8000));
@@ -2260,7 +2306,7 @@ fn extra_known_transition() {
 
     let new_bundle = bundles
         .iter_mut()
-        .find(|b| b.pub_witness.txid() == base_txid)
+        .find(|b| b.witness_id() == base_txid)
         .unwrap();
     let bundle_id = new_bundle.bundle.bundle_id();
     new_bundle
@@ -2309,7 +2355,7 @@ fn uncommitted_input_opout() {
         let mut input_map = witness_bundle.bundle.input_map.clone().release();
         input_map.pop_last();
         witness_bundle.bundle.input_map = NonEmptyOrdMap::from_checked(input_map);
-        let tx = tx_bitcoin_to_bp(witness_bundle.pub_witness.tx().unwrap().clone());
+        let tx = tx_bitcoin_to_bp(witness_bundle.tx.clone());
         let mut witness_psbt = BpPsbt::from_tx(tx);
         let idx = witness_psbt
             .outputs()
@@ -2340,15 +2386,13 @@ fn uncommitted_input_opout() {
             .unwrap();
         let witness: Tx = witness_psbt.to_unsigned_tx().into();
         witness_bundle.anchor.mpc_proof = proof.to_merkle_proof(protocol_id).unwrap();
-        witness_bundle.pub_witness = PubWitness::Tx(tx_bp_to_bitcoin(witness.clone()));
+        witness_bundle.tx = tx_bp_to_bitcoin(witness.clone());
     });
     let tx = consignment
         .bundles
         .iter()
         .find(|wb| !prev_txids.contains(&wb.witness_id()))
-        .unwrap()
-        .pub_witness
-        .tx()
+        .map(|wb| &wb.tx)
         .unwrap();
     let opret_script = tx
         .output
@@ -2380,10 +2424,12 @@ fn concealed_known_transition() {
     let schema_id = wlt_1.schema_id(contract_id);
     let contract = wlt_1.stock().contract_data(contract_id).unwrap();
     let assignment_type = contract
-        .schema
+        .rules
+        .schema()
         .assignment_types_for_state(asset_schema.default_state_type())[0];
     let transition_type = contract
-        .schema
+        .rules
+        .schema()
         .default_transition_for_assignment(assignment_type);
 
     // prepare 2 allocations on utxo
@@ -2488,12 +2534,12 @@ fn concealed_known_transition() {
     let witness_id = psbt.txid();
     let tx = wlt_1.sign_finalize_extract(&mut psbt);
     // update fascia with signed tx so it will be included in consignment
-    fascia.update_pub_witness(PubWitness::Tx(tx_bp_to_bitcoin(tx)));
+    fascia.update_witness_tx(tx_bp_to_bitcoin(tx));
 
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
     let consignment = wlt_1
-        .create_consignments(beneficiaries, witness_id, &fascia)
+        .create_consignments(beneficiaries, witness_id, &fascia, None)
         .into_values()
         .next()
         .unwrap();
@@ -2508,105 +2554,10 @@ fn concealed_known_transition() {
     assert!(!bundle.bundle.known_transitions_contain_opid(&opid_2));
 
     wlt_2.broadcast_tx(&tx_bitcoin_to_bp(
-        consignment
-            .bundles
-            .last()
-            .unwrap()
-            .pub_witness
-            .tx()
-            .unwrap()
-            .clone(),
+        consignment.bundles.last().unwrap().tx.clone(),
     ));
     wlt_2.sync();
     wlt_2.accept_transfer(consignment, None);
-}
-
-#[should_panic(expected = "MissingScript")]
-#[test]
-fn remove_scripts_code() {
-    initialize();
-
-    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
-
-    let issued_amt = 700;
-    let utxo = wlt_1.get_utxo(None);
-    let contract_id = wlt_1.issue_nia(issued_amt, Some(&utxo));
-    let asset_schema = wlt_1.asset_schema(contract_id);
-    let contract = wlt_1.stock().contract_data(contract_id).unwrap();
-    let assignment_type = contract
-        .schema
-        .assignment_types_for_state(asset_schema.default_state_type())[0];
-    let transition_type = contract
-        .schema
-        .default_transition_for_assignment(assignment_type);
-
-    // construct transaction committing to bundle with missing transition
-    let btc_change = wlt_1.get_address();
-    let (mut psbt, _) = wlt_1.construct_psbt(vec![utxo], vec![(btc_change, None)], None);
-    psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO);
-    psbt.output_mut(1).unwrap().set_opret_host();
-    psbt.set_rgb_close_method(CloseMethod::OpretFirst);
-
-    // 1st transition
-    let opout = Opout {
-        op: OpId::copy_from_slice(contract_id.as_slice()).unwrap(),
-        ty: OS_ASSET,
-        no: 0,
-    };
-    let mut transition_builder = wlt_1
-        .stock()
-        .transition_builder_raw(contract_id, transition_type)
-        .unwrap();
-    let state = asset_schema.allocated_state(issued_amt);
-    transition_builder = transition_builder.add_input(opout, state.clone()).unwrap();
-    let secret_seal_1 = wlt_2.get_secret_seal(None, None);
-    let seal_1 = BuilderSeal::Concealed(secret_seal_1);
-    let state = asset_schema.allocated_state(issued_amt + 1);
-    transition_builder = transition_builder
-        .add_owned_state_raw(*assignment_type, seal_1, state)
-        .unwrap();
-    let transition = transition_builder.complete_transition().unwrap();
-    for opout in transition.inputs() {
-        // this is not necessary since it's done by push_rgb_transition,
-        // but it shows that it's idempotent
-        psbt.set_rgb_contract_consumer(contract_id, opout, transition.id())
-            .unwrap();
-    }
-    psbt.push_rgb_transition(transition).unwrap();
-
-    psbt.set_as_unmodifiable();
-    let fascia = psbt.rgb_commit().unwrap();
-    let witness_id = psbt.txid();
-    let tx = wlt_1.sign_finalize_extract(&mut psbt);
-    wlt_1.broadcast_tx(&tx);
-    wlt_2.sync();
-
-    let mut beneficiaries = AssetBeneficiariesMap::new();
-    beneficiaries.insert(contract_id, vec![seal_1]);
-    let mut consignment = wlt_1
-        .create_consignments(beneficiaries, witness_id, &fascia)
-        .into_values()
-        .next()
-        .unwrap();
-    wlt_1.consume_fascia(fascia, witness_id);
-    let mut scripts = consignment.scripts.clone().release();
-    let mut lib = scripts.pop_last().unwrap().clone();
-    lib.code = none!();
-    consignment.scripts = Confined::<BTreeSet<_>, 0, 1024>::from_checked(bset![lib]);
-
-    // should fail here
-    wlt_2.accept_transfer(consignment, None);
-
-    // only fails here
-    wlt_2.send(
-        &mut wlt_1,
-        InvoiceType::Witness,
-        contract_id,
-        issued_amt,
-        1000,
-        None,
-    );
 }
 
 #[test]
@@ -2623,10 +2574,12 @@ fn accept_bundle_missing_transitions() {
     let schema_id = wlt_1.schema_id(contract_id);
     let contract = wlt_1.stock().contract_data(contract_id).unwrap();
     let assignment_type = contract
-        .schema
+        .rules
+        .schema()
         .assignment_types_for_state(asset_schema.default_state_type())[0];
     let transition_type = contract
-        .schema
+        .rules
+        .schema()
         .default_transition_for_assignment(assignment_type);
 
     // split into 2 allocations
@@ -2732,7 +2685,7 @@ fn accept_bundle_missing_transitions() {
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
     let consignment_1 = wlt_1
-        .create_consignments(beneficiaries, witness_id, &fascia)
+        .create_consignments(beneficiaries, witness_id, &fascia, None)
         .into_values()
         .next()
         .unwrap();
@@ -2748,7 +2701,7 @@ fn accept_bundle_missing_transitions() {
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_2]);
     let consignment_2 = wlt_1
-        .create_consignments(beneficiaries, witness_id, &fascia)
+        .create_consignments(beneficiaries, witness_id, &fascia, None)
         .into_values()
         .next()
         .unwrap();
@@ -2796,10 +2749,12 @@ fn unordered_transitions_within_bundle() {
     let asset_schema = wlt_1.asset_schema(contract_id);
     let contract = wlt_1.wallet.stock().contract_data(contract_id).unwrap();
     let assignment_type = contract
-        .schema
+        .rules
+        .schema()
         .assignment_types_for_state(asset_schema.default_state_type())[0];
     let transition_type = contract
-        .schema
+        .rules
+        .schema()
         .default_transition_for_assignment(assignment_type);
 
     let utxo_1 = wlt_1.get_utxo(Some(7000));
@@ -2860,7 +2815,7 @@ fn unordered_transitions_within_bundle() {
     wlt_1.broadcast_tx(&tx);
     wlt_2.sync();
 
-    let consignments = wlt_1.create_consignments(beneficiaries, witness_id, &fascia);
+    let consignments = wlt_1.create_consignments(beneficiaries, witness_id, &fascia, None);
     wlt_1.consume_fascia(fascia, witness_id);
     for (_, consignment) in consignments {
         wlt_2.accept_transfer(consignment, None);
@@ -2891,10 +2846,12 @@ fn transition_spending_uncommitted_opout() {
     let schema_id = wlt_1.schema_id(contract_id);
     let contract = wlt_1.stock().contract_data(contract_id).unwrap();
     let assignment_type = contract
-        .schema
+        .rules
+        .schema()
         .assignment_types_for_state(asset_schema.default_state_type())[0];
     let transition_type = contract
-        .schema
+        .rules
+        .schema()
         .default_transition_for_assignment(assignment_type);
 
     // split into 2 allocations on a single utxo
@@ -3007,7 +2964,7 @@ fn transition_spending_uncommitted_opout() {
     wlt_1.broadcast_tx(&tx);
     wlt_2.sync();
 
-    let consignments = wlt_1.create_consignments(beneficiaries, witness_id, &fascia);
+    let consignments = wlt_1.create_consignments(beneficiaries, witness_id, &fascia, None);
     wlt_1.consume_fascia(fascia, witness_id);
     for (_, consignment) in consignments {
         wlt_3.accept_transfer(consignment, None);
@@ -3126,10 +3083,12 @@ fn extra_after_merge() {
     let schema_id = wlt_1.schema_id(contract_id);
     let contract = wlt_1.stock().contract_data(contract_id).unwrap();
     let assignment_type = contract
-        .schema
+        .rules
+        .schema()
         .assignment_types_for_state(asset_schema.default_state_type())[0];
     let transition_type = contract
-        .schema
+        .rules
+        .schema()
         .default_transition_for_assignment(assignment_type);
 
     let invoice = wlt_1.invoice(
@@ -3201,7 +3160,7 @@ fn extra_after_merge() {
     let mut beneficiaries = AssetBeneficiariesMap::new();
     beneficiaries.insert(contract_id, vec![seal_1]);
     let consignment = wlt_1
-        .create_consignments(beneficiaries, witness_id, &fascia)
+        .create_consignments(beneficiaries, witness_id, &fascia, None)
         .into_values()
         .next()
         .unwrap();
@@ -3286,6 +3245,742 @@ fn contract_linking() {
             contract_id_2,
         )
         .unwrap();
+}
+
+#[test]
+fn spv_proofs() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let issued_supply = 600;
+    let contract_id = wlt_1.issue_nia(issued_supply, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // 1st transfer: wlt_1 -> wlt_2, gets mined
+    let (_, tx_1) = wlt_1.send(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        400,
+        1000,
+        None,
+    );
+    let witness_1 = txid_bp_to_bitcoin(tx_1.txid());
+
+    // wlt_2 holds the SPV proof of the witness it knows
+    let resolver = wlt_2.get_resolver();
+    wlt_2.store_spv_proof(witness_1, &resolver);
+
+    // 2nd transfer: wlt_2 -> wlt_1. Its consignment carries the SPV proof of the 1st
+    // witness; the 2nd witness has just been created, so it has no proof yet.
+    let invoice = wlt_1.invoice(contract_id, schema_id, 200, InvoiceType::Blinded(None));
+    let (consignment, tx_2, _, _) = wlt_2.pay_full(invoice, Some(1000), None, true, None);
+    let witness_2 = txid_bp_to_bitcoin(tx_2.txid());
+    wlt_2.mine_tx(&witness_2, false);
+
+    let proofs: HashMap<Txid, Option<SpvProof>> = consignment
+        .bundles
+        .iter()
+        .map(|wb| (wb.witness_id(), wb.spv_proof.clone()))
+        .collect();
+    assert_eq!(proofs.len(), 2);
+    assert!(proofs[&witness_1].is_some());
+    assert!(proofs[&witness_2].is_none());
+
+    // wlt_1 validates and accepts with a resolver which cannot resolve the 1st witness:
+    // both steps have to go through its SPV proof
+    let fallback = wlt_1.get_resolver();
+    let spv_resolver = SpvOnlyResolver::with(&fallback, [witness_1]);
+    wlt_1.accept_transfer_custom(consignment.clone(), None, &spv_resolver);
+    wlt_1.check_allocations(
+        contract_id,
+        AssetSchema::Nia,
+        vec![issued_supply - 400, 200],
+        false,
+    );
+
+    // a tampered SPV proof is detected: moving the TX one position to the right in the
+    // block makes the merkle root recomputation fail. It buys the sender nothing, since
+    // the witness is then resolved as if no proof had been supplied, which this SPV-only
+    // resolver cannot do
+    let mut tampered = consignment.clone();
+    let mut bundles = tampered.bundles.release();
+    let bundle = bundles
+        .iter_mut()
+        .find(|wb| wb.witness_id() == witness_1)
+        .unwrap();
+    bundle.spv_proof.as_mut().unwrap().pos += 1;
+    tampered.bundles = LargeVec::from_checked(bundles);
+    let res = tampered
+        .validate(
+            &AssetSchema::Nia.schema_rules(),
+            &spv_resolver,
+            &ValidationConfig {
+                chain_net: wlt_1.chain_net(),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+    assert!(
+        matches!(res, ValidationError::InvalidConsignment(Failure::SealNoPubWitness(_, txid)) if txid == witness_1),
+        "unexpected validation error: {res:?}"
+    );
+}
+
+/// A proof the receiver has already vetted survives a consignment it cannot check.
+///
+/// Consuming a consignment re-checks the proofs it carries, and one which fails to verify
+/// must not reach the stash. A resolver with no access to block headers verifies none of
+/// them, which is a statement about the resolver and not about the proofs: the receiver's
+/// own proof for that witness, checked when it was stored, must be left alone. Dropping it
+/// would strip the proofs exactly from the clients which have no indexer to fall back on,
+/// and which resolve their witnesses from those proofs. Only a refutation, which needs the
+/// header this resolver cannot fetch, takes a stored proof back out - see
+/// `stale_spv_proof_is_refreshed_and_tolerated`.
+#[test]
+fn unverifiable_proof_does_not_drop_the_stored_one() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_nia(600, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // 1st transfer, mined: both wallets end up holding the same verified proof for it
+    let (_, tx_1) = wlt_1.send(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        400,
+        1000,
+        None,
+    );
+    let witness_1 = txid_bp_to_bitcoin(tx_1.txid());
+    let resolver = wlt_2.get_resolver();
+    let proof = wlt_2.store_spv_proof(witness_1, &resolver);
+    wlt_1.sync_and_update_witnesses(None);
+    let wlt_1_resolver = wlt_1.get_resolver();
+    assert_eq!(wlt_1.store_spv_proof(witness_1, &wlt_1_resolver), proof);
+
+    // 2nd transfer, back to wlt_2: its consignment carries the 1st witness with the very
+    // proof wlt_2 already holds for it
+    let invoice = wlt_2.invoice(contract_id, schema_id, 100, InvoiceType::Blinded(None));
+    let (consignment, tx_2, _, _) = wlt_1.pay_full(invoice, Some(1000), None, true, None);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx_2.txid()), false);
+    assert!(
+        consignment
+            .bundles
+            .iter()
+            .any(|wb| wb.witness_id() == witness_1 && wb.spv_proof.as_ref() == Some(&proof))
+    );
+
+    // wlt_2 accepts it with a resolver which cannot serve block headers
+    let no_headers = NoHeadersResolver::with(&resolver);
+    wlt_2.accept_transfer_custom(consignment, None, &no_headers);
+
+    // the proof it vetted when storing it is still there
+    assert_eq!(
+        wlt_2
+            .stock()
+            .as_stash_provider()
+            .witness(witness_1)
+            .unwrap()
+            .spv_proof
+            .as_ref(),
+        Some(&proof)
+    );
+    wlt_2.check_allocations(contract_id, schema_id, vec![400, 100], false);
+}
+
+/// A reorg moving a witness to another block invalidates the SPV proof stored for it.
+///
+/// Witness resolution has to notice and fall back to retrieving the TX, picking up the new
+/// position. Reporting the witness as unresolved instead would archive it and invalidate
+/// its operations, even though it is perfectly valid at a different height.
+#[test]
+#[serial]
+fn reorg_with_spv_proofs() {
+    initialize();
+    connect_reorg_nodes();
+
+    let mut wlt_1 = BpTestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+    let mut wlt_2 = BpTestWallet::with(&DescriptorType::Wpkh, Some(INSTANCE_2), true);
+
+    let contract_id = wlt_1.issue_nia(600, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    let utxo = wlt_2.get_utxo(None);
+    mine_custom(false, INSTANCE_2, 6);
+    disconnect_reorg_nodes();
+
+    // the transfer is mined on the first node
+    let amt = 400;
+    let invoice = wlt_2.invoice(
+        contract_id,
+        schema_id,
+        amt,
+        InvoiceType::Blinded(Some(utxo)),
+    );
+    let (_, tx) = wlt_1.send_to_invoice(&mut wlt_2, invoice, Some(1000), None, None);
+    let witness = txid_bp_to_bitcoin(tx.txid());
+
+    // wlt_2 stores the SPV proof of the witness as mined on that node
+    let resolver = wlt_2.get_resolver();
+    let stored_proof = wlt_2.store_spv_proof(witness, &resolver);
+
+    // the second node, which never saw that block, mines the same TX at another height
+    mine_custom(false, INSTANCE_3, 3);
+    broadcast_tx_and_mine(&tx, INSTANCE_3);
+
+    // the stored proof is now stale: the block the second node has at that height is not
+    // the one the proof was built from, so its merkle root is not reproduced. Asserted so
+    // that the fallback below is not vacuous.
+    let new_resolver = get_resolver(&indexer_url(INSTANCE_3, Network::Regtest));
+    let header = new_resolver
+        .get_block_header(stored_proof.block_height)
+        .unwrap();
+    assert!(stored_proof.validate(witness, &header).is_err());
+
+    // switching to the second node re-resolves every witness: the stale proof must not
+    // cost wlt_2 its allocation
+    wlt_2.switch_to_instance(INSTANCE_3);
+    wlt_2.check_allocations(contract_id, schema_id, vec![amt], false);
+    assert!(matches!(
+        wlt_2.get_witness_ord(&witness),
+        WitnessOrd::Mined(_)
+    ));
+    // the refuted proof is dropped, so that the consignments composed from now on do not
+    // keep shipping it and retrieving a proof again picks up the one for the new block
+    assert!(
+        wlt_2
+            .stock()
+            .as_stash_provider()
+            .witness(witness)
+            .unwrap()
+            .spv_proof
+            .is_none()
+    );
+    let refreshed = wlt_2.store_spv_proof(witness, &new_resolver);
+    assert_ne!(refreshed, stored_proof);
+}
+
+/// An SPV proof invalidated by a reorg must not cost the wallet every later transfer.
+///
+/// Two things have to hold for that: updating the witnesses has to drop the stale proof, so
+/// that retrieving proofs again replaces it instead of skipping the witness for already
+/// having one, and a receiver has to tolerate a stale proof which slipped into a
+/// consignment before the reorg was noticed.
+///
+/// Whether the receiver ends up storing the stale proof it was handed depends on what it
+/// already had, covered by `receiver_stores_proofs`: a proof of its own is kept over the
+/// incoming one, and with nothing of its own it stores no refuted proof either.
+///
+/// `reorg_with_spv_proofs` shows a reorg leaves the wallet holding a proof which no longer
+/// validates; this starts from that state, reproduced deterministically by storing a proof
+/// pointing at a block which is not the one at its height.
+#[rstest]
+#[case(true)]
+#[case(false)]
+fn stale_spv_proof_is_refreshed_and_tolerated(#[case] receiver_stores_proofs: bool) {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_nia(600, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    let (_, tx) = wlt_1.send(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        400,
+        1000,
+        None,
+    );
+    let witness = txid_bp_to_bitcoin(tx.txid());
+
+    let resolver = wlt_2.get_resolver();
+    let proof = wlt_2.store_spv_proof(witness, &resolver);
+
+    // the state a reorg leaves behind: the block now at the proof's height is not the one
+    // the proof was built from, reproduced here by pointing the proof at another height
+    let stale = SpvProof {
+        block_height: NonZeroU32::new(proof.block_height.get() - 1).unwrap(),
+        ..proof.clone()
+    };
+    assert!(
+        stale
+            .validate(
+                witness,
+                &resolver.get_block_header(stale.block_height).unwrap()
+            )
+            .is_err()
+    );
+    wlt_2
+        .stock_mut()
+        .store_spv_proof(witness, stale.clone())
+        .unwrap();
+
+    // a stored proof is taken at face value while it stands: nothing re-checks it against
+    // the chain, so it stays until the witnesses are updated
+    assert_eq!(
+        wlt_2
+            .stock()
+            .as_stash_provider()
+            .witness(witness)
+            .unwrap()
+            .spv_proof
+            .as_ref(),
+        Some(&stale)
+    );
+
+    // updating the witnesses is what reconciles the stash with the chain: it finds the
+    // proof refuted and drops it
+    wlt_2.update_witnesses(1, vec![]);
+    assert!(
+        wlt_2
+            .stock()
+            .as_stash_provider()
+            .witness(witness)
+            .unwrap()
+            .spv_proof
+            .is_none()
+    );
+
+    // with the stale proof gone, retrieving a proof again repairs the witness
+    assert_eq!(wlt_2.store_spv_proof(witness, &resolver), proof);
+
+    // a reorg between storing a proof and building a consignment leaves no chance to
+    // refresh it, so a stale proof can still reach the receiver
+    wlt_2
+        .stock_mut()
+        .store_spv_proof(witness, stale.clone())
+        .unwrap();
+    wlt_1.sync_and_update_witnesses(None);
+    let wlt_1_resolver = wlt_1.get_resolver();
+    // with a proof of its own for that same witness, the receiver has two disagreeing
+    // proofs to reconcile when consuming the consignment; with none, it has to decide
+    // whether to store the one it is handed
+    if receiver_stores_proofs {
+        assert_eq!(wlt_1.store_spv_proof(witness, &wlt_1_resolver), proof);
+    }
+    assert_eq!(
+        wlt_1
+            .stock()
+            .as_stash_provider()
+            .witness(witness)
+            .unwrap()
+            .spv_proof
+            .as_ref(),
+        receiver_stores_proofs.then_some(&proof)
+    );
+    let invoice = wlt_1.invoice(contract_id, schema_id, 100, InvoiceType::Blinded(None));
+    let Beneficiary::BlindedSeal(secret_seal) = invoice.beneficiary.into_inner() else {
+        unreachable!("blinded invoice")
+    };
+    let (consignment, tx_2, _, _) = wlt_2.pay_full(invoice, Some(1000), None, true, None);
+    wlt_2.mine_tx(&txid_bp_to_bitcoin(tx_2.txid()), false);
+    assert!(
+        consignment
+            .bundles
+            .iter()
+            .any(|wb| wb.witness_id() == witness && wb.spv_proof.as_ref() == Some(&stale))
+    );
+    // the proof in the stash is the one which travels even when the transfer is composed
+    // with a resolver: it is shipped as is, without being checked against the chain
+    let with_resolver =
+        wlt_2.consign_transfer(contract_id, [], [secret_seal], [], None, Some(&resolver));
+    assert!(
+        with_resolver
+            .bundles
+            .iter()
+            .any(|wb| wb.witness_id() == witness && wb.spv_proof.as_ref() == Some(&stale))
+    );
+
+    // the receiver accepts it all the same: the witness is resolved as if it carried no
+    // proof, which is legal anyway, and the stale proof is reported as a warning
+    let validated = consignment
+        .validate(
+            &AssetSchema::Nia.schema_rules(),
+            &wlt_1.get_resolver(),
+            &ValidationConfig {
+                chain_net: wlt_1.chain_net(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let status = validated.clone().into_validation_status();
+    assert_eq!(status.validity(), Validity::Warnings);
+    assert!(
+        status
+            .warnings
+            .iter()
+            .any(|w| matches!(w, Warning::InvalidSpvProof(_, txid) if *txid == witness)),
+        "unexpected warnings: {:?}",
+        status.warnings
+    );
+
+    // consuming it does not fail on the disagreement, and the stale proof neither overwrites
+    // the proof the receiver already had nor becomes the one it stores for that witness
+    wlt_1
+        .stock_mut()
+        .accept_transfer(validated, &wlt_1_resolver)
+        .unwrap();
+    assert_eq!(
+        wlt_1
+            .stock()
+            .as_stash_provider()
+            .witness(witness)
+            .unwrap()
+            .spv_proof
+            .as_ref(),
+        receiver_stores_proofs.then_some(&proof)
+    );
+    wlt_1.check_allocations(contract_id, schema_id, vec![200, 100], false);
+}
+
+/// A wallet which keeps no SPV proof in its stash can still hand its counterparty a
+/// consignment carrying them, by passing a resolver when composing the transfer.
+///
+/// The witness of the transfer being composed is the exception: the consignment is handed
+/// over before that TX is broadcast, so there is nothing to prove yet.
+#[test]
+fn spv_proofs_retrieved_while_composing_the_transfer() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_nia(600, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // 1st transfer, mined: the only witness which can carry a proof
+    let invoice = wlt_2.invoice(contract_id, schema_id, 400, InvoiceType::Blinded(None));
+    let (_, tx_1) = wlt_1.send_to_invoice(&mut wlt_2, invoice, Some(1000), None, None);
+    let witness_1 = txid_bp_to_bitcoin(tx_1.txid());
+
+    // 2nd transfer, left unmined, as it would be when the consignment is handed over
+    let invoice = wlt_1.invoice(contract_id, schema_id, 100, InvoiceType::Blinded(None));
+    let Beneficiary::BlindedSeal(secret_seal) = invoice.beneficiary.into_inner() else {
+        unreachable!("blinded invoice")
+    };
+    let (consignment, tx_2, _, _) = wlt_2.pay_full(invoice, Some(1000), None, true, None);
+    let witness_2 = txid_bp_to_bitcoin(tx_2.txid());
+
+    // wlt_2 never stored a proof, so composing without a resolver carries none
+    assert!(consignment.bundles.iter().all(|wb| wb.spv_proof.is_none()));
+
+    // an indexer whose backend cannot produce inclusion proofs opts out with an empty
+    // impl. Retrieval being best-effort, composing through it carries no proof either,
+    // instead of failing the transfer over a capability the sender never asked about
+    struct NoSpvIndexer;
+    impl ResolveSpvProof for NoSpvIndexer {}
+    impl ResolveWitness for NoSpvIndexer {
+        fn resolve_witness(&self, _: Txid) -> Result<WitnessStatus, WitnessResolverError> {
+            Ok(WitnessStatus::Unresolved)
+        }
+        fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
+            Ok(())
+        }
+    }
+    let consignment = wlt_2.consign_transfer(
+        contract_id,
+        [],
+        [secret_seal],
+        [],
+        None,
+        Some(&NoSpvIndexer),
+    );
+    assert!(consignment.bundles.iter().all(|wb| wb.spv_proof.is_none()));
+
+    // composing the same transfer with one retrieves the proofs missing from the stash
+    let resolver = wlt_2.get_resolver();
+    let consignment =
+        wlt_2.consign_transfer(contract_id, [], [secret_seal], [], None, Some(&resolver));
+    let proofs: HashMap<Txid, Option<SpvProof>> = consignment
+        .bundles
+        .iter()
+        .map(|wb| (wb.witness_id(), wb.spv_proof.clone()))
+        .collect();
+    assert_eq!(proofs.len(), 2);
+    assert!(proofs[&witness_1].is_some());
+    assert!(
+        proofs[&witness_2].is_none(),
+        "an unmined witness has no proof to carry"
+    );
+
+    // retrieval is per consignment: the stash is left alone
+    assert!(
+        wlt_2
+            .stock()
+            .as_stash_provider()
+            .witness(witness_1)
+            .unwrap()
+            .spv_proof
+            .is_none()
+    );
+
+    // the retrieved proof is what lets wlt_1 accept without resolving the 1st witness
+    let fallback = wlt_1.get_resolver();
+    let spv_resolver = SpvOnlyResolver::with(&fallback, [witness_1]);
+    wlt_1.accept_transfer_custom(consignment, None, &spv_resolver);
+    wlt_1.check_allocations(contract_id, AssetSchema::Nia, vec![200, 100], false);
+}
+
+/// A proof arriving in a consignment is stored only if it could be checked here.
+///
+/// A resolver which serves no block headers cannot check one, and neither can any later
+/// [`Stock::update_witnesses`] through that same resolver, so storing it would leave the
+/// stash with a proof nothing ever vetted and shipping it to every later counterparty.
+/// Whether the proof is any good is beside the point: it is dropped for not having been
+/// checked, which is why the one used here is perfectly valid.
+#[rstest]
+#[case(true)]
+#[case(false)]
+fn unvetted_spv_proof_is_not_stored(#[case] resolver_serves_headers: bool) {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_nia(600, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // wlt_1 -> wlt_2, mined, so that its witness can carry a proof
+    let (_, tx) = wlt_1.send(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        400,
+        1000,
+        None,
+    );
+    let witness = txid_bp_to_bitcoin(tx.txid());
+
+    // wlt_2 -> wlt_1, its consignment carrying the valid proof of the 1st witness
+    let wlt_2_resolver = wlt_2.get_resolver();
+    wlt_2.store_spv_proof(witness, &wlt_2_resolver);
+    let invoice = wlt_1.invoice(contract_id, schema_id, 100, InvoiceType::Blinded(None));
+    let (consignment, tx_2, _, _) = wlt_2.pay_full(invoice, Some(1000), None, true, None);
+    wlt_2.mine_tx(&txid_bp_to_bitcoin(tx_2.txid()), false);
+    let carried = consignment
+        .bundles
+        .iter()
+        .find(|wb| wb.witness_id() == witness)
+        .and_then(|wb| wb.spv_proof.clone())
+        .expect("the mined witness travels with its proof");
+
+    // a resolver which resolves witnesses as usual but serves no block headers, leaving
+    // `get_block_header` at its `NotSupported` default
+    struct HeaderlessResolver<'a>(&'a AnyResolver);
+    impl ResolveWitness for HeaderlessResolver<'_> {
+        fn resolve_witness(&self, witness_id: Txid) -> Result<WitnessStatus, WitnessResolverError> {
+            self.0.resolve_witness(witness_id)
+        }
+        fn check_chain_net(&self, chain_net: ChainNet) -> Result<(), WitnessResolverError> {
+            self.0.check_chain_net(chain_net)
+        }
+    }
+
+    // the accept succeeds either way: an unverifiable proof is no reason to refuse a
+    // consignment, the witness is simply resolved the regular way
+    let fallback = wlt_1.get_resolver();
+    if resolver_serves_headers {
+        wlt_1.accept_transfer_custom(consignment, None, &fallback);
+    } else {
+        wlt_1.accept_transfer_custom(consignment, None, &HeaderlessResolver(&fallback));
+    }
+    wlt_1.check_allocations(contract_id, schema_id, vec![200, 100], false);
+
+    // the proof is kept only where it could be checked
+    assert_eq!(
+        wlt_1
+            .stock()
+            .as_stash_provider()
+            .witness(witness)
+            .unwrap()
+            .spv_proof
+            .as_ref(),
+        resolver_serves_headers.then_some(&carried)
+    );
+}
+
+/// Transfer resolved entirely through Bitcoin Core, retrieving the witness TXs, with no
+/// SPV proof involved: the behaviour predating SPV support.
+#[test]
+fn transfer_with_bitcoind_resolver() {
+    initialize();
+
+    // the bitcoind RPC is only exposed under the electrum profile
+    if *INDEXER.get().unwrap() != Indexer::Electrum {
+        return;
+    }
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let issued_supply = 600;
+    let contract_id = wlt_1.issue_nia(issued_supply, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    let invoice = wlt_2.invoice(contract_id, schema_id, 400, InvoiceType::Blinded(None));
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, Some(1000), None, true, None);
+    let witness = txid_bp_to_bitcoin(tx.txid());
+    wlt_1.mine_tx(&witness, false);
+
+    // nothing carries an SPV proof: resolution goes through full TX retrieval
+    assert!(consignment.bundles.iter().all(|wb| wb.spv_proof.is_none()));
+
+    // wlt_2 validates and accepts using Bitcoin Core as its only resolver
+    let resolver = wlt_2.get_bitcoind_resolver();
+    wlt_2.accept_transfer_custom(consignment, None, &resolver);
+    wlt_2.check_allocations(contract_id, AssetSchema::Nia, vec![400], false);
+
+    // the witness resolves to a mined TX, and an unknown one is reported as such rather
+    // than as an error, since the node has a transaction index
+    assert!(matches!(
+        resolver.resolve_witness(witness).unwrap(),
+        WitnessStatus::Resolved(_, WitnessOrd::Mined(_))
+    ));
+    let unknown: Txid = "0000000000000000000000000000000000000000000000000000000000000001"
+        .parse()
+        .unwrap();
+    assert_eq!(
+        resolver.resolve_witness(unknown).unwrap(),
+        WitnessStatus::Unresolved
+    );
+}
+
+/// A node without a transaction index can verify SPV proofs but cannot resolve witnesses.
+///
+/// Crucially it must report the latter as an error: Core answers a witness lookup with no
+/// transaction index the same way it answers one for a TX which does not exist, and
+/// taking that for [`WitnessStatus::Unresolved`] would archive a perfectly valid witness.
+#[test]
+fn bitcoind_no_txindex_is_spv_only() {
+    initialize();
+
+    // the bitcoind RPC is only exposed under the electrum profile
+    if *INDEXER.get().unwrap() != Indexer::Electrum {
+        return;
+    }
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_nia(600, None);
+    let (_, tx) = wlt_1.send(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        400,
+        1000,
+        None,
+    );
+    let witness = txid_bp_to_bitcoin(tx.txid());
+
+    let txindex_resolver = wlt_2.get_bitcoind_resolver();
+    let no_txindex_resolver = get_bitcoind_no_txindex_resolver();
+
+    // the witness is mined and its proof is retrievable from the indexed node
+    let proof = txindex_resolver.resolve_spv_proof(witness).unwrap();
+
+    // the node with no transaction index cannot resolve the very same witness, and says
+    // so instead of reporting it as unresolved
+    let err = no_txindex_resolver.resolve_witness(witness).unwrap_err();
+    assert!(
+        matches!(&err, WitnessResolverError::ResolverIssue(_, msg) if msg.contains("-txindex")),
+        "unexpected error: {err:?}"
+    );
+    // nor can it produce proofs
+    let err = no_txindex_resolver.resolve_spv_proof(witness).unwrap_err();
+    assert!(
+        matches!(&err, WitnessResolverError::ResolverIssue(_, msg) if msg.contains("-txindex")),
+        "unexpected error: {err:?}"
+    );
+
+    // but it does serve block headers, so it can verify the proof: wait for it to catch
+    // up with the chain of the indexed node first
+    let header = (0..50)
+        .find_map(|_| {
+            let header = no_txindex_resolver
+                .get_block_header(proof.block_height)
+                .ok();
+            if header.is_none() {
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            header
+        })
+        .expect("the node with no transaction index does not sync");
+    proof.validate(witness, &header).unwrap();
+}
+
+#[test]
+fn spv_proofs_bitcoind() {
+    initialize();
+
+    // the bitcoind RPC is only exposed under the electrum profile
+    if *INDEXER.get().unwrap() != Indexer::Electrum {
+        return;
+    }
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let issued_supply = 600;
+    let contract_id = wlt_1.issue_nia(issued_supply, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // 1st transfer: wlt_1 -> wlt_2, gets mined
+    let (_, tx_1) = wlt_1.send(
+        &mut wlt_2,
+        TransferType::Blinded,
+        contract_id,
+        400,
+        1000,
+        None,
+    );
+    let witness_1 = txid_bp_to_bitcoin(tx_1.txid());
+
+    // wlt_2 produces the SPV proof of its witness from a Bitcoin Core node
+    let core_resolver = wlt_2.get_bitcoind_resolver();
+    wlt_2.store_spv_proof(witness_1, &core_resolver);
+
+    // the proof Core built verifies against the real block header: its locally computed
+    // merkle branch is correct
+    let proof = core_resolver.resolve_spv_proof(witness_1).unwrap();
+    let header = core_resolver.get_block_header(proof.block_height).unwrap();
+    proof.validate(witness_1, &header).unwrap();
+
+    // 2nd transfer: wlt_2 -> wlt_1, its consignment carries the proof of the 1st witness
+    let invoice = wlt_1.invoice(contract_id, schema_id, 200, InvoiceType::Blinded(None));
+    let (consignment, tx_2, _, _) = wlt_2.pay_full(invoice, Some(1000), None, true, None);
+    wlt_2.mine_tx(&txid_bp_to_bitcoin(tx_2.txid()), false);
+    assert!(
+        consignment
+            .bundles
+            .iter()
+            .find(|wb| wb.witness_id() == witness_1)
+            .unwrap()
+            .spv_proof
+            .is_some()
+    );
+
+    // wlt_1 validates and accepts through Core, with a resolver refusing to resolve the
+    // 1st witness by TX, so both steps go through the SPV proof and Core's get_block_header
+    let fallback = wlt_1.get_bitcoind_resolver();
+    let spv_resolver = SpvOnlyResolver::with(&fallback, [witness_1]);
+    wlt_1.accept_transfer_custom(consignment, None, &spv_resolver);
+    wlt_1.check_allocations(
+        contract_id,
+        AssetSchema::Nia,
+        vec![issued_supply - 400, 200],
+        false,
+    );
 }
 
 #[rstest]
@@ -3741,16 +4436,20 @@ fn reorg_revert_multiple(#[case] history_type: HistoryType) {
             wlt_2.mine_tx(&txid, false);
             // receiver checks if it's safe to receive allocations
             let safe_height = height_pre_transfer; // min 1 confirmation
-            let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+            let asset_schema = AssetSchema::from(consignment.schema_id());
+            let asset_schema_rules = asset_schema.schema_rules();
             let validation_config = ValidationConfig {
                 chain_net: wlt_1.chain_net(),
                 safe_height: Some(NonZeroU32::new(safe_height).unwrap()),
-                trusted_typesystem,
                 ..Default::default()
             };
             let validated_consignment = consignment
                 .clone()
-                .validate(&wlt_1.get_resolver(), &validation_config)
+                .validate(
+                    &asset_schema_rules,
+                    &wlt_1.get_resolver(),
+                    &validation_config,
+                )
                 .unwrap();
             let validation_status = validated_consignment.clone().into_validation_status();
             assert_eq!(validation_status.warnings.len(), 1);
@@ -3946,12 +4645,14 @@ fn reorg_partial_bundle_ancestry() {
     // never produces for a single contract, but batched transfers do)
     let contract_data = wlt_1.stock().contract_data(contract_id).unwrap();
     let assignment_type = *contract_data
-        .schema
+        .rules
+        .schema()
         .assignment_types_for_state(asset_schema.default_state_type())
         .first()
         .unwrap();
     let transition_type = contract_data
-        .schema
+        .rules
+        .schema()
         .default_transition_for_assignment(assignment_type);
     let find_opout = |wlt: &BpTestWallet, utxo: Outpoint, amt: u64| {
         wlt.contract_assignments_for(contract_id, vec![utxo])
@@ -4205,14 +4906,18 @@ fn reorg_between_validation_and_accept() {
 
     // the sender re-sends the T0 consignment and the receiver validates it
     // while T0 is still mined
-    let trusted_typesystem = AssetSchema::from(consignment_t0.schema_id()).types();
+    let asset_schema = AssetSchema::from(consignment_t0.schema_id());
+    let asset_schema_rules = asset_schema.schema_rules();
     let validation_config = ValidationConfig {
         chain_net: wlt_1.chain_net(),
-        trusted_typesystem,
         ..Default::default()
     };
     let validated_t0 = consignment_t0
-        .validate(&wlt_1.get_resolver(), &validation_config)
+        .validate(
+            &asset_schema_rules,
+            &wlt_1.get_resolver(),
+            &validation_config,
+        )
         .unwrap();
 
     // reorg happening between validation and accept, before the wallet has a

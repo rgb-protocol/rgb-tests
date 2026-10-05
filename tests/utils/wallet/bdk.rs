@@ -52,7 +52,16 @@ impl BdkTestWallet {
             .make_persistent(FsBinStore::new(stock_path).unwrap(), true)
             .unwrap();
 
-        let wallet = RgbWallet::new(stock, bdk_wallet);
+        let mut wallet = RgbWallet::new(stock, bdk_wallet);
+
+        // Consignments carry only the schema id, so every schema this wallet
+        // may issue or receive has to be known up-front, out-of-band.
+        for asset_schema in AssetSchema::iter() {
+            wallet
+                .stock_mut()
+                .import_schema_definition(asset_schema.schema_definition())
+                .unwrap();
+        }
 
         Self {
             wallet,
@@ -149,7 +158,7 @@ impl TestWalletExt for BdkTestWallet {
         params: TransferParams,
     ) -> (Self::Psbt, Self::PsbtMeta, Transfer) {
         self.wallet
-            .pay::<ProprietaryKey, BdkOutput>(&invoice, params)
+            .pay::<ProprietaryKey, BdkOutput>(&invoice, params, None)
             .unwrap()
     }
 

@@ -15,7 +15,7 @@ impl BpTestWallet {
         wallet_dir: PathBuf,
         wallet_account: WalletAccount,
         instance: u8,
-        import_kits: bool,
+        import_schema_definitions: bool,
         keychains: Vec<Keychain>,
     ) -> Self {
         std::fs::create_dir_all(&wallet_dir).unwrap();
@@ -58,10 +58,12 @@ impl BpTestWallet {
             }
         );
 
-        if import_kits {
+        if import_schema_definitions {
             for asset_schema in AssetSchema::iter() {
-                let valid_kit = asset_schema.get_valid_kit();
-                wallet.stock_mut().import_kit(valid_kit).unwrap();
+                wallet
+                    .stock_mut()
+                    .import_schema_definition(asset_schema.schema_definition())
+                    .unwrap();
             }
         }
 
@@ -87,8 +89,12 @@ impl BpTestWallet {
         Self::with(descriptor_type, None, true)
     }
 
-    pub fn with(descriptor_type: &DescriptorType, instance: Option<u8>, import_kits: bool) -> Self {
-        Self::with_rng(descriptor_type, instance, import_kits, None).0
+    pub fn with(
+        descriptor_type: &DescriptorType,
+        instance: Option<u8>,
+        import_schema_definitions: bool,
+    ) -> Self {
+        Self::with_rng(descriptor_type, instance, import_schema_definitions, None).0
     }
 
     pub fn gen_keys(seed: &[u8]) -> (XprivAccount, PathBuf) {
@@ -108,7 +114,7 @@ impl BpTestWallet {
     pub fn with_rng(
         descriptor_type: &DescriptorType,
         instance: Option<u8>,
-        import_kits: bool,
+        import_schema_definitions: bool,
         rng: Option<&mut StdRng>,
     ) -> (Self, Vec<u8>) {
         let mut seed = vec![0u8; 128];
@@ -126,7 +132,7 @@ impl BpTestWallet {
             wallet_dir,
             WalletAccount::Private(xpriv_account),
             instance.unwrap_or(INSTANCE_1),
-            import_kits,
+            import_schema_definitions,
             vec![Keychain::OUTER, Keychain::INNER],
         );
         (wallet, seed)
@@ -224,7 +230,8 @@ impl BpTestWallet {
             if cid == contract_id {
                 continue;
             }
-            let mut extra_cons = self.consign_transfer(cid, [output_seal], [], [], Some(bp_txid));
+            let mut extra_cons =
+                self.consign_transfer(cid, [output_seal], [], [], Some(bp_txid), None);
             let changed = extra_cons.modify_bundle(txid, transition_signer);
             assert!(changed);
             self.accept_transfer(extra_cons.clone(), None);
@@ -317,16 +324,17 @@ impl BpTestWallet {
         println!("inflation txid: {}", txid);
         self.sync();
         let consignment_map =
-            self.create_consignments(bmap![contract_id => beneficiaries], txid, &fascia);
+            self.create_consignments(bmap![contract_id => beneficiaries], txid, &fascia, None);
         self.consume_fascia(fascia, txid);
         for consignment in consignment_map.values() {
+            let schema_rules = AssetSchema::from(consignment.schema_id()).schema_rules();
             consignment
                 .clone()
                 .validate(
+                    &schema_rules,
                     &self.get_resolver(),
                     &ValidationConfig {
                         chain_net: self.chain_net(),
-                        trusted_typesystem: AssetSchema::from(consignment.schema_id()).types(),
                         ..Default::default()
                     },
                 )
@@ -412,7 +420,7 @@ impl BpTestWallet {
         self.mine_tx(&psbt.get_txid(), false);
         println!("burn txid: {}", txid);
         self.sync();
-        let consignment = self.consign_transfer(contract_id, [], [], [opid], Some(txid));
+        let consignment = self.consign_transfer(contract_id, [], [], [opid], Some(txid), None);
         self.accept_transfer(consignment.clone(), None);
         (consignment, tx)
     }
@@ -466,7 +474,7 @@ impl BpTestWallet {
         self.mine_tx(&psbt.get_txid(), false);
         println!("link txid: {}", txid);
         self.sync();
-        let consignment = self.consign_transfer(from_contract_id, [], [], [opid], Some(txid));
+        let consignment = self.consign_transfer(from_contract_id, [], [], [opid], Some(txid), None);
         (consignment, tx)
     }
 
@@ -754,11 +762,13 @@ impl BpTestWallet {
             let asset_schema = self.asset_schema(contract_id);
             let contract = self.wallet.stock().contract_data(contract_id).unwrap();
             let assignment_types = contract
-                .schema
+                .rules
+                .schema()
                 .assignment_types_for_state(asset_schema.default_state_type());
             let assignment_type = assignment_types[0];
             let transition_type = contract
-                .schema
+                .rules
+                .schema()
                 .default_transition_for_assignment(assignment_type);
             let mut asset_transition_builder = self
                 .wallet
@@ -898,7 +908,7 @@ impl BpTestWallet {
         // construct transitions for extra state
         for (cid, seal_map) in extra_state {
             let contract = self.wallet.stock().contract_data(cid).unwrap();
-            let schema = contract.schema;
+            let schema = &contract.rules.schema();
 
             for (_explicit_seal, assigns) in seal_map {
                 for (opout, state) in assigns {
@@ -991,7 +1001,7 @@ impl BpTestWallet {
 
         self.broadcast_tx(&tx);
         let txid = tx.txid();
-        let consignment_map = self.create_consignments(rgb_beneficiaries, txid, &fascia);
+        let consignment_map = self.create_consignments(rgb_beneficiaries, txid, &fascia, None);
         self.consume_fascia(fascia.clone(), txid);
         if !blinded_to_self.is_empty()
             && let Some(revealed_fascia) = self.reveal_fascia(fascia.clone(), &blinded_to_self)
@@ -1052,7 +1062,7 @@ impl TestWalletExt for BpTestWallet {
         params: TransferParams,
     ) -> (Self::Psbt, Self::PsbtMeta, Transfer) {
         self.wallet
-            .pay::<PropKey, Output>(&invoice, params)
+            .pay::<PropKey, Output>(&invoice, params, None)
             .unwrap()
     }
 

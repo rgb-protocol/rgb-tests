@@ -61,6 +61,7 @@ time = "0.3.53"
 rgb-api = { path = "./rgb-api", features = [
     "bp",
     "bdk",
+    "bitcoind_blocking",
     "electrum_blocking",
     "esplora_blocking",
     "fs",
@@ -75,6 +76,7 @@ rgb-consensus = { path = "./rgb-consensus" }
 ## rgb-ops
 rgb-ops = { path = "./rgb-ops", features = [
     "fs",
+    "legacy",
 ] }
 ## rgb-schemas
 rgb-schemas = { path = "./rgb-schemas" }

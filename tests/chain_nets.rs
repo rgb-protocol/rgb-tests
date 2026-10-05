@@ -89,3 +89,38 @@ fn check_chain_net_failures(#[case] url: &str, #[case] expected_err: WitnessReso
     let result = resolver.check_chain_net(ChainNet::BitcoinSignet);
     assert!(matches!(result, Err(err) if err == expected_err));
 }
+
+/// A Bitcoin Core node with no transaction index is on the right chain like any other, so
+/// `check_chain_net` accepts it: it can still serve block headers, and the operations it
+/// cannot serve reject it on their own, see `bitcoind_no_txindex_is_spv_only`.
+#[test]
+fn check_chain_net_bitcoind_no_txindex() {
+    initialize();
+
+    // the bitcoind RPC is only exposed under the electrum profile
+    if *INDEXER.get().unwrap() != Indexer::Electrum {
+        return;
+    }
+
+    // the node with a transaction index is accepted
+    get_bitcoind_resolver(INSTANCE_1)
+        .check_chain_net(ChainNet::BitcoinRegtest)
+        .unwrap();
+
+    // and so is the one without it
+    get_bitcoind_no_txindex_resolver()
+        .check_chain_net(ChainNet::BitcoinRegtest)
+        .unwrap();
+
+    // telling the two apart is what `has_synced_txindex` is for
+    assert!(
+        get_bitcoind_client(&bitcoind_url(INSTANCE_1))
+            .has_synced_txindex()
+            .unwrap()
+    );
+    assert!(
+        !get_bitcoind_client(&BITCOIND_NO_TXINDEX_REGTEST_URL)
+            .has_synced_txindex()
+            .unwrap()
+    );
+}

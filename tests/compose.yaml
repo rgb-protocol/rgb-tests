@@ -3,14 +3,31 @@ services:
     image: registry.gitlab.com/hashbeam/docker/bitcoind:30.0
     profiles: [electrum]
     command: "-fallbackfee=0.0002"
+    ports:
+      - 18443:18443
   bitcoind_2:
     image: registry.gitlab.com/hashbeam/docker/bitcoind:30.0
     profiles: [electrum]
     command: "-fallbackfee=0.0002"
+    ports:
+      - 18453:18443
   bitcoind_3:
     image: registry.gitlab.com/hashbeam/docker/bitcoind:30.0
     profiles: [electrum]
     command: "-fallbackfee=0.0002"
+    ports:
+      - 18463:18443
+  # node without a transaction index, to cover the SPV-only capabilities of bitcoind.
+  # The trailing -txindex=0 overrides the -txindex the image entrypoint always adds, and
+  # -connect keeps it in sync with the chain of bitcoind_1.
+  bitcoind_no_txindex:
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:30.0
+    profiles: [electrum]
+    command: "-fallbackfee=0.0002 -txindex=0 -connect=bitcoind_1:18444"
+    ports:
+      - 18473:18443
+    depends_on:
+      - bitcoind_1
   electrs_1:
     image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0
     profiles: [electrum]

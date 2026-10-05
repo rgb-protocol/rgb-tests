@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "lock_time": 0,
+  "input": [
+    {
+      "previous_output": "4ea42a7fb885cf0df1f075f34ef12ad1d55981f19bd67235a3e2a7dd02535d0b:0",
+      "script_sig": "",
+      "sequence": 0,
+      "witness": [
+        "3045022100a02c7ac39b19a93e8afe835baa35272f0330e3a35625668c5060c500e644e2b102201f0b277ae4796a453e88e58f0888a7ae437838dd104cd6bd391e50b3062d64f501",
+        "0383019bb57251d065705e06673578992edeac44cdb2d1976ac86a52bc56a9fc63"
+      ]
+    },
+    {
+      "previous_output": "4ea42a7fb885cf0df1f075f34ef12ad1d55981f19bd67235a3e2a7dd02535d0b:1",
+      "script_sig": "",
+      "sequence": 0,
+      "witness": [
+        "304402206a460c43f343aae223b65957665ed24964403d0df0d3cba6c1ea9fc2f4a95f3402206f0be6b39c0511d7ad448282e4adbfa4bf7a58266950b26a865aaad8a03ea39601",
+        "0285473654a7ecf9c46861a80a4a8f83a32dd966b7c7ffbcf73a5f08e40edba49b"
+      ]
+    },
+    {
+      "previous_output": "1bfbb6f95baeea173c50948d54f125bfaf5dedbf0e5f8a78e008a88e07763e7f:1",
+      "script_sig": "",
+      "sequence": 0,
+      "witness": [
+        "3045022100b7fd853f5d9558f1311273d64b8e3a1d67a46d76c02a6d3b92618ad1ff55b3020220389b34481fefb35c463325c24cb025482162a49664ef7c65872515d7ac530b4a01",
+        "03f3a303e36bb12db73e72ea4f46aa86b9bc84a00319db1d7c9bf756c046b7af58"
+      ]
+    }
+  ],
+  "output": [
+    {
+      "value": 199989400,
+      "script_pubkey": "00140065286391f6eccbb5aaac90d86baed18a0e5ec3"
+    },
+    {
+      "value": 0,
+      "script_pubkey": "6a209694eeee0eefa5f34ddf899966a558beec430248f0f93aed7688cd1d4c8a7eed"
+    }
+  ]
+}

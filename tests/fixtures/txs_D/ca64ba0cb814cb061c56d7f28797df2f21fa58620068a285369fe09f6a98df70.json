@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "lock_time": 0,
+  "input": [
+    {
+      "previous_output": "3c7c980f47d6e9fb2c6cd0517339b86356b62e5161fe616838928d27fc01f8aa:0",
+      "script_sig": "",
+      "sequence": 0,
+      "witness": [
+        "344f4ce383d263a9c458a326b3fb2f260b4cbcc600eb84b74f5d9d0a02784e8fb598d3c2c685cf042e2a228c874100eba202aff62e35875b58818fa022328429"
+      ]
+    }
+  ],
+  "output": [
+    {
+      "value": 99999600,
+      "script_pubkey": "51206ae429c80c4c923261eb4bedc0177eeff821c130bdbdbaa863791918ee6e88da"
+    }
+  ]
+}

@@ -1,11 +1,21 @@
 {
-  "version": "v0",
+  "version": "v1",
   "transfer": true,
-  "terminals": {},
+  "terminals": {
+    "e3e3a1067165c8894fc95067375c2d2c09e9ee980d619b0136facfafb419e30f": [
+      {
+        "revealed": {
+          "txid": null,
+          "vout": 1,
+          "blinding": 14841966395195651740
+        }
+      }
+    ]
+  },
   "genesis": {
     "ffv": 0,
     "schemaId": "rgb:sch:RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU#remote-digital-pegasus",
-    "timestamp": 1750883671,
+    "timestamp": 1785536352,
     "issuer": "ssi:anonymous",
     "chainNet": "bitcoinRegtest",
     "sealClosingStrategy": "firstOpretOrTapret",
@@ -27,9 +37,11 @@
         "items": [
           {
             "seal": {
-              "txid": "4b8d99de8188a6769987e59faa7cdb70086608a05f38a336549770f047a64701",
-              "vout": 1,
-              "blinding": 15971490758955256628
+              "revealed": {
+                "txid": "20099efac334df919b446c4e1dd3f39e58dc525d6322bc4b34cd6bfa572618dc",
+                "vout": 1,
+                "blinding": 421657903451540658
+              }
             },
             "state": 666
           }
@@ -39,62 +51,61 @@
   },
   "bundles": [
     {
-      "pubWitness": {
-        "tx": {
-          "version": 2,
-          "inputs": [
-            {
-              "prevOutput": "4b8d99de8188a6769987e59faa7cdb70086608a05f38a336549770f047a64701:1",
-              "sigScript": "",
-              "sequence": 0,
-              "witness": []
-            }
-          ],
-          "outputs": [
-            {
-              "value": 0,
-              "scriptPubkey": "6a204266173b9f445e4e0738d460c90ed778eb152822ad9c14366c7fc07b20fcbcc3"
-            },
-            {
-              "value": 9000,
-              "scriptPubkey": "0014a38ad5e206733b28151e460e383991ffbdbdbfe9"
-            },
-            {
-              "value": 99990600,
-              "scriptPubkey": "00146990e864fee7e996d191cf742d37d80fd47eab2f"
-            }
-          ],
-          "lockTime": 0
-        }
+      "tx": {
+        "version": 2,
+        "lock_time": 0,
+        "input": [
+          {
+            "previous_output": "20099efac334df919b446c4e1dd3f39e58dc525d6322bc4b34cd6bfa572618dc:1",
+            "script_sig": "",
+            "sequence": 0,
+            "witness": []
+          }
+        ],
+        "output": [
+          {
+            "value": 0,
+            "script_pubkey": "6a204add924332ff79f93a7ef8a2b41287210069bf0724bc9b3d41d67839d5c9ef38"
+          },
+          {
+            "value": 9000,
+            "script_pubkey": "001488416d68afb1bf4415583c38d0df8ff89310e35e"
+          },
+          {
+            "value": 99990600,
+            "script_pubkey": "00143618d5877b93e6c6bd95b49bafb68d8fe5cf0fe6"
+          }
+        ]
       },
+      "spvProof": null,
       "anchor": {
         "mpcProof": {
-          "pos": 6,
+          "pos": 5,
           "cofactor": 0,
           "path": [
-            "50d3665113ef6571da5870d08ab7f2fd9a74a8fb8b885d72ba6e27ee443bd1f1",
-            "28ad1a030ca76f794d62a000e8d68101ed7855fc06ae56e1c10e64814c6dfbeb",
-            "26fd7ea39c056153b91b556d0a1d2bfd2d99a02d18ffdc5738fc0c565bf5cc56"
+            "24cef31f5cb0c7bb3f20ac7451fa82d08b110a37a05926eb3dfd4c92b1849672",
+            "61ea621cdd56cdfe6a35eb91dadf149b12cf68d0196575515bed406a2fedf5da",
+            "3d6ce31608f5cfe2dadf4269d267d90ce0e0f486035f168faa4b05a940509ece"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "6ed33f3dc88ef3682ac43fbe1ac4648245130d12fa1ab9f755a3c92f00b0178b/4000/0": "31f87d18b87fc70e808bb8043e4cebddc2aa2896b4c4cf407865a38db0257658"
+          "658ec983b74baeae599b9b60b0c35e9a7df727b0877af50b4fc97d29f939a5e8/4000/0": "4b9ab7440b71c397492ef2b62923e4c33558ac799c62ac34c3c8927270b5830f"
         },
         "knownTransitions": [
           {
-            "opid": "31f87d18b87fc70e808bb8043e4cebddc2aa2896b4c4cf407865a38db0257658",
+            "opid": "4b9ab7440b71c397492ef2b62923e4c33558ac799c62ac34c3c8927270b5830f",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:btM~PciO-82gqxD_-_GsRkgk-UTDRL6G-rn3VaPJ-LwCwF4s",
+              "contractId": "rgb:ZY7Jg7dL-rq5Zm5t-gsMNemn-33J7CHe-vULT8l9-Kfk5peg",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "6ed33f3dc88ef3682ac43fbe1ac4648245130d12fa1ab9f755a3c92f00b0178b/4000/0"
+                "658ec983b74baeae599b9b60b0c35e9a7df727b0877af50b4fc97d29f939a5e8/4000/0"
               ],
               "assignments": {
                 "4000": {
@@ -102,9 +113,11 @@
                   "items": [
                     {
                       "seal": {
-                        "txid": null,
-                        "vout": 2,
-                        "blinding": 5104376770230072053
+                        "revealed": {
+                          "txid": null,
+                          "vout": 2,
+                          "blinding": 2671171644414692109
+                        }
                       },
                       "state": 666
                     }
@@ -118,62 +131,61 @@
       }
     },
     {
-      "pubWitness": {
-        "tx": {
-          "version": 2,
-          "inputs": [
-            {
-              "prevOutput": "143b34678a7e3e0d2dbbfbd14c6a163aed89d96e4992374154d3c1b5973a93cd:2",
-              "sigScript": "",
-              "sequence": 0,
-              "witness": []
-            }
-          ],
-          "outputs": [
-            {
-              "value": 0,
-              "scriptPubkey": "6a20ec7439f82cb704cdc0e867ec63c6f88ecdb352266915e7b95639b26360ebbb6e"
-            },
-            {
-              "value": 9000,
-              "scriptPubkey": "00142842f7eabee95edda63fefc011bce78c69a9cd1d"
-            },
-            {
-              "value": 99981200,
-              "scriptPubkey": "0014f62a638b6981c9396ea76109aed6ef5f5981a303"
-            }
-          ],
-          "lockTime": 0
-        }
+      "tx": {
+        "version": 2,
+        "lock_time": 0,
+        "input": [
+          {
+            "previous_output": "8463e6ab34019b32df0e5ad11e47122bd747953e528c2e27f2643411b451af7c:2",
+            "script_sig": "",
+            "sequence": 0,
+            "witness": []
+          }
+        ],
+        "output": [
+          {
+            "value": 0,
+            "script_pubkey": "6a200a6ac301624cbd2a2cb83b84eebc71d92ff7d2bd2530510495f2120fcd246955"
+          },
+          {
+            "value": 9000,
+            "script_pubkey": "00146cbeb7c3ad908e740fbcd2e8080d6010d7c09177"
+          },
+          {
+            "value": 99981200,
+            "script_pubkey": "0014b98d006578fc9eabfc701bc64cf73509d6eff967"
+          }
+        ]
       },
+      "spvProof": null,
       "anchor": {
         "mpcProof": {
-          "pos": 6,
+          "pos": 5,
           "cofactor": 0,
           "path": [
-            "f250b9b3d529f03b634d1b400fcc1c722e3d5da1723e55634d053bf241966f36",
-            "95b11bf9d3c76e118677fee7ccddb3fb86ccd42c813d254737c3156484b9916f",
-            "0cc8e38d92681cbfc54e90e42a9ff9e1944b3e2e2caa6fd6b8fa98d865f69811"
+            "89660fd79eec4af1ba2e38dca2c1091e70941f9456e8316ac280a466e20d7884",
+            "683bd10e5df164aae08a20d2f6b09fcc3744ce7aff0853d8a81f5c7b92c2787a",
+            "8ec9786e7ccd460648320ea9cfcfcc5cb958fa6d5334b3dc3410aeebc97e48fd"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "31f87d18b87fc70e808bb8043e4cebddc2aa2896b4c4cf407865a38db0257658/4000/0": "348ec8956f9dbf0cc5fb8de31adfb146b6567c1d5ec2abdaff8b203ca0045e1a"
+          "4b9ab7440b71c397492ef2b62923e4c33558ac799c62ac34c3c8927270b5830f/4000/0": "f3f75889566fbe3585fe9adfc9ed9d18f2e83129c4408fcbb7a6221b213051db"
         },
         "knownTransitions": [
           {
-            "opid": "348ec8956f9dbf0cc5fb8de31adfb146b6567c1d5ec2abdaff8b203ca0045e1a",
+            "opid": "f3f75889566fbe3585fe9adfc9ed9d18f2e83129c4408fcbb7a6221b213051db",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:btM~PciO-82gqxD_-_GsRkgk-UTDRL6G-rn3VaPJ-LwCwF4s",
+              "contractId": "rgb:ZY7Jg7dL-rq5Zm5t-gsMNemn-33J7CHe-vULT8l9-Kfk5peg",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "31f87d18b87fc70e808bb8043e4cebddc2aa2896b4c4cf407865a38db0257658/4000/0"
+                "4b9ab7440b71c397492ef2b62923e4c33558ac799c62ac34c3c8927270b5830f/4000/0"
               ],
               "assignments": {
                 "4000": {
@@ -181,17 +193,21 @@
                   "items": [
                     {
                       "seal": {
-                        "txid": null,
-                        "vout": 1,
-                        "blinding": 14095570581868621249
+                        "revealed": {
+                          "txid": null,
+                          "vout": 1,
+                          "blinding": 6623405432438148403
+                        }
                       },
                       "state": 50
                     },
                     {
                       "seal": {
-                        "txid": null,
-                        "vout": 2,
-                        "blinding": 8503444477660371154
+                        "revealed": {
+                          "txid": null,
+                          "vout": 2,
+                          "blinding": 4129887118014127442
+                        }
                       },
                       "state": 616
                     }
@@ -205,62 +221,61 @@
       }
     },
     {
-      "pubWitness": {
-        "tx": {
-          "version": 2,
-          "inputs": [
-            {
-              "prevOutput": "84e3ac658455e8969e03ac02dc487c9ccd2fcb10314f9d19b0b223cfb85e7ed3:2",
-              "sigScript": "",
-              "sequence": 0,
-              "witness": []
-            }
-          ],
-          "outputs": [
-            {
-              "value": 0,
-              "scriptPubkey": "6a20ded4a8d8dba904936aeea30e8bc0ae524b64c3500bc9cfe94895dc77bfde35d9"
-            },
-            {
-              "value": 9000,
-              "scriptPubkey": "0014fe9163be63b335ae4640e5011d610feb791713db"
-            },
-            {
-              "value": 99971800,
-              "scriptPubkey": "0014282993ddc2ba6d84598e751a93429395d460c7f9"
-            }
-          ],
-          "lockTime": 0
-        }
+      "tx": {
+        "version": 2,
+        "lock_time": 0,
+        "input": [
+          {
+            "previous_output": "4e697ad6d7a716993c0567a0a2afac658d033b31305e7f118bbedec44018d0ac:2",
+            "script_sig": "",
+            "sequence": 0,
+            "witness": []
+          }
+        ],
+        "output": [
+          {
+            "value": 0,
+            "script_pubkey": "6a207bf47abb120a5fd36d126295a15f5f02ff1a461b96bf80595fa881767af190a1"
+          },
+          {
+            "value": 9000,
+            "script_pubkey": "0014e02f6f65d80e2a0a7fdd15ff445dd7f0d399f660"
+          },
+          {
+            "value": 99971800,
+            "script_pubkey": "0014dc2c6fa23501667453d7e2f28d906f8c0eb4109b"
+          }
+        ]
       },
+      "spvProof": null,
       "anchor": {
         "mpcProof": {
-          "pos": 6,
+          "pos": 5,
           "cofactor": 0,
           "path": [
-            "a5b9eb9691493220613a6207567cc40c00b69c960c417b83c63ffe98dd1582cc",
-            "c91ec5dbc524954e5ec1321bcab56cb1f06c3a6759b5d9ff8560f159f39a8c49",
-            "061191e16060e63aaf24c4c0e0d4795a5e8762f201ee7745abae967346812236"
+            "bd96e8bf67db803a68716e094936c89e16e9b86eb5e10025fc01678ae819ca76",
+            "167bcf3d64fc4ef2cad85a313a4619a4ec0c7ca2fa5075fb9d230830c2fa7f0f",
+            "0410990f2e8807043cfd4ef3045f76b5c5d57d093689f9c99f8530a03571861e"
           ]
         },
         "dbcProof": null
       },
       "bundle": {
         "inputMap": {
-          "348ec8956f9dbf0cc5fb8de31adfb146b6567c1d5ec2abdaff8b203ca0045e1a/4000/1": "21c09f8ead108258bcdf2e7bbb0de231974b351b9cebe69e283beb6a99590628"
+          "f3f75889566fbe3585fe9adfc9ed9d18f2e83129c4408fcbb7a6221b213051db/4000/1": "8cbbc22893dc84eda26750bf2332fa956c419c1b3b684f17c89344d3cecc2858"
         },
         "knownTransitions": [
           {
-            "opid": "21c09f8ead108258bcdf2e7bbb0de231974b351b9cebe69e283beb6a99590628",
+            "opid": "8cbbc22893dc84eda26750bf2332fa956c419c1b3b684f17c89344d3cecc2858",
             "transition": {
               "ffv": 0,
-              "contractId": "rgb:btM~PciO-82gqxD_-_GsRkgk-UTDRL6G-rn3VaPJ-LwCwF4s",
+              "contractId": "rgb:ZY7Jg7dL-rq5Zm5t-gsMNemn-33J7CHe-vULT8l9-Kfk5peg",
               "nonce": 18446744073709551615,
               "transitionType": 10000,
               "metadata": {},
               "globals": {},
               "inputs": [
-                "348ec8956f9dbf0cc5fb8de31adfb146b6567c1d5ec2abdaff8b203ca0045e1a/4000/1"
+                "f3f75889566fbe3585fe9adfc9ed9d18f2e83129c4408fcbb7a6221b213051db/4000/1"
               ],
               "assignments": {
                 "4000": {
@@ -268,17 +283,21 @@
                   "items": [
                     {
                       "seal": {
-                        "txid": null,
-                        "vout": 1,
-                        "blinding": 2964060174665201768
+                        "revealed": {
+                          "txid": null,
+                          "vout": 1,
+                          "blinding": 14841966395195651740
+                        }
                       },
                       "state": 77
                     },
                     {
                       "seal": {
-                        "txid": null,
-                        "vout": 2,
-                        "blinding": 17353984293023054398
+                        "revealed": {
+                          "txid": null,
+                          "vout": 2,
+                          "blinding": 12043986569188829888
+                        }
                       },
                       "state": 539
                     }
@@ -290,656 +309,6 @@
           }
         ]
       }
-    }
-  ],
-  "schema": {
-    "ffv": 0,
-    "name": "NonInflatableAsset",
-    "metaTypes": {},
-    "globalTypes": {
-      "2000": {
-        "globalStateSchema": {
-          "semId": "d7fcbee31ef0a85d5f973bda1b0b8c9e7efbcbc5572577382cacd3bdb4218a01",
-          "maxItems": 1
-        },
-        "name": "spec"
-      },
-      "2001": {
-        "globalStateSchema": {
-          "semId": "5b8bc7543832054a1d22be94226be7538b133a26881cba4613027878e05c6cf7",
-          "maxItems": 1
-        },
-        "name": "terms"
-      },
-      "2010": {
-        "globalStateSchema": {
-          "semId": "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84",
-          "maxItems": 1
-        },
-        "name": "issuedSupply"
-      }
-    },
-    "ownedTypes": {
-      "4000": {
-        "ownedStateSchema": {
-          "fungible": "unsigned64Bit"
-        },
-        "name": "assetOwner",
-        "defaultTransition": 10000
-      }
-    },
-    "genesis": {
-      "metadata": [],
-      "globals": {
-        "2000": "once",
-        "2001": "once",
-        "2010": "once"
-      },
-      "assignments": {
-        "4000": "onceOrMore"
-      },
-      "validator": {
-        "lib": "abf099d28bed50df5e065715327f3a9b329f777cb0b9fefff634c193a03cb626",
-        "pos": 9
-      }
-    },
-    "transitions": {
-      "10000": {
-        "transitionSchema": {
-          "metadata": [],
-          "globals": {},
-          "inputs": {
-            "4000": "onceOrMore"
-          },
-          "assignments": {
-            "4000": "onceOrMore"
-          },
-          "validator": {
-            "lib": "abf099d28bed50df5e065715327f3a9b329f777cb0b9fefff634c193a03cb626",
-            "pos": 0
-          }
-        },
-        "name": "transfer"
-      }
-    },
-    "defaultAssignment": 4000
-  },
-  "types": {
-    "0af65fd62581de85cbd14e23e2db9a92bbef8b7974ffe1b50c4c74db8f86e751": {
-      "List": [
-        "5f5e26e5c5053c1b4544515bc6a0653da02a0791fb31116d71a4fad916e15355",
-        {
-          "min": 0,
-          "max": 7
-        }
-      ]
-    },
-    "18cb946f1293cf180e9d78dcc65bc59b472ffffeadfbf58db198cc8328f64b01": {
-      "Tuple": [
-        "560d96f7a47924b2c3df040e6463398fd65fd591652c294342bfa5f939155154"
-      ]
-    },
-    "1cabbfc3d826c0bfd1e9770a889efacc8b6716ad014a3eec10b6591530229042": {
-      "Primitive": 64
-    },
-    "1cb0758e14c2008c0f008ce6d2d41e9e1937e1cd0f9914c59a7e29e1ce7ba0bb": {
-      "Tuple": [
-        "ccc272928f793803d91f5dad8d51cc986b4332380f9224f7c7c1514d768ebb90"
-      ]
-    },
-    "2a5baaac5089ff098d150b482cfed8bcd01a91c0d7b45d32216ed576ab71ebdd": {
-      "Array": [
-        "1cabbfc3d826c0bfd1e9770a889efacc8b6716ad014a3eec10b6591530229042",
-        32
-      ]
-    },
-    "2fd8f27a172712903e6a3e96f0f85c0480b4211a17acd13059fc51d4a4bbde2c": {
-      "Union": {
-        "none:0": "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c",
-        "some:1": "b070d38ff6d20c5ae5d80715ca31541d5a52bbdecbd3529d38e6ddb672200997"
-      }
-    },
-    "3cd1a29dccad9b917b26305f89a8a4fb2118302a4e73c5ac0a780de6ab005e73": {
-      "Enum": [
-        "excl:33",
-        "hash:35",
-        "dollar:36",
-        "amp:38",
-        "plus:43",
-        "dash:45",
-        "dot:46",
-        "zero:48",
-        "one:49",
-        "two:50",
-        "three:51",
-        "four:52",
-        "five:53",
-        "six:54",
-        "seven:55",
-        "eight:56",
-        "nine:57",
-        "caret:94",
-        "lodash:95",
-        "a:97",
-        "b:98",
-        "c:99",
-        "d:100",
-        "e:101",
-        "f:102",
-        "g:103",
-        "h:104",
-        "i:105",
-        "j:106",
-        "k:107",
-        "l:108",
-        "m:109",
-        "n:110",
-        "o:111",
-        "p:112",
-        "q:113",
-        "r:114",
-        "s:115",
-        "t:116",
-        "u:117",
-        "v:118",
-        "w:119",
-        "x:120",
-        "y:121",
-        "z:122"
-      ]
-    },
-    "3f2b72b7c4af1a630cb6d3ff088baf351093ee465b9e7d472a610082e449d7e4": {
-      "Tuple": [
-        "63aa2314e8b147c8b284dfb39a9e10d19caad5faea848e3cb9849d9167d6344a"
-      ]
-    },
-    "43aa7fc5f6f5644fe5a2ae5e1aa99042cdeb879442e34c723ff5827fb133de8a": {
-      "Struct": [
-        {
-          "name": "type",
-          "ty": "b10ddefe8020add8a0ca08292150abb13c514d76de5168c1c97105a27e676660"
-        },
-        {
-          "name": "digest",
-          "ty": "2a5baaac5089ff098d150b482cfed8bcd01a91c0d7b45d32216ed576ab71ebdd"
-        }
-      ]
-    },
-    "45b780258601c526b23b5b4861460a9050e13f35fbbe8305a8001157e4013888": {
-      "Union": {
-        "none:0": "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c",
-        "some:1": "caff8faeb38a00a04e3621538f8e61d75a85a465cb0a0e48c3593e7eaa6c5fc7"
-      }
-    },
-    "48be23172ae884459ae78334a0063f09fa0e317bea8b233ce782a38875e796b8": {
-      "Enum": [
-        "space:32",
-        "excl:33",
-        "quotes:34",
-        "hash:35",
-        "dollar:36",
-        "percent:37",
-        "ampersand:38",
-        "apostrophe:39",
-        "bracketL:40",
-        "bracketR:41",
-        "asterisk:42",
-        "plus:43",
-        "comma:44",
-        "minus:45",
-        "dot:46",
-        "slash:47",
-        "zero:48",
-        "one:49",
-        "two:50",
-        "three:51",
-        "four:52",
-        "five:53",
-        "six:54",
-        "seven:55",
-        "eight:56",
-        "nine:57",
-        "colon:58",
-        "semiColon:59",
-        "less:60",
-        "equal:61",
-        "greater:62",
-        "question:63",
-        "at:64",
-        "_A:65",
-        "_B:66",
-        "_C:67",
-        "_D:68",
-        "_E:69",
-        "_F:70",
-        "_G:71",
-        "_H:72",
-        "_I:73",
-        "_J:74",
-        "_K:75",
-        "_L:76",
-        "_M:77",
-        "_N:78",
-        "_O:79",
-        "_P:80",
-        "_Q:81",
-        "_R:82",
-        "_S:83",
-        "_T:84",
-        "_U:85",
-        "_V:86",
-        "_W:87",
-        "_X:88",
-        "_Y:89",
-        "_Z:90",
-        "sqBracketL:91",
-        "backSlash:92",
-        "sqBracketR:93",
-        "caret:94",
-        "lodash:95",
-        "backtick:96",
-        "a:97",
-        "b:98",
-        "c:99",
-        "d:100",
-        "e:101",
-        "f:102",
-        "g:103",
-        "h:104",
-        "i:105",
-        "j:106",
-        "k:107",
-        "l:108",
-        "m:109",
-        "n:110",
-        "o:111",
-        "p:112",
-        "q:113",
-        "r:114",
-        "s:115",
-        "t:116",
-        "u:117",
-        "v:118",
-        "w:119",
-        "x:120",
-        "y:121",
-        "z:122",
-        "cBracketL:123",
-        "pipe:124",
-        "cBracketR:125",
-        "tilde:126"
-      ]
-    },
-    "560d96f7a47924b2c3df040e6463398fd65fd591652c294342bfa5f939155154": {
-      "List": [
-        "fba958721a3d335406b368c36f5a82790960cce239febcafe189ba9839d5da78",
-        {
-          "min": 0,
-          "max": 65535
-        }
-      ]
-    },
-    "5b772c8eb15fd74700c79241f60f8fda37e736b3fd462ab017ce4d454efa81aa": {
-      "Tuple": [
-        "5e5ec8924f73cd72c4225c96ab47796658ef1b729ca306e260bca42b25891d0f"
-      ]
-    },
-    "5b8bc7543832054a1d22be94226be7538b133a26881cba4613027878e05c6cf7": {
-      "Struct": [
-        {
-          "name": "text",
-          "ty": "18cb946f1293cf180e9d78dcc65bc59b472ffffeadfbf58db198cc8328f64b01"
-        },
-        {
-          "name": "media",
-          "ty": "e087a83496338799afc48a9211683a427d2bd33e2ea7ebb8a8b880ea4ab4eb81"
-        }
-      ]
-    },
-    "5ca149585de534ee91b3e3a030b7efd4cdb79abea9152f101f3759b4c7210e1f": {
-      "Primitive": 8
-    },
-    "5d03c4178da98e7e3f3af343e3997d74201d11f42732cfbea2b04b8e3ff15f22": {
-      "Enum": [
-        "indivisible:0",
-        "deci:1",
-        "centi:2",
-        "milli:3",
-        "deciMilli:4",
-        "centiMilli:5",
-        "micro:6",
-        "deciMicro:7",
-        "centiMicro:8",
-        "nano:9",
-        "deciNano:10",
-        "centiNano:11",
-        "pico:12",
-        "deciPico:13",
-        "centiPico:14",
-        "femto:15",
-        "deciFemto:16",
-        "centiFemto:17",
-        "atto:18"
-      ]
-    },
-    "5e5ec8924f73cd72c4225c96ab47796658ef1b729ca306e260bca42b25891d0f": {
-      "Tuple": [
-        "822380f475f0edb4b5dc517991de7390ada2dbb3752c4c066851aa01630296c2",
-        "0af65fd62581de85cbd14e23e2db9a92bbef8b7974ffe1b50c4c74db8f86e751"
-      ]
-    },
-    "5f5e26e5c5053c1b4544515bc6a0653da02a0791fb31116d71a4fad916e15355": {
-      "Enum": [
-        "zero:48",
-        "one:49",
-        "two:50",
-        "three:51",
-        "four:52",
-        "five:53",
-        "six:54",
-        "seven:55",
-        "eight:56",
-        "nine:57",
-        "_A:65",
-        "_B:66",
-        "_C:67",
-        "_D:68",
-        "_E:69",
-        "_F:70",
-        "_G:71",
-        "_H:72",
-        "_I:73",
-        "_J:74",
-        "_K:75",
-        "_L:76",
-        "_M:77",
-        "_N:78",
-        "_O:79",
-        "_P:80",
-        "_Q:81",
-        "_R:82",
-        "_S:83",
-        "_T:84",
-        "_U:85",
-        "_V:86",
-        "_W:87",
-        "_X:88",
-        "_Y:89",
-        "_Z:90",
-        "a:97",
-        "b:98",
-        "c:99",
-        "d:100",
-        "e:101",
-        "f:102",
-        "g:103",
-        "h:104",
-        "i:105",
-        "j:106",
-        "k:107",
-        "l:108",
-        "m:109",
-        "n:110",
-        "o:111",
-        "p:112",
-        "q:113",
-        "r:114",
-        "s:115",
-        "t:116",
-        "u:117",
-        "v:118",
-        "w:119",
-        "x:120",
-        "y:121",
-        "z:122"
-      ]
-    },
-    "63aa2314e8b147c8b284dfb39a9e10d19caad5faea848e3cb9849d9167d6344a": {
-      "List": [
-        "fba958721a3d335406b368c36f5a82790960cce239febcafe189ba9839d5da78",
-        {
-          "min": 1,
-          "max": 255
-        }
-      ]
-    },
-    "805ec5bc5312c84190445da16aa1c08a09e300e8323acfae6a23420a29ad003d": {
-      "Tuple": [
-        "c43a7d9eb9b3027973c98f5dd6e1ac04f5cbd34240c0bebc0a0fb808140094d4"
-      ]
-    },
-    "822380f475f0edb4b5dc517991de7390ada2dbb3752c4c066851aa01630296c2": {
-      "Enum": [
-        "_A:65",
-        "_B:66",
-        "_C:67",
-        "_D:68",
-        "_E:69",
-        "_F:70",
-        "_G:71",
-        "_H:72",
-        "_I:73",
-        "_J:74",
-        "_K:75",
-        "_L:76",
-        "_M:77",
-        "_N:78",
-        "_O:79",
-        "_P:80",
-        "_Q:81",
-        "_R:82",
-        "_S:83",
-        "_T:84",
-        "_U:85",
-        "_V:86",
-        "_W:87",
-        "_X:88",
-        "_Y:89",
-        "_Z:90",
-        "a:97",
-        "b:98",
-        "c:99",
-        "d:100",
-        "e:101",
-        "f:102",
-        "g:103",
-        "h:104",
-        "i:105",
-        "j:106",
-        "k:107",
-        "l:108",
-        "m:109",
-        "n:110",
-        "o:111",
-        "p:112",
-        "q:113",
-        "r:114",
-        "s:115",
-        "t:116",
-        "u:117",
-        "v:118",
-        "w:119",
-        "x:120",
-        "y:121",
-        "z:122"
-      ]
-    },
-    "888c5865633af13b95b7cd1a8d8af2dac1dc140b977251d9d4daf3c7511c8e84": {
-      "Tuple": [
-        "5ca149585de534ee91b3e3a030b7efd4cdb79abea9152f101f3759b4c7210e1f"
-      ]
-    },
-    "b070d38ff6d20c5ae5d80715ca31541d5a52bbdecbd3529d38e6ddb672200997": {
-      "Tuple": [
-        "1cb0758e14c2008c0f008ce6d2d41e9e1937e1cd0f9914c59a7e29e1ce7ba0bb"
-      ]
-    },
-    "b10ddefe8020add8a0ca08292150abb13c514d76de5168c1c97105a27e676660": {
-      "Struct": [
-        {
-          "name": "type",
-          "ty": "1cb0758e14c2008c0f008ce6d2d41e9e1937e1cd0f9914c59a7e29e1ce7ba0bb"
-        },
-        {
-          "name": "subtype",
-          "ty": "2fd8f27a172712903e6a3e96f0f85c0480b4211a17acd13059fc51d4a4bbde2c"
-        },
-        {
-          "name": "charset",
-          "ty": "2fd8f27a172712903e6a3e96f0f85c0480b4211a17acd13059fc51d4a4bbde2c"
-        }
-      ]
-    },
-    "bf8fcbe9c5395731a6b4cd61fb00dfe7a5d629365339c55aeae087a3b90aaa46": {
-      "List": [
-        "3cd1a29dccad9b917b26305f89a8a4fb2118302a4e73c5ac0a780de6ab005e73",
-        {
-          "min": 0,
-          "max": 63
-        }
-      ]
-    },
-    "c43a7d9eb9b3027973c98f5dd6e1ac04f5cbd34240c0bebc0a0fb808140094d4": {
-      "Tuple": [
-        "48be23172ae884459ae78334a0063f09fa0e317bea8b233ce782a38875e796b8",
-        "f5ad172144ccd2dd62ece74ff0fb14641d936a80c1a0c93ebf97727184897cbc"
-      ]
-    },
-    "caff8faeb38a00a04e3621538f8e61d75a85a465cb0a0e48c3593e7eaa6c5fc7": {
-      "Tuple": [
-        "3f2b72b7c4af1a630cb6d3ff088baf351093ee465b9e7d472a610082e449d7e4"
-      ]
-    },
-    "ccc272928f793803d91f5dad8d51cc986b4332380f9224f7c7c1514d768ebb90": {
-      "Tuple": [
-        "f9170804ddae0479f8d5af74ab3bd202e6ea4172d9a9b93707151adb7fc40ca1",
-        "bf8fcbe9c5395731a6b4cd61fb00dfe7a5d629365339c55aeae087a3b90aaa46"
-      ]
-    },
-    "d7fcbee31ef0a85d5f973bda1b0b8c9e7efbcbc5572577382cacd3bdb4218a01": {
-      "Struct": [
-        {
-          "name": "ticker",
-          "ty": "5b772c8eb15fd74700c79241f60f8fda37e736b3fd462ab017ce4d454efa81aa"
-        },
-        {
-          "name": "name",
-          "ty": "805ec5bc5312c84190445da16aa1c08a09e300e8323acfae6a23420a29ad003d"
-        },
-        {
-          "name": "details",
-          "ty": "45b780258601c526b23b5b4861460a9050e13f35fbbe8305a8001157e4013888"
-        },
-        {
-          "name": "precision",
-          "ty": "5d03c4178da98e7e3f3af343e3997d74201d11f42732cfbea2b04b8e3ff15f22"
-        }
-      ]
-    },
-    "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c": {
-      "Primitive": 0
-    },
-    "dc1e2f52567f725fd730ad84867f0da4c9ba9af0813311dfe4ef3e3c4a612548": {
-      "Tuple": [
-        "43aa7fc5f6f5644fe5a2ae5e1aa99042cdeb879442e34c723ff5827fb133de8a"
-      ]
-    },
-    "e087a83496338799afc48a9211683a427d2bd33e2ea7ebb8a8b880ea4ab4eb81": {
-      "Union": {
-        "none:0": "d83fbee02f0de5b46cf80fe11ef7fdf061c78d975d31ade9eea2bc4099339e6c",
-        "some:1": "dc1e2f52567f725fd730ad84867f0da4c9ba9af0813311dfe4ef3e3c4a612548"
-      }
-    },
-    "f5ad172144ccd2dd62ece74ff0fb14641d936a80c1a0c93ebf97727184897cbc": {
-      "List": [
-        "48be23172ae884459ae78334a0063f09fa0e317bea8b233ce782a38875e796b8",
-        {
-          "min": 0,
-          "max": 39
-        }
-      ]
-    },
-    "f9170804ddae0479f8d5af74ab3bd202e6ea4172d9a9b93707151adb7fc40ca1": {
-      "Enum": [
-        "a:97",
-        "b:98",
-        "c:99",
-        "d:100",
-        "e:101",
-        "f:102",
-        "g:103",
-        "h:104",
-        "i:105",
-        "j:106",
-        "k:107",
-        "l:108",
-        "m:109",
-        "n:110",
-        "o:111",
-        "p:112",
-        "q:113",
-        "r:114",
-        "s:115",
-        "t:116",
-        "u:117",
-        "v:118",
-        "w:119",
-        "x:120",
-        "y:121",
-        "z:122"
-      ]
-    },
-    "fba958721a3d335406b368c36f5a82790960cce239febcafe189ba9839d5da78": "UnicodeChar"
-  },
-  "scripts": [
-    {
-      "isae": [
-        "ALU",
-        "BPDIGEST",
-        "RGB"
-      ],
-      "code": [
-        11,
-        0,
-        0,
-        0,
-        208,
-        160,
-        15,
-        1,
-        7,
-        11,
-        0,
-        1,
-        0,
-        11,
-        8,
-        0,
-        0,
-        11,
-        1,
-        2,
-        0,
-        200,
-        218,
-        7,
-        1,
-        57,
-        48,
-        0,
-        209,
-        160,
-        15,
-        1,
-        7
-      ],
-      "data": [
-        0,
-        1,
-        0,
-        0
-      ],
-      "libs": []
     }
   ]
 }

@@ -1,9 +1,10 @@
 {
   "version": 2,
-  "inputs": [
+  "lock_time": 0,
+  "input": [
     {
-      "prevOutput": "4caa17eae3f082765ce50dceaddd4e0ec4cef41d162bd42a3bbbbb076de649a7:1",
-      "sigScript": "",
+      "previous_output": "4caa17eae3f082765ce50dceaddd4e0ec4cef41d162bd42a3bbbbb076de649a7:1",
+      "script_sig": "",
       "sequence": 0,
       "witness": [
         "3045022100cbe68467f587b7988836921e51b054a45b64967fd8bf2f91edb1aef8a6a97b5202202a8806310d4a5a35ca74e0617b2f279bf36feedaa390233f50ea6593445989d501",
@@ -11,15 +12,14 @@
       ]
     }
   ],
-  "outputs": [
+  "output": [
     {
       "value": 0,
-      "scriptPubkey": "6a2004b86f6d44449be00a1b75a13d671ad44da9b388367102b2a6ee668389313b5b"
+      "script_pubkey": "6a2004b86f6d44449be00a1b75a13d671ad44da9b388367102b2a6ee668389313b5b"
     },
     {
       "value": 99999600,
-      "scriptPubkey": "00148467a4cb9231d8da59df02de1a82ce5761b6d59e"
+      "script_pubkey": "00148467a4cb9231d8da59df02de1a82ce5761b6d59e"
     }
-  ],
-  "lockTime": 0
+  ]
 }
