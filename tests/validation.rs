@@ -570,7 +570,7 @@ fn consignment_data_reads_rules_from_the_stash() {
         .validate(&asset_schema.schema_rules(), &resolver, &validation_config)
         .unwrap();
 
-    let mut stock = Stock::in_memory();
+    let mut stock = sql::open_in_memory().unwrap();
 
     // the schema is unknown until its definition is imported
     assert!(stock.consignment_data(&valid).is_err());
@@ -667,7 +667,7 @@ fn schema_definition_rejects_tampered_type_lib() {
     );
 
     // and a stash refuses to take it
-    let mut stock = Stock::in_memory();
+    let mut stock = sql::open_in_memory().unwrap();
     assert!(stock.import_schema_definition(tampered).is_err());
     assert!(stock.import_schema_definition(schema_def).is_ok());
 }

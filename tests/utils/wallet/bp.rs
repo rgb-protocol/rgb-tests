@@ -41,13 +41,13 @@ impl BpTestWallet {
             let bp_wallet_provider = FsTextStore::new(bp_dir).unwrap();
             bp_wallet.make_persistent(bp_wallet_provider, true).unwrap();
             bp_wallet.set_name(name.to_string());
-            let mut stock = Stock::in_memory();
-            let stock_provider = FsBinStore::new(wallet_dir.clone()).unwrap();
-            stock.make_persistent(stock_provider, true).unwrap();
-            RgbWallet::new(stock, bp_wallet)
+            let stock = sql::open(wallet_dir.join("stock.db")).unwrap();
+            SqlWallet::new(stock, bp_wallet)
         } else {
             // load wallet
-            RgbWallet::load(wallet_dir.clone(), bp_dir, true).unwrap()
+            let stock = sql::open(wallet_dir.join("stock.db")).unwrap();
+            let bp_wallet = BpWallet::load(FsTextStore::new(bp_dir).unwrap(), true).unwrap();
+            SqlWallet::new(stock, bp_wallet)
         };
         println!(
             "wallet dir: {wallet_dir:?} ({})",

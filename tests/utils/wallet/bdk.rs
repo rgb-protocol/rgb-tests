@@ -46,13 +46,9 @@ impl BdkTestWallet {
             .create_wallet(&mut db)
             .unwrap();
 
-        let stock_path = wallet_dir.join("stock");
-        let mut stock = Stock::in_memory();
-        stock
-            .make_persistent(FsBinStore::new(stock_path).unwrap(), true)
-            .unwrap();
+        let stock = sql::open(wallet_dir.join("stock.db")).unwrap();
 
-        let mut wallet = RgbWallet::new(stock, bdk_wallet);
+        let mut wallet = SqlWallet::new(stock, bdk_wallet);
 
         // Consignments carry only the schema id, so every schema this wallet
         // may issue or receive has to be known up-front, out-of-band.

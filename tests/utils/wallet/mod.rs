@@ -6,6 +6,8 @@ mod bp;
 pub use bdk::*;
 pub use bp::*;
 
+pub type SqlWallet<W> = rgb::RgbWallet<W, SqlStash, SqlState, SqlIndex>;
+
 pub enum AllocationFilter {
     Stock,
     Wallet,
@@ -26,9 +28,9 @@ impl AllocationFilter {
 
 pub enum Filter<'w, W: WalletProvider> {
     NoWallet,
-    Wallet(&'w RgbWallet<W>),
-    WalletAll(&'w RgbWallet<W>),
-    WalletTentative(&'w RgbWallet<W>),
+    Wallet(&'w SqlWallet<W>),
+    WalletAll(&'w SqlWallet<W>),
+    WalletTentative(&'w SqlWallet<W>),
 }
 
 impl<W: WalletProvider> AssignmentsFilter for Filter<'_, W> {
@@ -967,7 +969,7 @@ pub fn uda_token_data(
 }
 
 pub struct TestWallet<W: WalletProvider, D> {
-    pub wallet: RgbWallet<W>,
+    pub wallet: SqlWallet<W>,
     aux: D,
     wallet_dir: PathBuf,
     instance: u8,
@@ -1145,11 +1147,11 @@ where
         self.schema_id(contract_id).into()
     }
 
-    pub fn stock(&self) -> &Stock {
+    pub fn stock(&self) -> &SqliteStock {
         self.wallet.stock()
     }
 
-    pub fn stock_mut(&mut self) -> &mut Stock {
+    pub fn stock_mut(&mut self) -> &mut SqliteStock {
         self.wallet.stock_mut()
     }
 
@@ -1441,7 +1443,7 @@ where
         let accept_start = Instant::now();
         self.wallet
             .stock_mut()
-            .accept_transfer(validated_consignment.clone(), &resolver)
+            .accept_transfer(validated_consignment.clone(), resolver)
             .unwrap();
         let accept_duration = accept_start.elapsed();
         if let Some(report) = report {
@@ -1464,17 +1466,14 @@ where
             .unwrap();
     }
 
-    pub fn contract_data(
-        &self,
-        contract_id: ContractId,
-    ) -> ContractData<MemContract<&MemContractState>> {
+    pub fn contract_data(&self, contract_id: ContractId) -> ContractData<SqlContractReader> {
         self.wallet.stock().contract_data(contract_id).unwrap()
     }
 
     pub fn contract_wrapper<C: IssuerWrapper>(
         &self,
         contract_id: ContractId,
-    ) -> C::Wrapper<MemContract<&MemContractState>> {
+    ) -> C::Wrapper<SqlContractReader> {
         self.wallet
             .stock()
             .contract_wrapper::<C>(contract_id)
@@ -1538,7 +1537,11 @@ where
     }
 
     pub fn list_contracts(&self) -> Vec<ContractInfo> {
-        self.wallet.stock().contracts().unwrap().collect()
+        self.wallet
+            .stock()
+            .contracts()
+            .map(|r| r.expect("stash read"))
+            .collect()
     }
 
     pub fn debug_contracts(&self) {
@@ -1564,7 +1567,7 @@ where
         println!("\nOwned:");
         fn witness<S: KnownState>(
             allocation: &OutputAssignment<S>,
-            contract: &ContractData<MemContract<&MemContractState>>,
+            contract: &ContractData<SqlContractReader>,
         ) -> String {
             allocation
                 .witness

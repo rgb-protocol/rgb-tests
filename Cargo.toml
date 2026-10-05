@@ -65,6 +65,7 @@ rgb-api = { path = "./rgb-api", features = [
     "electrum_blocking",
     "esplora_blocking",
     "fs",
+    "sqlite",
 ] }
 rgb-psbt-utils = { path = "./rgb-api/psbt", features = [
     "bp",
@@ -77,6 +78,7 @@ rgb-consensus = { path = "./rgb-consensus" }
 rgb-ops = { path = "./rgb-ops", features = [
     "fs",
     "legacy",
+    "sqlite",
 ] }
 ## rgb-schemas
 rgb-schemas = { path = "./rgb-schemas" }

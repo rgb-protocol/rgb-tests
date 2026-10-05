@@ -147,7 +147,7 @@ pub use rgb::{
     invoice::{AddressPayload, Pay2Vout},
     opret::OpretProof,
     pay::{PsbtMeta, TxParams},
-    persistence::{ContractAssignments, MemContract, MemContractState, MemError, Stock},
+    persistence::{ContractAssignments, MemContract, MemContractState, MemError, sql},
     rgbasm,
     stl::{ContractTerms, RejectListUrl, StandardTypes, rgb_contract_stl},
     tapret::{TapretNodePartner, TapretRightBranch},
@@ -200,7 +200,11 @@ pub use rgbstd::{
     // `Indexer` is aliased since `utils::chain` has an enum by that name
     indexers::{AnyResolver, ResolveSpvProof},
     invoice::{Beneficiary, RgbInvoice, RgbInvoiceBuilder, XChainNet},
-    persistence::{ContractStateRead, StashReadProvider, StockError, fs::FsBinStore},
+    persistence::{
+        ContractStateRead, StashReadProvider, StockError,
+        fs::FsBinStore,
+        sql::{SqlContractReader, SqlIndex, SqlStash, SqlState, SqliteStock},
+    },
     schema::SchemaId,
     stl::{
         AssetSpec, Attachment, Details, EmbeddedMedia, MediaType, Name, ProofOfReserves,
