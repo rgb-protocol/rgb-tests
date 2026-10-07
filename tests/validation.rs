@@ -5999,3 +5999,81 @@ fn normal_consignment_armoring() {
     consignment.save(&mut container).unwrap();
     assert_eq!(Transfer::load(&container[..]).unwrap(), consignment);
 }
+
+#[cfg(unix)]
+#[test]
+#[ignore = "fails until the rgb-strict-encoding prealloc cap lands"]
+fn bundles_size_alloc_bomb() {
+    const F1_CHILD_ENV: &str = "RGB_TESTS_F1_CONSIGNMENT_BOMB";
+
+    /// Caps the address space of the current process to model a memory-limited reader.
+    fn cap_address_space(cap_mib: u64) {
+        unsafe {
+            let mut lim = libc::rlimit {
+                rlim_cur: 0,
+                rlim_max: 0,
+            };
+            libc::getrlimit(libc::RLIMIT_AS, &mut lim);
+            let cap = cap_mib << 20;
+            lim.rlim_cur = cap.min(lim.rlim_max);
+            libc::setrlimit(libc::RLIMIT_AS, &lim);
+        }
+    }
+
+    /// Takes a valid consignment and inflates its `bundles` length prefix to 0xFFFF_FFFF.
+    fn forged_consignment_bytes() -> Vec<u8> {
+        let transfer = get_consignment_from_json("consignment_A");
+        let mut bytes = transfer
+            .to_strict_serialized::<{ usize::MAX }>()
+            .unwrap()
+            .release();
+
+        let first_bundle = transfer
+            .bundles
+            .iter()
+            .next()
+            .expect("consignment_A has at least one witness bundle");
+        let bundle_bytes: Vec<u8> = first_bundle
+            .strict_encode(StrictWriter::in_memory::<{ usize::MAX }>())
+            .unwrap()
+            .unbox()
+            .unconfine();
+        let bundle_start = bytes
+            .windows(bundle_bytes.len())
+            .position(|w| w == bundle_bytes)
+            .expect("first bundle encoding must appear in the consignment");
+        let prefix = bundle_start - 4;
+
+        bytes[prefix..prefix + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        bytes
+    }
+
+    if std::env::var(F1_CHILD_ENV).is_ok() {
+        // this code is executed in a subprocess
+        cap_address_space(8192); // 8 GiB
+        let bytes = forged_consignment_bytes();
+        let confined = Confined::try_from(bytes).unwrap();
+        let res = Transfer::from_strict_serialized::<{ usize::MAX }>(confined);
+        assert!(res.is_err());
+        return;
+    }
+
+    // run from_strict_serialized in a dedicated process
+    let exe = std::env::current_exe().unwrap();
+    let out = std::process::Command::new(exe)
+        .args([
+            "bundles_size_alloc_bomb",
+            "--exact",
+            "--nocapture",
+            "--include-ignored",
+        ])
+        .env(F1_CHILD_ENV, "1")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "child process failed ({}):\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

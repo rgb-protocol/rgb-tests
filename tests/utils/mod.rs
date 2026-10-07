@@ -237,7 +237,9 @@ pub use serde_json::{Value, json};
 pub use serial_test::serial;
 pub use signal_hook::consts::{SIGINT, SIGTERM};
 pub use signal_hook::flag::register;
-pub use strict_encoding::{FieldName, StrictSerialize, TypeName, fname, libname, strict_dumb, tn};
+pub use strict_encoding::{
+    FieldName, StrictSerialize, StrictWriter, TypeName, fname, libname, strict_dumb, tn,
+};
 pub use strict_types::ast::{Field, NamedFields};
 pub use strict_types::{
     LibRef, SemId, StrictDecode, StrictDeserialize, StrictDumb, StrictEncode, StrictType,
