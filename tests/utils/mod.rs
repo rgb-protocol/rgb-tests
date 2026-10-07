@@ -172,8 +172,8 @@ pub use rgb::{
     },
 };
 pub use rgbcore::{
-    Txid, Vout,
-    commit_verify::mpc,
+    GlobalCommitment, Txid, Vout,
+    commit_verify::{CommitId, MerkleHash, mpc},
     dbc::tapret::{TapretCommitment, TapretProof},
     seals::txout::TxPtr,
     seals::txout::{BlindSeal, CloseMethod, ExplicitSeal},
@@ -237,11 +237,11 @@ pub use serde_json::{Value, json};
 pub use serial_test::serial;
 pub use signal_hook::consts::{SIGINT, SIGTERM};
 pub use signal_hook::flag::register;
-pub use strict_encoding::{FieldName, StrictSerialize, TypeName, fname, strict_dumb, tn};
+pub use strict_encoding::{FieldName, StrictSerialize, TypeName, fname, libname, strict_dumb, tn};
 pub use strict_types::ast::{Field, NamedFields};
 pub use strict_types::{
     LibRef, SemId, StrictDecode, StrictDeserialize, StrictDumb, StrictEncode, StrictType,
-    StrictVal, Ty, TypeLibId, TypeSystem,
+    StrictVal, Ty, TypeLibId, TypeSystem, stl::std_stl, typelib::LibBuilder,
 };
 pub use strum::{EnumIter, IntoEnumIterator};
 pub use time::OffsetDateTime;
