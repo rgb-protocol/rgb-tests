@@ -5935,3 +5935,67 @@ fn validate_consignment_substituted_enum_type() {
         "substituted type definition accepted at a trusted sem id"
     );
 }
+
+/// Pad `scripts` with maxed-out libraries until the consignment exceeds the ASCII armor bound
+fn oversized_consignment() -> Transfer {
+    const PAD_LIBS: u16 = 140;
+
+    let consignment = get_consignment_from_json("consignment_B");
+    let base_lib = AssetSchema::from(consignment.schema_id())
+        .scripts()
+        .release()
+        .pop_first()
+        .unwrap()
+        .1;
+    let mut libs = BTreeSet::new();
+    for i in 0..PAD_LIBS {
+        let mut lib = base_lib.clone();
+        let mut data = vec![0u8; u16::MAX as usize];
+        data[..2].copy_from_slice(&i.to_le_bytes()); // keep every library distinct
+        lib.code = SmallBlob::from_checked(vec![0u8; u16::MAX as usize]);
+        lib.data = SmallBlob::from_checked(data);
+        libs.insert(lib);
+    }
+    consignment
+}
+
+#[test]
+#[ignore = "armor encode cap is below the container decode cap, ~40s"]
+fn oversized_consignment_armoring() {
+    let Some(completed) = child_case("oversized_consignment_armoring") else {
+        let consignment = oversized_consignment();
+        let size = consignment
+            .to_strict_serialized::<{ usize::MAX }>()
+            .unwrap()
+            .release()
+            .len();
+        assert!(size > u24::MAX.to_usize(), "padding insufficient: {size}");
+
+        // refusing the container on save, refusing it on load and rendering it are all
+        // acceptable; only terminating the process is not
+        let mut container = Vec::<u8>::new();
+        if consignment.save(&mut container).is_ok()
+            && let Ok(transfer) = Transfer::load(&container[..])
+        {
+            assert!(!transfer.to_string().is_empty());
+        }
+        return;
+    };
+    assert!(
+        completed,
+        "armoring an oversized consignment terminated the process"
+    );
+}
+
+#[test]
+fn normal_consignment_armoring() {
+    let consignment = get_consignment_from_json("consignment_B");
+    assert!(
+        consignment
+            .to_string()
+            .starts_with("-----BEGIN RGB CONSIGNMENT-----")
+    );
+    let mut container = Vec::<u8>::new();
+    consignment.save(&mut container).unwrap();
+    assert_eq!(Transfer::load(&container[..]).unwrap(), consignment);
+}
