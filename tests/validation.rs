@@ -5448,3 +5448,74 @@ fn validate_consignment_global_state_count_in_range() {
         "validating 255 global state items terminated the process"
     );
 }
+
+#[test]
+#[ignore = "decoder discards the declared RString sizing and charset"]
+fn validate_consignment_out_of_bounds_global_state() {
+    // AssetSpec: ticker of 255 '@' (declared RString<Alpha, AlphaNum, 1, 8>), empty name
+    // (declared min 1), no details, precision centi
+    let mut blob_hex = String::from("ff");
+    for _ in 0..255 {
+        blob_hex.push_str("40");
+    }
+    blob_hex.push_str("000002");
+
+    let bytes = Vec::<u8>::from_hex(&blob_hex).unwrap();
+    assert!(
+        AssetSpec::from_strict_serialized::<0xFFFF>(Confined::try_from(bytes).unwrap()).is_err(),
+        "blob must violate RGBContract.AssetSpec"
+    );
+
+    let scenario = Scenario::B;
+    let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let old_genesis_opid = base_consignment.genesis.id();
+
+    let cons_path = format!("tests/fixtures/consignment_{scenario}.json");
+    let file = std::fs::File::open(cons_path).unwrap();
+    let mut json_consignment: Value = serde_json::from_reader(file).unwrap();
+    *json_consignment
+        .get_mut("genesis")
+        .unwrap()
+        .get_mut("globals")
+        .unwrap()
+        .get_mut("2000") // GS_NOMINAL
+        .unwrap()
+        .get_mut(0)
+        .unwrap() = Value::String(blob_hex);
+
+    // rewriting genesis re-ids it and the contract, so realign every bundle
+    let mut consignment = transfer_from_json_value(&json_consignment);
+    let genesis_opid = consignment.genesis.id();
+    let contract_id = consignment.contract_id();
+    let mut bundles = consignment.bundles.release();
+    update_transition_children(
+        &mut bundles,
+        map! {old_genesis_opid => genesis_opid},
+        map! {},
+        Some(contract_id),
+    );
+    consignment.bundles = LargeVec::from_checked(bundles);
+    consignment.terminals = empty!(); // terminals are now outdated
+
+    let asset_schema_rules = AssetSchema::from(consignment.schema_id()).schema_rules();
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let resolver = OfflineResolver {
+        consignment: &consignment,
+    };
+    let res = consignment
+        .clone()
+        .validate(&asset_schema_rules, &resolver, &validation_config);
+    let sem_id = StandardTypes::with(rgb_contract_stl()).get("RGBContract.AssetSpec");
+    assert_eq!(
+        res.unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SchemaInvalidGlobalValue(
+            genesis_opid,
+            GS_NOMINAL,
+            sem_id
+        )),
+        "global state outside the declared type accepted"
+    );
+}
