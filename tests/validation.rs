@@ -5871,3 +5871,67 @@ fn validate_consignment_noncanonical_global_state_map() {
         );
     }
 }
+
+#[test]
+#[ignore = "Variant equality matches on tag or name"]
+fn validate_consignment_substituted_enum_type() {
+    let scenario = Scenario::B;
+    let resolver = scenario.resolver();
+    let cons_path = format!("tests/fixtures/consignment_{scenario}.json");
+    let file = std::fs::File::open(cons_path).unwrap();
+    let mut json_consignment: Value = serde_json::from_reader(file).unwrap();
+
+    // permute two Precision variant names, leaving the tag set intact
+    let types = json_consignment
+        .get_mut("types")
+        .unwrap()
+        .as_object_mut()
+        .unwrap();
+    let mut precision_sem_id = None;
+    for (sem_id, ty) in types.iter_mut() {
+        let Some(variants) = ty.get_mut("Enum").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        if !variants.iter().any(|v| v == "centi:2") || !variants.iter().any(|v| v == "atto:18") {
+            continue;
+        }
+        for variant in variants.iter_mut() {
+            if variant == "centi:2" {
+                *variant = json!("atto:2");
+            } else if variant == "atto:18" {
+                *variant = json!("centi:18");
+            }
+        }
+        precision_sem_id = Some(sem_id.clone());
+        break;
+    }
+    let precision_sem_id = precision_sem_id.expect("Precision enum");
+    let precision_sem_id: SemId = serde_json::from_value(Value::String(precision_sem_id)).unwrap();
+
+    let consignment = transfer_from_json_value(&json_consignment);
+    let substituted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
+
+    // 0x02 is the trailing precision byte of the GS_NOMINAL blob the consignment ships
+    assert_ne!(
+        trusted_typesystem
+            .strict_deserialize_type(precision_sem_id, &[2u8])
+            .unwrap()
+            .unbox(),
+        substituted_typesystem
+            .strict_deserialize_type(precision_sem_id, &[2u8])
+            .unwrap()
+            .unbox(),
+    );
+
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let rules = AssetSchema::from(consignment.schema_id()).schema_rules();
+    let res = consignment.validate(&rules, &resolver, &validation_config);
+    assert!(
+        res.is_err(),
+        "substituted type definition accepted at a trusted sem id"
+    );
+}
