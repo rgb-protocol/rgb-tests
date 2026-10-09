@@ -6154,6 +6154,46 @@ fn validate_consignment_script_call_off_end() {
     );
 }
 
+/// `splt`, `ins` and `del` with zeroed operands, each followed by `ret`: byte string opcodes that
+/// decode, so a validator library may use them
+const UNIMPLEMENTED_BYTES_OPS: [(&str, &[u8]); 3] = [
+    ("splt", &[0x3c, 0x00, 0x00, 0x00, 0x07]),
+    ("ins", &[0x3d, 0x00, 0x00, 0x07]),
+    ("del", &[0x3e, 0x00, 0x00, 0x00, 0x07]),
+];
+
+#[test]
+#[ignore = "splt, ins and del are unimplemented"]
+fn validate_consignment_script_unimplemented_bytes_ops() {
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    for (op, code) in UNIMPLEMENTED_BYTES_OPS {
+        let (consignment, rules) = scripted_transfer(code.to_vec(), 0);
+        let opid = consignment.bundles[0]
+            .bundle
+            .known_transitions
+            .first()
+            .unwrap()
+            .opid;
+        let resolver = OfflineResolver {
+            consignment: &consignment,
+        };
+        let res = consignment
+            .clone()
+            .validate(&rules, &resolver, &validation_config);
+        assert!(
+            matches!(
+                res,
+                Err(ValidationError::InvalidConsignment(Failure::ScriptFailure(id, _, _)))
+                    if id == opid
+            ),
+            "{op}: a validator using an unimplemented opcode was not rejected: {res:?}"
+        );
+    }
+}
+
 /// Build a UDA contract whose `tokens` global state holds two attachments, under keys 1 and 2
 fn uda_contract_with_two_attachments() -> (Consignment<false>, GlobalStateType, Vec<u8>, usize) {
     let att_a = attachment_from_fpath(MEDIA_FPATH);
