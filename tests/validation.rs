@@ -6138,7 +6138,6 @@ fn permute_precision_names(v: &mut Value) -> usize {
 
 /// V1 consignments carry no types, so the substitution is checked on the type systems
 #[test]
-#[ignore = "decoding a Unicode character is unimplemented"]
 fn validate_consignment_unicode_char_global_state() {
     // a type library shipped with the schema definition may declare a bare Unicode character,
     // which no derived Rust type produces but the type system accepts
