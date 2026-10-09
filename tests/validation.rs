@@ -6002,7 +6002,6 @@ fn normal_consignment_armoring() {
 
 #[cfg(unix)]
 #[test]
-#[ignore = "fails until the rgb-strict-encoding prealloc cap lands"]
 fn bundles_size_alloc_bomb() {
     const F1_CHILD_ENV: &str = "RGB_TESTS_F1_CONSIGNMENT_BOMB";
 
