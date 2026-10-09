@@ -6163,7 +6163,6 @@ const UNIMPLEMENTED_BYTES_OPS: [(&str, &[u8]); 3] = [
 ];
 
 #[test]
-#[ignore = "splt, ins and del are unimplemented"]
 fn validate_consignment_script_unimplemented_bytes_ops() {
     let validation_config = ValidationConfig {
         chain_net: ChainNet::BitcoinRegtest,
