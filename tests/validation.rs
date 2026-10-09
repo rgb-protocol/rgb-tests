@@ -5450,7 +5450,6 @@ fn validate_consignment_global_state_count_in_range() {
 }
 
 #[test]
-#[ignore = "decoder discards the declared RString sizing and charset"]
 fn validate_consignment_out_of_bounds_global_state() {
     // AssetSpec: ticker of 255 '@' (declared RString<Alpha, AlphaNum, 1, 8>), empty name
     // (declared min 1), no details, precision centi
