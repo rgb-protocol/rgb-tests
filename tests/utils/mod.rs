@@ -243,7 +243,8 @@ pub use strict_encoding::{
 pub use strict_types::ast::{Field, NamedFields};
 pub use strict_types::{
     LibRef, SemId, StrictDecode, StrictDeserialize, StrictDumb, StrictEncode, StrictType,
-    StrictVal, Ty, TypeLibId, TypeSystem, stl::std_stl, typelib::LibBuilder,
+    StrictVal, SystemBuilder, Ty, TypeLib, TypeLibId, TypeSystem, stl::std_stl,
+    typelib::LibBuilder,
 };
 pub use strum::{EnumIter, IntoEnumIterator};
 pub use time::OffsetDateTime;
