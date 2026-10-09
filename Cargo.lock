@@ -2480,7 +2480,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-aluvm"
-version = "0.11.1"
+version = "0.11.2-rc.1"
 dependencies = [
  "amplify",
  "baid64",
@@ -2497,7 +2497,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-api"
-version = "0.11.1"
+version = "0.11.2-rc.1"
 dependencies = [
  "amplify",
  "baid64",
@@ -2516,7 +2516,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-ascii-armor"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "amplify",
  "baid64",
@@ -2527,7 +2527,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-consensus"
-version = "0.11.1"
+version = "0.11.2-rc.1"
 dependencies = [
  "amplify",
  "baid64",
@@ -2552,7 +2552,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-invoicing"
-version = "0.11.1"
+version = "0.11.2-rc.1"
 dependencies = [
  "amplify",
  "baid64",
@@ -2568,7 +2568,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-ops"
-version = "0.11.1"
+version = "0.11.2-rc.1"
 dependencies = [
  "amplify",
  "baid64",
@@ -2591,7 +2591,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-psbt-utils"
-version = "0.11.1"
+version = "0.11.2-rc.1"
 dependencies = [
  "amplify",
  "bp-std",
@@ -2604,7 +2604,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-schemas"
-version = "0.11.1"
+version = "0.11.2-rc.1"
 dependencies = [
  "amplify",
  "rgb-aluvm",
@@ -2614,7 +2614,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-strict-encoding"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "amplify",
  "bitcoin",
@@ -2625,7 +2625,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-strict-encoding-derive"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "amplify_syn",
  "heck",
@@ -2636,7 +2636,7 @@ dependencies = [
 
 [[package]]
 name = "rgb-strict-types"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "amplify",
  "baid64",
