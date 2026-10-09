@@ -5810,7 +5810,6 @@ fn uda_contract_with_two_attachments() -> (Consignment<false>, GlobalStateType, 
 }
 
 #[test]
-#[ignore = "map decoding checks neither key order nor uniqueness"]
 fn validate_consignment_noncanonical_global_state_map() {
     use rgbstd::GlobalValues;
 
