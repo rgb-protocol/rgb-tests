@@ -3266,7 +3266,7 @@ fn contract_linking() {
             address: EvmAddress::default(),
         }),
         None,
-        mint_right_utxo,
+        vec![mint_right_utxo],
     );
     if let AssetInfo::Bfa {
         ref mut link_info, ..
@@ -4204,7 +4204,7 @@ fn bfa_mint_and_transfer(
     let mut wlt_1 = BpTestWallet::with_descriptor(&wlt_1_desc);
     let mut wlt_2 = BpTestWallet::with_descriptor(&wlt_2_desc);
 
-    let contract_id = wlt_1.issue_bfa();
+    let contract_id = wlt_1.issue_bfa(2, None);
 
     // no initial allocations
     wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![], false);
@@ -4355,11 +4355,133 @@ fn bfa_mint_and_transfer(
 }
 
 #[test]
+fn bfa_transfer_mint_right_only() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_bfa(2, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+    let mint_amt: u64 = 1000;
+    wlt_1.mint_bfa(contract_id, mint_amt, 20_000_000);
+
+    let mint_rights_count = |wlt: &BpTestWallet| {
+        wlt.contract_wrapper::<BridgedFungibleAsset>(contract_id)
+            .mint_rights(Filter::Wallet(&wlt.wallet))
+            .count()
+    };
+    assert_eq!(mint_rights_count(&wlt_1), 1);
+
+    // wlt_2 receives both the assets and the mint right on the same UTXO
+    let shared_utxo = wlt_2.get_utxo(None);
+    wlt_1.send_bfa(
+        &mut wlt_2,
+        InvoiceType::Blinded(Some(shared_utxo)),
+        contract_id,
+        mint_amt,
+        2000,
+    );
+    let invoice = wlt_2.invoice_void(
+        contract_id,
+        schema_id,
+        fname!("mintRight"),
+        InvoiceType::Blinded(Some(shared_utxo)),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+    wlt_2.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_1.sync();
+    assert_eq!(mint_rights_count(&wlt_1), 0);
+    assert_eq!(mint_rights_count(&wlt_2), 1);
+    wlt_2.check_allocations(contract_id, AssetSchema::Bfa, vec![mint_amt], false);
+    let shared_outpoints = |wlt: &BpTestWallet| -> Vec<Outpoint> {
+        wlt.contract_wrapper::<BridgedFungibleAsset>(contract_id)
+            .mint_rights(Filter::Wallet(&wlt.wallet))
+            .map(|r| r.unwrap().seal.outpoint().unwrap())
+            .collect()
+    };
+    assert_eq!(shared_outpoints(&wlt_2), vec![shared_utxo]);
+
+    // wlt_2 transfers back only the mint right: the assets on the same UTXO are moved to change
+    let invoice = wlt_1.invoice_void(
+        contract_id,
+        schema_id,
+        fname!("mintRight"),
+        InvoiceType::Blinded(None),
+    );
+    let (consignment, tx, _, _) = wlt_2.pay_full(invoice, None, None, true, None);
+    wlt_2.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+    wlt_1.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_2.sync();
+    assert_eq!(mint_rights_count(&wlt_1), 1);
+    assert_eq!(mint_rights_count(&wlt_2), 0);
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![], false);
+    wlt_2.check_allocations(contract_id, AssetSchema::Bfa, vec![mint_amt], false);
+
+    // the received right is usable
+    wlt_1.mint_bfa(contract_id, 500, 20_000_100);
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![500], false);
+
+    // paying one mint right while holding several: a propagate takes exactly one mint right as
+    // input, so the payment must not sweep up every right the wallet holds
+    let contract_id = wlt_1.issue_bfa(2, None);
+    let mint_rights_count = |wlt: &BpTestWallet| {
+        wlt.contract_wrapper::<BridgedFungibleAsset>(contract_id)
+            .mint_rights(Filter::Wallet(&wlt.wallet))
+            .count()
+    };
+    assert_eq!(mint_rights_count(&wlt_1), 2);
+    let invoice = wlt_2.invoice_void(
+        contract_id,
+        schema_id,
+        fname!("mintRight"),
+        InvoiceType::Blinded(None),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+    wlt_2.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_1.sync();
+    assert_eq!(mint_rights_count(&wlt_1), 1);
+    assert_eq!(mint_rights_count(&wlt_2), 1);
+
+    // two mint rights on the same UTXO: the one not paid cannot ride in the main transition, so
+    // it is moved by an extra transition and has to remain a spendable allocation of the payer
+    let shared_utxo = wlt_1.get_utxo(None);
+    let contract_id = wlt_1.issue_bfa(2, Some(shared_utxo));
+    let mint_right_outpoints = |wlt: &BpTestWallet| -> Vec<Outpoint> {
+        wlt.contract_wrapper::<BridgedFungibleAsset>(contract_id)
+            .mint_rights(Filter::Wallet(&wlt.wallet))
+            .map(|r| r.unwrap().seal.outpoint().unwrap())
+            .collect()
+    };
+    assert_eq!(mint_right_outpoints(&wlt_1), vec![shared_utxo, shared_utxo]);
+    let invoice = wlt_2.invoice_void(
+        contract_id,
+        schema_id,
+        fname!("mintRight"),
+        InvoiceType::Blinded(None),
+    );
+    let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+    wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+    wlt_2.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_1.sync();
+    assert_eq!(mint_right_outpoints(&wlt_2).len(), 1);
+    let remaining = mint_right_outpoints(&wlt_1);
+    assert_eq!(remaining.len(), 1);
+    assert_ne!(remaining[0], shared_utxo);
+
+    // the right moved by the extra transition is usable
+    wlt_1.mint_bfa(contract_id, 500, 20_000_200);
+    wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![500], false);
+}
+
+#[test]
 fn bfa_burn() {
     initialize();
 
     let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
-    let contract_id = wlt_1.issue_bfa();
+    let contract_id = wlt_1.issue_bfa(2, None);
 
     let mint_amt: u64 = 1000;
     wlt_1.mint_bfa(contract_id, mint_amt, 20_000_000);

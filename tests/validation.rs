@@ -386,8 +386,10 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
 
     if let Scenario::E = scenario {
         let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+        let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
-        let contract_id = wlt_1.issue_bfa();
+        let contract_id = wlt_1.issue_bfa(2, None);
+        let schema_id = wlt_1.schema_id(contract_id);
 
         let mut txes = vec![];
 
@@ -395,8 +397,35 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
         let (_consignment, tx) = wlt_1.mint_bfa(contract_id, mint_amt, 20_000_000);
         txes.push(tx);
 
-        // Self-transfer moving both OS_ASSET and OS_MINT forward
-        let (consignment, tx) = wlt_1.bfa_transfer_with_mint_right(contract_id);
+        // wlt_2 receives both the assets and the mint right on the same UTXO
+        let shared_utxo = wlt_2.get_utxo(None);
+        let (_consignment, tx) = wlt_1.send_bfa(
+            &mut wlt_2,
+            InvoiceType::Blinded(Some(shared_utxo)),
+            contract_id,
+            mint_amt,
+            2000,
+        );
+        txes.push(tx);
+        let invoice = wlt_2.invoice_void(
+            contract_id,
+            schema_id,
+            fname!("mintRight"),
+            InvoiceType::Blinded(Some(shared_utxo)),
+        );
+        let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
+        wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+        wlt_2.accept_transfer_bfa(consignment, |_anchor| true);
+        txes.push(tx);
+
+        // Sending the assets moves the mint right too: a transfer and a propagate in one bundle
+        let (consignment, tx) = wlt_2.send_bfa(
+            &mut wlt_1,
+            InvoiceType::Blinded(None),
+            contract_id,
+            mint_amt,
+            2000,
+        );
         txes.push(tx);
 
         return (consignment, txes);
@@ -2655,6 +2684,20 @@ fn last_transition(consignment: &Transfer) -> Transition {
         .clone()
 }
 
+/// The first transition of the given type in the consignment's last bundle.
+fn last_bundle_transition(consignment: &Transfer, ty: TransitionType) -> Transition {
+    consignment
+        .bundles
+        .last()
+        .unwrap()
+        .bundle
+        .known_transitions
+        .iter()
+        .map(|kt| kt.transition.clone())
+        .find(|transition| transition.transition_type == ty)
+        .unwrap_or_else(|| panic!("no transition of type {ty} in the last bundle"))
+}
+
 fn assert_bfa_valid(consignment: Transfer, rules: &SchemaRules, resolver: &MockResolver) {
     let validation_config = ValidationConfig {
         chain_net: ChainNet::BitcoinRegtest,
@@ -2705,27 +2748,33 @@ fn assert_bfa_script_failure(consignment: Transfer, rules: &SchemaRules, opid: O
 }
 
 #[test]
-fn validate_consignment_bfa_mint_right_transfer() {
+fn validate_consignment_bfa_propagate() {
     fn bfa_mutated_transfer(
         base_consignment: &Transfer,
         resolver: &MockResolver,
+        ty: TransitionType,
         mutate: impl FnOnce(&mut Transition),
     ) -> (Transfer, MockResolver, OpId) {
         let mut consignment = base_consignment.clone();
         let mut bundles = consignment.bundles.release();
-        let witness_bundle = bundles.last_mut().unwrap();
+        let witness_bundle = bundles
+            .iter_mut()
+            .rev()
+            .find(|wb| {
+                wb.bundle
+                    .known_transitions
+                    .iter()
+                    .any(|kt| kt.transition.transition_type == ty)
+            })
+            .expect("fixture must carry the transition to mutate");
         let mut transition = witness_bundle
             .bundle
             .known_transitions
-            .last()
-            .unwrap()
-            .transition
-            .clone();
+            .iter()
+            .map(|kt| kt.transition.clone())
+            .find(|transition| transition.transition_type == ty)
+            .unwrap();
         let old_opid = transition.id();
-        assert_eq!(
-            transition.transition_type, TS_TRANSFER,
-            "fixture must end with a transfer transition"
-        );
         mutate(&mut transition);
         let transition_id = transition.id();
         assert_ne!(
@@ -2750,37 +2799,6 @@ fn validate_consignment_bfa_mint_right_transfer() {
         (consignment, alt_resolver, transition_id)
     }
 
-    /// Count the `OS_MINT` inputs and outputs of a transition.
-    fn mint_right_counts(transition: &Transition) -> (usize, usize) {
-        let inputs = transition
-            .inputs
-            .iter()
-            .filter(|opout| opout.ty == OS_MINT)
-            .count();
-        let outputs = transition
-            .assignments
-            .get(&OS_MINT)
-            .map(|assigns| assigns.as_declarative().len())
-            .unwrap_or(0);
-        (inputs, outputs)
-    }
-
-    /// Drop the single `OS_MINT` input of a transition, leaving its other inputs untouched.
-    fn drop_mint_right_input(transition: &mut Transition) {
-        let remaining = transition
-            .inputs
-            .iter()
-            .copied()
-            .filter(|opout| opout.ty != OS_MINT)
-            .collect::<Vec<_>>();
-        assert_eq!(
-            remaining.len() + 1,
-            transition.inputs.len(),
-            "fixture transition must carry exactly one OS_MINT input to drop"
-        );
-        transition.inputs = NonEmptyOrdSet::from_iter_checked(remaining).into();
-    }
-
     /// Assign a second `OS_MINT` output to a transition which already has one.
     fn split_mint_right_output(transition: &mut Transition) {
         let mut rights = transition
@@ -2802,35 +2820,24 @@ fn validate_consignment_bfa_mint_right_transfer() {
             .unwrap();
     }
 
-    /// Append a `transfer` bundle spending every assignment of the consignment's last transition
-    fn append_mint_right_spend(
+    /// Append a `propagate` bundle spending every `OS_MINT` assignment of the consignment's
+    /// propagate transition, keeping only `rights_out` of them as outputs
+    fn append_propagate(
         consignment: &mut Transfer,
         resolver: &MockResolver,
         rights_out: usize,
     ) -> (MockResolver, OpId) {
-        let parent_transition = last_transition(consignment);
+        let parent_transition = last_bundle_transition(consignment, TS_PROPAGATE);
         let parent_opid = parent_transition.id();
-
-        // spend every assignment of the parent transition
-        let inputs = parent_transition
-            .assignments
-            .iter()
-            .flat_map(|(ty, assigns)| {
-                (0..assigns.len_u16()).map(|no| Opout::new(parent_opid, *ty, no))
-            })
-            .collect::<Vec<_>>();
-
-        // re-assign everything, keeping only `rights_out` of the mint rights
         let mut rights = parent_transition
             .assignments
             .get(&OS_MINT)
             .expect("parent transition must carry OS_MINT outputs")
             .as_declarative()
             .to_vec();
-        assert!(
-            rights_out <= rights.len(),
-            "parent transition carries fewer than {rights_out} OS_MINT outputs"
-        );
+        let inputs = (0..rights.len() as u16)
+            .map(|no| Opout::new(parent_opid, OS_MINT, no))
+            .collect::<Vec<_>>();
         rights.truncate(rights_out);
         let mut transition = Transition {
             inputs: NonEmptyOrdSet::from_iter_checked(inputs).into(),
@@ -2846,83 +2853,206 @@ fn validate_consignment_bfa_mint_right_transfer() {
         let opid = transition.id();
         (append_bundle(consignment, resolver, transition), opid)
     }
+
     let scenario = Scenario::E;
     let resolver = scenario.resolver();
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let asset_schema_rules = AssetSchema::from(base_consignment.schema_id()).schema_rules();
 
     // valid, 1 -> 1: the unmutated fixture
-    let consignment = base_consignment.clone();
-    assert_eq!(mint_right_counts(&last_transition(&consignment)), (1, 1));
-    assert_bfa_valid(consignment, &asset_schema_rules, &resolver);
+    let propagate = last_bundle_transition(&base_consignment, TS_PROPAGATE);
+    assert_eq!(propagate.inputs.len(), 1);
+    assert_bfa_valid(base_consignment.clone(), &asset_schema_rules, &resolver);
 
     // valid, 1 -> 2: a right may be split
     let (consignment, alt_resolver, _) =
-        bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
+        bfa_mutated_transfer(&base_consignment, &resolver, TS_PROPAGATE, |transition| {
             split_mint_right_output(transition);
-            assert_eq!(mint_right_counts(transition), (1, 2));
         });
     assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
 
-    // valid, 0 -> 0: a plain asset transfer, carrying no mint right
-    let (consignment, alt_resolver, _) =
-        bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
-            drop_mint_right_input(transition);
-            transition
-                .assignments
-                .remove(&OS_MINT)
-                .expect("fixture transition must carry an OS_MINT output");
-            assert_eq!(mint_right_counts(transition), (0, 0));
-        });
+    // valid, 1 -> 1 -> 1: a propagated right may be propagated again
+    let mut consignment = base_consignment.clone();
+    let (alt_resolver, _) = append_propagate(&mut consignment, &resolver, 1);
     assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
 
-    // valid, 2 -> 2: two rights can be moved in the same transfer
-    let (mut consignment, alt_resolver, _) =
-        bfa_mutated_transfer(&base_consignment, &resolver, split_mint_right_output);
-    let (alt_resolver, _) = append_mint_right_spend(&mut consignment, &alt_resolver, 2);
-    assert_eq!(mint_right_counts(&last_transition(&consignment)), (2, 2));
+    // SchemaAssignmentOccurrences, 1 -> 0: propagate doesn't allow a hidden burn
+    let (consignment, _, opid) =
+        bfa_mutated_transfer(&base_consignment, &resolver, TS_PROPAGATE, |transition| {
+            transition.assignments.remove(&OS_MINT).unwrap();
+        });
+    assert!(matches!(
+        consignment
+            .validate_deterministic(&asset_schema_rules, &ValidationConfig {
+                chain_net: ChainNet::BitcoinRegtest,
+                ..Default::default()
+            })
+            .unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SchemaAssignmentOccurrences(id, OS_MINT, _))
+            if id == opid
+    ));
+
+    // SchemaInputOccurrences, 2 -> 2: propagate spends exactly one right
+    let (mut consignment, alt_resolver, _) = bfa_mutated_transfer(
+        &base_consignment,
+        &resolver,
+        TS_PROPAGATE,
+        split_mint_right_output,
+    );
+    let (_, opid) = append_propagate(&mut consignment, &alt_resolver, 2);
+    assert!(matches!(
+        consignment
+            .validate_deterministic(&asset_schema_rules, &ValidationConfig {
+                chain_net: ChainNet::BitcoinRegtest,
+                ..Default::default()
+            })
+            .unwrap_err(),
+        ValidationError::InvalidConsignment(Failure::SchemaInputOccurrences(id, OS_MINT, _))
+            if id == opid
+    ));
+
+    // SchemaUnknownAssignmentType: neither transfer nor mint can carry mint rights
+    for ty in [TS_TRANSFER, TS_MINT] {
+        let (consignment, _, opid) =
+            bfa_mutated_transfer(&base_consignment, &resolver, ty, |transition| {
+                transition
+                    .assignments
+                    .insert(
+                        OS_MINT,
+                        TypedAssigns::Declarative(
+                            NonEmptyVec::with(Assign::with(
+                                BuilderSeal::Revealed(GraphSeal::new_random_vout(0)),
+                                VoidState::strict_dumb(),
+                            ))
+                            .into(),
+                        ),
+                    )
+                    .unwrap();
+            });
+        assert_eq!(
+            consignment
+                .validate_deterministic(
+                    &asset_schema_rules,
+                    &ValidationConfig {
+                        chain_net: ChainNet::BitcoinRegtest,
+                        ..Default::default()
+                    }
+                )
+                .unwrap_err(),
+            ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(
+                opid, OS_MINT
+            )),
+            "{ty:?} must not output mint rights"
+        );
+    }
+}
+
+#[rstest]
+#[case(TransferType::Witness)]
+#[case(TransferType::Blinded)]
+fn validate_consignment_bfa_propagate_and_mint_same_bundle(#[case] mint_type: TransferType) {
+    let scenario = Scenario::E;
+    let resolver = scenario.resolver();
+    let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let asset_schema_rules = AssetSchema::from(base_consignment.schema_id()).schema_rules();
+
+    // reuse the fixture's mint as a template
+    let mint_template = base_consignment
+        .bundles
+        .iter()
+        .flat_map(|wb| wb.bundle.known_transitions.iter())
+        .map(|kt| kt.transition.clone())
+        .find(|transition| transition.transition_type == TS_MINT)
+        .expect("fixture must carry a mint transition");
+    let minted = mint_template
+        .assignments
+        .get(&OS_ASSET)
+        .unwrap()
+        .as_fungible()
+        .iter()
+        .map(|assign| assign.as_state().as_u64())
+        .sum::<u64>();
+
+    let mut consignment = base_consignment.clone();
+    let mut bundles = consignment.bundles.release();
+    let witness_bundle = bundles.last_mut().unwrap();
+    let old_propagate = last_bundle_transition(&base_consignment, TS_PROPAGATE);
+    let old_propagate_opid = old_propagate.id();
+
+    // the propagated right is assigned to a seal on the witness' first input
+    let propagated_right_seal = GraphSeal::rand_from(witness_bundle.tx.input[0].previous_output);
+    let mut propagate = old_propagate;
+    propagate
+        .assignments
+        .insert(
+            OS_MINT,
+            TypedAssigns::Declarative(
+                NonEmptyVec::with(Assign::with(
+                    BuilderSeal::Revealed(propagated_right_seal),
+                    VoidState::strict_dumb(),
+                ))
+                .into(),
+            ),
+        )
+        .unwrap();
+    let propagate_opid = propagate.id();
+
+    // the mint consumes it
+    let mint_seal = match mint_type {
+        TransferType::Witness => BuilderSeal::Revealed(GraphSeal::new_random_vout(0)),
+        TransferType::Blinded => BuilderSeal::Concealed(SecretSeal::strict_dumb()),
+    };
+    let mut mint = Transition {
+        inputs: NonEmptyOrdSet::with(Opout::new(propagate_opid, OS_MINT, 0)).into(),
+        ..mint_template
+    };
+    mint.assignments
+        .insert(
+            OS_ASSET,
+            TypedAssigns::Fungible(AssignVec::with(NonEmptyVec::with(AssignFungible::with(
+                mint_seal,
+                RevealedValue::new(minted),
+            )))),
+        )
+        .unwrap();
+    let mint_opid = mint.id();
+
+    // the propagate comes before the mint which depends on it
+    let mut known_transitions = witness_bundle
+        .bundle
+        .known_transitions
+        .iter()
+        .filter(|kt| kt.opid != old_propagate_opid)
+        .cloned()
+        .collect::<Vec<_>>();
+    known_transitions.push(KnownTransition::new(propagate_opid, propagate.clone()));
+    known_transitions.push(KnownTransition::new(mint_opid, mint.clone()));
+    let mut input_map = witness_bundle
+        .bundle
+        .input_map
+        .clone()
+        .release()
+        .into_iter()
+        .map(|(opout, opid)| {
+            let opid = if opid == old_propagate_opid {
+                propagate_opid
+            } else {
+                opid
+            };
+            (opout, opid)
+        })
+        .collect::<BTreeMap<_, _>>();
+    input_map.insert(Opout::new(propagate_opid, OS_MINT, 0), mint_opid);
+    witness_bundle.bundle = TransitionBundle {
+        input_map: NonEmptyOrdMap::from_checked(input_map),
+        known_transitions: NonEmptyVec::from_checked(known_transitions),
+    };
+    update_anchor(witness_bundle, None);
+    let alt_resolver = resolver.with_new_transaction(witness_bundle.tx.clone());
+    consignment.bundles = LargeVec::from_checked(bundles);
+    consignment.terminals = empty!(); // terminals are now outdated
+
     assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
-
-    // ScriptFailure, 0 -> 1: a right may not be created from thin air
-    let (consignment, _, transition_id) =
-        bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
-            drop_mint_right_input(transition);
-            assert_eq!(mint_right_counts(transition), (0, 1));
-        });
-    assert_bfa_script_failure(
-        consignment,
-        &asset_schema_rules,
-        transition_id,
-        ERRNO_MISSING_INPUT,
-    );
-
-    // ScriptFailure, 1 -> 0: transfer doesn't allow hidden burn
-    let (consignment, _, transition_id) =
-        bfa_mutated_transfer(&base_consignment, &resolver, |transition| {
-            transition
-                .assignments
-                .remove(&OS_MINT)
-                .expect("fixture transition must carry an OS_MINT output to drop");
-            assert_eq!(mint_right_counts(transition), (1, 0));
-        });
-    assert_bfa_script_failure(
-        consignment,
-        &asset_schema_rules,
-        transition_id,
-        ERRNO_HIDDEN_BURN,
-    );
-
-    // ScriptFailure, 2 -> 1: transfer doesn't allow hidden burn
-    let (mut consignment, alt_resolver, _) =
-        bfa_mutated_transfer(&base_consignment, &resolver, split_mint_right_output);
-    let (_, transition_id) = append_mint_right_spend(&mut consignment, &alt_resolver, 1);
-    assert_eq!(mint_right_counts(&last_transition(&consignment)), (2, 1));
-    assert_bfa_script_failure(
-        consignment,
-        &asset_schema_rules,
-        transition_id,
-        ERRNO_HIDDEN_BURN,
-    );
 }
 
 #[test]
@@ -2936,13 +3066,20 @@ fn validate_consignment_bfa_burn() {
         burned: Option<u64>,
         change: Option<u64>,
     ) -> (MockResolver, OpId) {
-        let parent_transition = last_transition(consignment);
-        let parent_opid = parent_transition.id();
+        // assets are held by the last bundle's transfer, mint rights by its propagate
+        let parent_transition = last_bundle_transition(consignment, TS_TRANSFER);
+        let mint_parent_transition = last_bundle_transition(consignment, TS_PROPAGATE);
         let inputs = spend
             .iter()
             .flat_map(|ty| {
                 let ty = *ty;
-                let count = parent_transition
+                let parent = if ty == OS_MINT {
+                    &mint_parent_transition
+                } else {
+                    &parent_transition
+                };
+                let parent_opid = parent.id();
+                let count = parent
                     .assignments
                     .get(&ty)
                     .map(|assigns| assigns.len_u16())
@@ -2961,7 +3098,6 @@ fn validate_consignment_bfa_burn() {
 
         // a burn transition defines no OS_MINT assignments: a right it spends is retired
         let mut assignments = parent_transition.assignments.clone();
-        assignments.remove(&OS_MINT).unwrap();
         match change {
             Some(amount) => {
                 assignments
@@ -2997,8 +3133,9 @@ fn validate_consignment_bfa_burn() {
     let base_consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
     let asset_schema_rules = AssetSchema::from(base_consignment.schema_id()).schema_rules();
 
-    // the fixture ends with a transfer holding the whole bridged supply plus the mint right
-    let parent = last_transition(&base_consignment);
+    // the fixture ends with a bundle holding a transfer with the whole bridged supply and a
+    // propagate with the mint right
+    let parent = last_bundle_transition(&base_consignment, TS_TRANSFER);
     let supply = parent
         .assignments
         .get(&OS_ASSET)
@@ -3009,7 +3146,7 @@ fn validate_consignment_bfa_burn() {
         .sum::<u64>();
     assert_ne!(supply, 0);
     assert_eq!(
-        parent
+        last_bundle_transition(&base_consignment, TS_PROPAGATE)
             .assignments
             .get(&OS_MINT)
             .expect("fixture transition must carry an OS_MINT output")

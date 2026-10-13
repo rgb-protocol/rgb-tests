@@ -464,7 +464,7 @@ pub enum AssetInfo {
         terms: ContractTerms,
         bridge_location: BridgeLocation,
         reject_list: Option<RejectListLocation>,
-        mint_right_outpoint: Outpoint,
+        mint_right_outpoints: Vec<Outpoint>,
         link_info: (Option<ContractId>, Option<Outpoint>),
     },
 }
@@ -581,7 +581,7 @@ impl AssetInfo {
         terms_media_fpath: Option<&str>,
         bridge_location: BridgeLocation,
         reject_list: Option<RejectListLocation>,
-        mint_right_outpoint: Outpoint,
+        mint_right_outpoints: Vec<Outpoint>,
     ) -> Self {
         let spec = AssetSpec::with(
             ticker,
@@ -601,7 +601,7 @@ impl AssetInfo {
             terms,
             bridge_location,
             reject_list,
-            mint_right_outpoint,
+            mint_right_outpoints,
             link_info: (None, None),
         }
     }
@@ -959,16 +959,15 @@ impl AssetInfo {
         blinding: Option<u64>,
     ) -> ContractBuilder {
         if let Self::Bfa {
-            mint_right_outpoint,
+            mint_right_outpoints,
             ..
         } = self
         {
-            builder = builder
-                .add_rights(
-                    "mintRight",
-                    get_builder_seal(*mint_right_outpoint, blinding),
-                )
-                .unwrap();
+            for outpoint in mint_right_outpoints {
+                builder = builder
+                    .add_rights("mintRight", get_builder_seal(*outpoint, blinding))
+                    .unwrap();
+            }
         }
         builder
     }
@@ -1378,8 +1377,13 @@ where
         self.issue_with_info(asset_info, vec![outpoint.copied()], None, None)
     }
 
-    pub fn issue_bfa(&mut self) -> ContractId {
-        let mint_right_outpoint = self.get_utxo(None);
+    /// Issue a BFA contract with `mint_rights` mint rights, all on `outpoint` if given, otherwise
+    /// each on a fresh UTXO
+    pub fn issue_bfa(&mut self, mint_rights: usize, outpoint: Option<Outpoint>) -> ContractId {
+        assert!(mint_rights > 0);
+        let mint_right_outpoints = (0..mint_rights)
+            .map(|_| outpoint.unwrap_or_else(|| self.get_utxo(None)))
+            .collect::<Vec<_>>();
         let bridge_location = BridgeLocation::Evm(EvmContract {
             chain_id: BFA_CHAIN_ID,
             address: EvmAddress::default(),
@@ -1395,7 +1399,7 @@ where
             Some(RejectListLocation::Url(
                 RejectListUrl::try_from(REJECT_LIST_URL.to_owned()).unwrap(),
             )),
-            mint_right_outpoint,
+            mint_right_outpoints,
         );
         self.issue_with_info(asset_info, vec![], None, None)
     }
