@@ -326,7 +326,7 @@ fn issue_bfa(#[case] reject_list: Option<RejectListLocation>) {
         None,
         bridge_location.clone(),
         reject_list.clone(),
-        wallet.get_utxo(None),
+        vec![wallet.get_utxo(None)],
     );
     let contract_id = wallet.issue_with_info(asset_info, vec![], None, None);
 

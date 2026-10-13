@@ -16,7 +16,6 @@ pub const ELECTRUM_SIGNET_URL: &str = "ssl://mempool.space:60602"; // no verbose
 pub const FAKE_TXID: &str = "e5a3e577309df31bd606f48049049d2e1e02b048206ba232944fcc053a176ccb:0";
 pub const UDA_FIXED_INDEX: u32 = 0;
 pub const DEFAULT_FEE_ABS: u64 = 400;
-pub const MINT_RIGHT_SATS: u64 = 2000;
 pub const MEDIA_FPATH: &str = "tests/fixtures/rgb_logo.jpeg";
 pub const REJECT_LIST_URL: &str = "example.xyz/rejectList";
 pub const PURPOSE_BIP84: u32 = 84;
@@ -224,13 +223,12 @@ pub use rgbstd::{
 pub use rstest::rstest;
 pub use schemata::{
     BFA_SCHEMA_ID, BfaWrapper, BridgedFungibleAsset, CFA_SCHEMA_ID, CollectibleFungibleAsset,
-    ERRNO_BURN_MISMATCH, ERRNO_BURN_ZERO, ERRNO_HIDDEN_BURN, ERRNO_INFLATION_MISMATCH,
-    ERRNO_ISSUED_MISMATCH, ERRNO_MISSING_INPUT, ERRNO_NON_EQUAL_IN_OUT, GS_BRIDGE_LOCATION,
-    GS_BURNED_ASSET, GS_BURNED_INFLATION, GS_ISSUED_SUPPLY, GS_NOMINAL, IFA_SCHEMA_ID, IfaWrapper,
-    InflatableFungibleAsset, MS_ALLOWED_INFLATION, NIA_SCHEMA_ID, NonInflatableAsset, OS_ASSET,
-    OS_INFLATION, OS_LINK, OS_MINT, PFA_SCHEMA_ID, PermissionedFungibleAsset, TS_BURN,
-    TS_INFLATION, TS_MINT, TS_TRANSFER, UDA_SCHEMA_ID, UniqueDigitalAsset,
-    burn_global_by_assignment,
+    ERRNO_BURN_MISMATCH, ERRNO_BURN_ZERO, ERRNO_INFLATION_MISMATCH, ERRNO_ISSUED_MISMATCH,
+    ERRNO_NON_EQUAL_IN_OUT, GS_BRIDGE_LOCATION, GS_BURNED_ASSET, GS_BURNED_INFLATION,
+    GS_ISSUED_SUPPLY, GS_NOMINAL, IFA_SCHEMA_ID, IfaWrapper, InflatableFungibleAsset,
+    MS_ALLOWED_INFLATION, NIA_SCHEMA_ID, NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_LINK,
+    OS_MINT, PFA_SCHEMA_ID, PermissionedFungibleAsset, TS_BURN, TS_INFLATION, TS_MINT,
+    TS_PROPAGATE, TS_TRANSFER, UDA_SCHEMA_ID, UniqueDigitalAsset, burn_global_by_assignment,
 };
 pub use serde::{Deserialize, Serialize};
 pub use serde_json::{Value, json};
