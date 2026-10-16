@@ -5179,8 +5179,12 @@ fn validate_consignment_substituted_operation() {
         .transpile::<Blob94>()
         .compile()
         .unwrap();
-    let types = StandardTypes::with(blob_lib);
-    let blob_sem_id = types.get("Blob94");
+    let types = StandardTypes::with(blob_lib.clone());
+    let blob_sem_id = types.get("BlobTest.Blob94");
+    // only the blob library and its dependencies, otherwise TypeLibExtraneous
+    let libs = TypeLibs::from_iter_checked(types.libs().release().into_iter().filter(|(id, _)| {
+        *id == blob_lib.id() || blob_lib.dependencies.iter().any(|dep| dep.id == *id)
+    }));
 
     let mut many = rgb::GlobalState::default();
     let mut leaves = vec![];
@@ -5198,8 +5202,7 @@ fn validate_consignment_substituted_operation() {
         many.add_state(global_type, item).unwrap();
     }
 
-    let (consignment, rules) =
-        transfer_with_globals(global_type, blob_sem_id, types.libs(), many.clone());
+    let (consignment, rules) = transfer_with_globals(global_type, blob_sem_id, libs, many.clone());
     let validation_config = ValidationConfig {
         chain_net: ChainNet::BitcoinRegtest,
         ..Default::default()
@@ -5870,23 +5873,16 @@ fn validate_consignment_noncanonical_global_state_map() {
     }
 }
 
+/// V1 consignments carry no types, so the substitution is checked on the type systems
 #[test]
 #[ignore = "Variant equality matches on tag or name"]
-fn validate_consignment_substituted_enum_type() {
-    let scenario = Scenario::B;
-    let resolver = scenario.resolver();
-    let cons_path = format!("tests/fixtures/consignment_{scenario}.json");
-    let file = std::fs::File::open(cons_path).unwrap();
-    let mut json_consignment: Value = serde_json::from_reader(file).unwrap();
+fn substituted_enum_type_compares_equal() {
+    let trusted = AssetSchema::Nia.types();
+    let mut json_types = serde_json::to_value(&trusted).unwrap();
 
     // permute two Precision variant names, leaving the tag set intact
-    let types = json_consignment
-        .get_mut("types")
-        .unwrap()
-        .as_object_mut()
-        .unwrap();
     let mut precision_sem_id = None;
-    for (sem_id, ty) in types.iter_mut() {
+    for (sem_id, ty) in json_types.as_object_mut().unwrap().iter_mut() {
         let Some(variants) = ty.get_mut("Enum").and_then(Value::as_array_mut) else {
             continue;
         };
@@ -5905,70 +5901,56 @@ fn validate_consignment_substituted_enum_type() {
     }
     let precision_sem_id = precision_sem_id.expect("Precision enum");
     let precision_sem_id: SemId = serde_json::from_value(Value::String(precision_sem_id)).unwrap();
+    let substituted: TypeSystem = serde_json::from_value(json_types).unwrap();
 
-    let consignment = transfer_from_json_value(&json_consignment);
-    let substituted_typesystem = AssetSchema::from(consignment.schema_id()).types();
-    let trusted_typesystem = AssetSchema::from(consignment.schema_id()).types();
-
-    // 0x02 is the trailing precision byte of the GS_NOMINAL blob the consignment ships
     assert_ne!(
-        trusted_typesystem
+        trusted
             .strict_deserialize_type(precision_sem_id, &[2u8])
             .unwrap()
             .unbox(),
-        substituted_typesystem
+        substituted
             .strict_deserialize_type(precision_sem_id, &[2u8])
             .unwrap()
             .unbox(),
     );
-
-    let validation_config = ValidationConfig {
-        chain_net: ChainNet::BitcoinRegtest,
-        ..Default::default()
-    };
-    let rules = AssetSchema::from(consignment.schema_id()).schema_rules();
-    let res = consignment.validate(&rules, &resolver, &validation_config);
     assert!(
-        res.is_err(),
-        "substituted type definition accepted at a trusted sem id"
+        trusted != substituted,
+        "type systems that decode the same byte differently compare equal"
     );
 }
 
-/// Pad `scripts` with maxed-out libraries until the consignment exceeds the ASCII armor bound
+/// Pad `bundles` with copies of the first one until the consignment exceeds the ASCII armor bound
 fn oversized_consignment() -> Transfer {
-    const PAD_LIBS: u16 = 140;
-
-    let consignment = get_consignment_from_json("consignment_B");
-    let base_lib = AssetSchema::from(consignment.schema_id())
-        .scripts()
-        .release()
-        .pop_first()
+    let mut consignment = get_consignment_from_json("consignment_B");
+    let base = consignment.bundles.iter().next().unwrap().clone();
+    let bundle_len = base
+        .strict_encode(StrictWriter::in_memory::<{ usize::MAX }>())
         .unwrap()
-        .1;
-    let mut libs = BTreeSet::new();
-    for i in 0..PAD_LIBS {
-        let mut lib = base_lib.clone();
-        let mut data = vec![0u8; u16::MAX as usize];
-        data[..2].copy_from_slice(&i.to_le_bytes()); // keep every library distinct
-        lib.code = SmallBlob::from_checked(vec![0u8; u16::MAX as usize]);
-        lib.data = SmallBlob::from_checked(data);
-        libs.insert(lib);
-    }
+        .unbox()
+        .unconfine()
+        .len();
+    let mut bundles = consignment.bundles.release();
+    bundles.extend(std::iter::repeat_n(
+        base,
+        u24::MAX.to_usize() / bundle_len + 1,
+    ));
+    consignment.bundles = LargeVec::from_checked(bundles);
     consignment
 }
 
 #[test]
 #[ignore = "armor encode cap is below the container decode cap, ~40s"]
 fn oversized_consignment_armoring() {
-    let Some(completed) = child_case("oversized_consignment_armoring") else {
-        let consignment = oversized_consignment();
-        let size = consignment
-            .to_strict_serialized::<{ usize::MAX }>()
-            .unwrap()
-            .release()
-            .len();
-        assert!(size > u24::MAX.to_usize(), "padding insufficient: {size}");
+    // checked in the parent, so a short fixture is not reported as a crash
+    let consignment = oversized_consignment();
+    let size = consignment
+        .to_strict_serialized::<{ usize::MAX }>()
+        .unwrap()
+        .release()
+        .len();
+    assert!(size > u24::MAX.to_usize(), "padding insufficient: {size}");
 
+    let Some(completed) = child_case("oversized_consignment_armoring") else {
         // refusing the container on save, refusing it on load and rendering it are all
         // acceptable; only terminating the process is not
         let mut container = Vec::<u8>::new();
