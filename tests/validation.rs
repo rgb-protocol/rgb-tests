@@ -5992,8 +5992,10 @@ fn schema_definition_rejects_substituted_enum_type() {
     assert!(stock.import_schema_definition(rekeyed).is_err());
 }
 
-/// Pad `bundles` with copies of the first one until the consignment exceeds the ASCII armor bound
-fn oversized_consignment() -> Transfer {
+/// Pad `bundles` with copies of the first one until the consignment exceeds the ASCII armor bound.
+/// Returns the padded consignment and its serialized size, computed rather than measured since
+/// serializing it takes ~10s in a debug build.
+fn oversized_consignment() -> (Transfer, usize) {
     let mut consignment = get_consignment_from_json("consignment_B");
     let base = consignment.bundles.iter().next().unwrap().clone();
     let bundle_len = base
@@ -6002,25 +6004,24 @@ fn oversized_consignment() -> Transfer {
         .unbox()
         .unconfine()
         .len();
+    let copies = u24::MAX.to_usize() / bundle_len + 1;
+    // the bundles length prefix has a fixed width, so each copy adds exactly its own encoding
+    let size = consignment
+        .to_strict_serialized::<{ usize::MAX }>()
+        .unwrap()
+        .len()
+        + copies * bundle_len;
     let mut bundles = consignment.bundles.release();
-    bundles.extend(std::iter::repeat_n(
-        base,
-        u24::MAX.to_usize() / bundle_len + 1,
-    ));
+    bundles.extend(std::iter::repeat_n(base, copies));
     consignment.bundles = LargeVec::from_checked(bundles);
-    consignment
+    (consignment, size)
 }
 
 #[test]
-#[ignore = "armor encode cap is below the container decode cap, ~60s"]
+#[ignore = "armor encode cap is below the container decode cap, ~25s"]
 fn oversized_consignment_armoring() {
     let Some(completed) = child_case("oversized_consignment_armoring") else {
-        let consignment = oversized_consignment();
-        let size = consignment
-            .to_strict_serialized::<{ usize::MAX }>()
-            .unwrap()
-            .release()
-            .len();
+        let (consignment, size) = oversized_consignment();
         assert!(size > u24::MAX.to_usize(), "padding insufficient: {size}");
 
         // refusing the container on save, refusing it on load and rendering it are all
