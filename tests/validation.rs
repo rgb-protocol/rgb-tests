@@ -5255,19 +5255,57 @@ const CNG_A8: &[u8] = &[0xc2, 0x2a, 0x00, 0x00, 0x07];
 
 const CHILD_CASE: &str = "RGB_TESTS_CHILD_CASE";
 
+/// Exit code of a child whose target, run through [`child_target`], panicked
+const CHILD_TARGET_PANICKED: i32 = 86;
+
 /// Re-run `case` in a child process, so that a hard crash cannot take the test suite down.
-/// Returns `None` in the child, which then has to run the case itself.
+/// Returns `None` in the child, which then has to run the case itself, wrapping the part under
+/// test in [`child_target`]. Returns whether the target completed; a child failing anywhere
+/// else (e.g. while building its fixtures) fails the test instead of passing for a crash.
 fn child_case(case: &str) -> Option<bool> {
     if std::env::var(CHILD_CASE).as_deref() == Ok(case) {
         return None;
     }
     let status = Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", "--include-ignored", "--test-threads", "1", case])
+        .args([
+            "--exact",
+            "--include-ignored",
+            "--nocapture",
+            "--test-threads",
+            "1",
+            case,
+        ])
         .env(CHILD_CASE, case)
         .stdout(Stdio::null())
         .status()
         .unwrap();
-    Some(status.success())
+    if status.success() {
+        return Some(true);
+    }
+    if killed(status) || status.code() == Some(CHILD_TARGET_PANICKED) {
+        return Some(false);
+    }
+    panic!("{case}: child process failed before reaching its target ({status})");
+}
+
+/// Whether a process was terminated rather than exiting: by a signal on unix, with an NTSTATUS
+/// error code (e.g. abort's 0xC0000409, stack overflow's 0xC00000FD) on windows
+fn killed(status: std::process::ExitStatus) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        status.signal().is_some()
+    }
+    #[cfg(windows)]
+    {
+        status.code().is_some_and(|code| code as u32 >= 0xC000_0000)
+    }
+}
+
+/// Run the part of a child case under test, turning a panic into [`CHILD_TARGET_PANICKED`]
+fn child_target<T>(f: impl FnOnce() -> T) -> T {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+        .unwrap_or_else(|_| std::process::exit(CHILD_TARGET_PANICKED))
 }
 
 /// Build a transfer under a schema whose transition validator is the given bytecode
@@ -5430,7 +5468,7 @@ fn validate_quietly(consignment: Transfer, rules: SchemaRules) {
 fn validate_consignment_global_state_count_overflow() {
     let Some(completed) = child_case("validate_consignment_global_state_count_overflow") else {
         let (consignment, rules) = scripted_transfer(CNG_A8.to_vec(), 256);
-        validate_quietly(consignment, rules);
+        child_target(|| validate_quietly(consignment, rules));
         return;
     };
     assert!(
@@ -5443,7 +5481,7 @@ fn validate_consignment_global_state_count_overflow() {
 fn validate_consignment_global_state_count_in_range() {
     let Some(completed) = child_case("validate_consignment_global_state_count_in_range") else {
         let (consignment, rules) = scripted_transfer(CNG_A8.to_vec(), 255);
-        validate_quietly(consignment, rules);
+        child_target(|| validate_quietly(consignment, rules));
         return;
     };
     assert!(
@@ -5734,7 +5772,7 @@ fn validate_consignment_script_status_merge() {
         // rgb-consensus preloads a16[0] with the transition type, so `st.a a16[0]` alone
         // reaches int_add with mismatched operand layouts
         let (consignment, rules) = scripted_transfer(ST_A16.to_vec(), 0);
-        validate_quietly(consignment, rules);
+        child_target(|| validate_quietly(consignment, rules));
         return;
     };
     assert!(
@@ -5747,7 +5785,7 @@ fn validate_consignment_script_status_merge() {
 fn validate_consignment_script_status_merge_in_range() {
     let Some(completed) = child_case("validate_consignment_script_status_merge_in_range") else {
         let (consignment, rules) = scripted_transfer(ST_A8.to_vec(), 0);
-        validate_quietly(consignment, rules);
+        child_target(|| validate_quietly(consignment, rules));
         return;
     };
     assert!(
@@ -5873,6 +5911,29 @@ fn validate_consignment_noncanonical_global_state_map() {
     }
 }
 
+/// Permute two Precision variant names in every Precision enum found in `v`, leaving the tag
+/// set intact. Returns how many enums were rewritten.
+fn permute_precision_names(v: &mut Value) -> usize {
+    match v {
+        Value::Array(variants)
+            if variants.iter().any(|v| v == "centi:2")
+                && variants.iter().any(|v| v == "atto:18") =>
+        {
+            for variant in variants.iter_mut() {
+                if variant == "centi:2" {
+                    *variant = json!("atto:2");
+                } else if variant == "atto:18" {
+                    *variant = json!("centi:18");
+                }
+            }
+            1
+        }
+        Value::Array(items) => items.iter_mut().map(permute_precision_names).sum(),
+        Value::Object(map) => map.values_mut().map(permute_precision_names).sum(),
+        _ => 0,
+    }
+}
+
 /// V1 consignments carry no types, so the substitution is checked on the type systems
 #[test]
 #[ignore = "Variant equality matches on tag or name"]
@@ -5880,26 +5941,12 @@ fn substituted_enum_type_compares_equal() {
     let trusted = AssetSchema::Nia.types();
     let mut json_types = serde_json::to_value(&trusted).unwrap();
 
-    // permute two Precision variant names, leaving the tag set intact
-    let mut precision_sem_id = None;
-    for (sem_id, ty) in json_types.as_object_mut().unwrap().iter_mut() {
-        let Some(variants) = ty.get_mut("Enum").and_then(Value::as_array_mut) else {
-            continue;
-        };
-        if !variants.iter().any(|v| v == "centi:2") || !variants.iter().any(|v| v == "atto:18") {
-            continue;
-        }
-        for variant in variants.iter_mut() {
-            if variant == "centi:2" {
-                *variant = json!("atto:2");
-            } else if variant == "atto:18" {
-                *variant = json!("centi:18");
-            }
-        }
-        precision_sem_id = Some(sem_id.clone());
-        break;
-    }
-    let precision_sem_id = precision_sem_id.expect("Precision enum");
+    let precision_sem_id = json_types
+        .as_object_mut()
+        .unwrap()
+        .iter_mut()
+        .find_map(|(sem_id, ty)| (permute_precision_names(ty) > 0).then(|| sem_id.clone()))
+        .expect("Precision enum");
     let precision_sem_id: SemId = serde_json::from_value(Value::String(precision_sem_id)).unwrap();
     let substituted: TypeSystem = serde_json::from_value(json_types).unwrap();
 
@@ -5917,6 +5964,32 @@ fn substituted_enum_type_compares_equal() {
         trusted != substituted,
         "type systems that decode the same byte differently compare equal"
     );
+}
+
+/// Type definitions reach v1 validation only through a schema definition, which derives every
+/// semantic id itself. Unlike `schema_definition_rejects_tampered_type_lib`, permuting variant
+/// names keeps the type's shape, which is what tag-or-name `Variant` equality would miss.
+#[test]
+fn schema_definition_rejects_substituted_enum_type() {
+    let schema_def = AssetSchema::Nia.schema_definition();
+    let mut json_def = serde_json::to_value(&schema_def).unwrap();
+    assert!(permute_precision_names(&mut json_def) > 0, "Precision enum");
+    let tampered: SchemaDefinition = serde_json::from_value(json_def).unwrap();
+    assert!(matches!(
+        tampered.verify(),
+        Err(SchemaDefError::TypeLibIdMismatch(..))
+    ));
+
+    // re-key the libraries by their new commitments, so only the content differs
+    let libs =
+        TypeLibs::from_iter_checked(tampered.libs.values().map(|lib| (lib.id(), lib.clone())));
+    let rekeyed = SchemaDefinition::new(tampered.schema.clone(), libs, tampered.scripts.clone());
+    assert!(
+        rekeyed.verify().is_err(),
+        "a schema definition with a substituted enum type must not verify"
+    );
+    let mut stock = SqliteStock::in_memory().unwrap();
+    assert!(stock.import_schema_definition(rekeyed).is_err());
 }
 
 /// Pad `bundles` with copies of the first one until the consignment exceeds the ASCII armor bound
@@ -5939,26 +6012,27 @@ fn oversized_consignment() -> Transfer {
 }
 
 #[test]
-#[ignore = "armor encode cap is below the container decode cap, ~40s"]
+#[ignore = "armor encode cap is below the container decode cap, ~60s"]
 fn oversized_consignment_armoring() {
-    // checked in the parent, so a short fixture is not reported as a crash
-    let consignment = oversized_consignment();
-    let size = consignment
-        .to_strict_serialized::<{ usize::MAX }>()
-        .unwrap()
-        .release()
-        .len();
-    assert!(size > u24::MAX.to_usize(), "padding insufficient: {size}");
-
     let Some(completed) = child_case("oversized_consignment_armoring") else {
+        let consignment = oversized_consignment();
+        let size = consignment
+            .to_strict_serialized::<{ usize::MAX }>()
+            .unwrap()
+            .release()
+            .len();
+        assert!(size > u24::MAX.to_usize(), "padding insufficient: {size}");
+
         // refusing the container on save, refusing it on load and rendering it are all
         // acceptable; only terminating the process is not
-        let mut container = Vec::<u8>::new();
-        if consignment.save(&mut container).is_ok()
-            && let Ok(transfer) = Transfer::load(&container[..])
-        {
-            assert!(!transfer.to_string().is_empty());
-        }
+        child_target(|| {
+            let mut container = Vec::<u8>::new();
+            if consignment.save(&mut container).is_ok()
+                && let Ok(transfer) = Transfer::load(&container[..])
+            {
+                assert!(!transfer.to_string().is_empty());
+            }
+        });
         return;
     };
     assert!(
