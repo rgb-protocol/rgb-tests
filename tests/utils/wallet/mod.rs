@@ -460,7 +460,10 @@ pub enum AssetInfo {
         link_info: (Option<ContractId>, Option<Outpoint>),
     },
     Bfa {
-        spec: AssetSpec,
+        ticker: UnicodeTicker,
+        name: Name,
+        precision: Precision,
+        details: Option<Details>,
         terms: ContractTerms,
         bridge_location: BridgeLocation,
         reject_list: Option<RejectListLocation>,
@@ -583,13 +586,6 @@ impl AssetInfo {
         reject_list: Option<RejectListLocation>,
         mint_right_outpoints: Vec<Outpoint>,
     ) -> Self {
-        let spec = AssetSpec::with(
-            ticker,
-            name,
-            Precision::try_from(precision).unwrap(),
-            details,
-        )
-        .unwrap();
         let text = RicardianContract::from_str(terms_text).unwrap();
         let attachment = terms_media_fpath.map(attachment_from_fpath);
         let terms = ContractTerms {
@@ -597,7 +593,10 @@ impl AssetInfo {
             media: attachment,
         };
         Self::Bfa {
-            spec,
+            ticker: UnicodeTicker::try_from(ticker.to_owned()).unwrap(),
+            name: Name::try_from(name.to_owned()).unwrap(),
+            precision: Precision::try_from(precision).unwrap(),
+            details: details.map(|d| Details::try_from(d.to_owned()).unwrap()),
             terms,
             bridge_location,
             reject_list,
@@ -853,7 +852,10 @@ impl AssetInfo {
                 builder
             }
             Self::Bfa {
-                spec,
+                ticker,
+                name,
+                precision,
+                details,
                 terms,
                 bridge_location,
                 reject_list,
@@ -861,12 +863,21 @@ impl AssetInfo {
                 ..
             } => {
                 builder = builder
-                    .add_global_state("spec", spec.clone())
+                    .add_global_state("ticker", ticker.clone())
+                    .unwrap()
+                    .add_global_state("name", name.clone())
+                    .unwrap()
+                    .add_global_state("precision", *precision)
                     .unwrap()
                     .add_global_state("terms", terms.clone())
                     .unwrap()
                     .add_global_state("bridgeLocation", bridge_location.clone())
                     .unwrap();
+                if let Some(details) = details {
+                    builder = builder
+                        .add_global_state("details", details.clone())
+                        .unwrap()
+                }
                 if let Some(reject_list) = reject_list {
                     builder = builder
                         .add_global_state("rejectList", reject_list.clone())

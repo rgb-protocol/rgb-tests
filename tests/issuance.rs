@@ -317,11 +317,15 @@ fn issue_bfa(#[case] reject_list: Option<RejectListLocation>) {
         chain_id: BFA_CHAIN_ID,
         address: EvmAddress::default(),
     });
+    let ticker = "₿FAティッカー";
+    let name = "BFA asset name";
+    let precision = 2;
+    let details = Some("BFA details");
     let asset_info = AssetInfo::bfa(
-        "BFATCKR",
-        "BFA asset name",
-        2,
-        None,
+        ticker,
+        name,
+        precision,
+        details,
         "BFA terms",
         None,
         bridge_location.clone(),
@@ -331,6 +335,13 @@ fn issue_bfa(#[case] reject_list: Option<RejectListLocation>) {
     let contract_id = wallet.issue_with_info(asset_info, vec![], None, None);
 
     let contract = wallet.contract_wrapper::<BridgedFungibleAsset>(contract_id);
+    assert_eq!(contract.ticker().to_string(), ticker);
+    assert_eq!(contract.name().to_string(), name);
+    assert_eq!(contract.precision().decimals(), precision);
+    assert_eq!(
+        contract.details().map(|d| d.to_string()).as_deref(),
+        details
+    );
     assert_eq!(contract.bridge_location(), bridge_location);
     assert_eq!(contract.reject_list(), reject_list);
 }

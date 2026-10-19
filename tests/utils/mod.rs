@@ -217,7 +217,7 @@ pub use rgbstd::{
     schema::SchemaId,
     stl::{
         AssetSpec, Attachment, Details, EmbeddedMedia, MediaType, Name, ProofOfReserves,
-        RicardianContract, Ticker, TokenData,
+        RicardianContract, Ticker, TokenData, UnicodeTicker,
     },
 };
 pub use rstest::rstest;
