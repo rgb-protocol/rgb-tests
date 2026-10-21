@@ -5936,6 +5936,76 @@ fn permute_precision_names(v: &mut Value) -> usize {
 
 /// V1 consignments carry no types, so the substitution is checked on the type systems
 #[test]
+#[ignore = "decoding a Unicode character is unimplemented"]
+fn validate_consignment_unicode_char_global_state() {
+    // a type library shipped with the schema definition may declare a bare Unicode character,
+    // which no derived Rust type produces but the type system accepts
+    let lib = TypeLib {
+        name: libname!("GlyphTest"),
+        dependencies: none!(),
+        extern_types: none!(),
+        types: NonEmptyOrdMap::with_key_value(tn!("Glyph"), Ty::UnicodeChar),
+    };
+    let sys = SystemBuilder::new()
+        .import(lib.clone())
+        .unwrap()
+        .finalize()
+        .unwrap();
+    let glyph_sem_id = *sys.resolve("GlyphTest.Glyph").unwrap();
+    let global_type = GlobalStateType::with(42);
+
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let validate = |glyph: &[u8]| {
+        let mut globals = rgb::GlobalState::default();
+        globals
+            .add_state(
+                global_type,
+                RevealedData::new(SmallBlob::from_checked(glyph.to_vec())),
+            )
+            .unwrap();
+        let (consignment, rules) = transfer_with_globals(
+            global_type,
+            glyph_sem_id,
+            TypeLibs::from_checked(bmap! { lib.id() => lib.clone() }),
+            globals,
+        );
+        let resolver = OfflineResolver {
+            consignment: &consignment,
+        };
+        consignment
+            .clone()
+            .validate(&rules, &resolver, &validation_config)
+    };
+
+    // valid one, two, three and four byte UTF-8 characters
+    for c in ['A', '\u{3a9}', '\u{20ac}', '\u{1f600}'] {
+        validate(c.to_string().as_bytes())
+            .unwrap_or_else(|e| panic!("{c:?}: valid Unicode character rejected: {e:?}"));
+    }
+
+    for (case, glyph) in [
+        ("bad leading byte", &[0xAAu8][..]),
+        ("truncated sequence", &[0xF0, 0x9F]),
+        ("bad continuation byte", &[0xC0, 0x00]),
+        ("trailing bytes", b"AB"),
+    ] {
+        let res = validate(glyph);
+        assert!(
+            matches!(
+                res,
+                Err(ValidationError::InvalidConsignment(
+                    Failure::SchemaInvalidGlobalValue(_, ty, sem_id)
+                )) if ty == global_type && sem_id == glyph_sem_id
+            ),
+            "{case}: malformed Unicode character not rejected: {res:?}"
+        );
+    }
+}
+
+#[test]
 #[ignore = "Variant equality matches on tag or name"]
 fn substituted_enum_type_compares_equal() {
     let trusted = AssetSchema::Nia.types();
