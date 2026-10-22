@@ -6068,7 +6068,6 @@ fn caller_and_helper(code: &[u8], helper: &[u8]) -> (Lib, Lib) {
 }
 
 #[test]
-#[ignore = "routine never advances cp0, so ret halts instead of returning"]
 fn validate_consignment_script_routine_return() {
     let (consignment, rules) = scripted_transfer(ROUTINE_THEN_FAIL.to_vec(), 0);
     let res = validate_scripted(consignment, rules);
@@ -6090,7 +6089,6 @@ fn validate_consignment_script_routine_return_pass() {
 }
 
 #[test]
-#[ignore = "call never advances cp0, so ret halts instead of returning"]
 fn validate_consignment_script_call_return() {
     let (caller, helper) = caller_and_helper(CALL_THEN_FAIL, RET);
     let (consignment, rules) = scripted_transfer_with_libs(caller, vec![helper], 0);
@@ -6116,7 +6114,6 @@ fn validate_consignment_script_call_return_pass() {
 /// The schema only ships the libraries a validator's libs segment names, but a library index
 /// past the end of that segment decodes to the default `LibId`, which no schema ships
 #[test]
-#[ignore = "Vm::exec gives up on an unresolved library keeping st0"]
 fn validate_consignment_script_call_missing_lib() {
     let (consignment, rules) = scripted_transfer(CALL_THEN_RET.to_vec(), 0);
     let res = validate_scripted(consignment, rules);
@@ -6127,7 +6124,6 @@ fn validate_consignment_script_call_missing_lib() {
 }
 
 #[test]
-#[ignore = "running off the end of the code ends the whole program"]
 fn validate_consignment_script_routine_off_end() {
     let (consignment, rules) = scripted_transfer(ROUTINE_OFF_END_THEN_FAIL.to_vec(), 0);
     let res = validate_scripted(consignment, rules);
@@ -6143,7 +6139,6 @@ fn validate_consignment_script_routine_off_end() {
 }
 
 #[test]
-#[ignore = "running off the end of a called library ends the whole program"]
 fn validate_consignment_script_call_off_end() {
     let (caller, helper) = caller_and_helper(CALL_THEN_FAIL, TEST);
     let (consignment, rules) = scripted_transfer_with_libs(caller, vec![helper], 0);
