@@ -5513,8 +5513,18 @@ fn child_target<T>(f: impl FnOnce() -> T) -> T {
 
 /// Build a transfer under a schema whose transition validator is the given bytecode
 fn scripted_transfer(code: Vec<u8>, global_items: u16) -> (Transfer, SchemaRules) {
-    let global_type = GlobalStateType::with(42);
     let lib = Lib::with("ALU", code, vec![], none!()).unwrap();
+    scripted_transfer_with_libs(lib, vec![], global_items)
+}
+
+/// Build a transfer under a schema whose transition validator is `lib`, shipping `helpers` for
+/// it to call into
+fn scripted_transfer_with_libs(
+    lib: Lib,
+    helpers: Vec<Lib>,
+    global_items: u16,
+) -> (Transfer, SchemaRules) {
+    let global_type = GlobalStateType::with(42);
 
     let types = StandardTypes::with(rgb_contract_stl());
     let schema = Schema {
@@ -5560,7 +5570,9 @@ fn scripted_transfer(code: Vec<u8>, global_items: u16) -> (Transfer, SchemaRules
         },
         default_assignment: Some(OS_ASSET),
     };
-    let scripts = Confined::from_checked(bmap! {lib.id() => lib});
+    let mut scripts = bmap! {lib.id() => lib};
+    scripts.extend(helpers.into_iter().map(|helper| (helper.id(), helper)));
+    let scripts = Confined::from_checked(scripts);
     let rules = SchemaDefinition::new(schema, types.libs(), scripts)
         .verify()
         .unwrap();
@@ -6014,6 +6026,136 @@ fn validate_consignment_undecodable_script() {
             opid, None, None
         ))),
         "a validator that can't be decoded must fail"
+    );
+}
+
+/// `routine 4; fail; ret;`: the subroutine at 4 returns into the `fail`
+const ROUTINE_THEN_FAIL: &[u8] = &[0x04, 0x04, 0x00, 0x00, 0x07];
+/// `routine 4; ret; ret;`: the subroutine at 4 returns into the final `ret`
+const ROUTINE_THEN_RET: &[u8] = &[0x04, 0x04, 0x00, 0x07, 0x07];
+/// `call 0 @ lib#0; fail; ret;`: the called library returns into the `fail`
+const CALL_THEN_FAIL: &[u8] = &[0x05, 0x00, 0x00, 0x00, 0x00, 0x07];
+/// `call 0 @ lib#0; ret; ret;`: the called library returns into the second `ret`
+const CALL_THEN_RET: &[u8] = &[0x05, 0x00, 0x00, 0x00, 0x07, 0x07];
+/// `ret;`: a called library that returns straight away
+const RET: &[u8] = &[0x07];
+/// `routine 4; fail; test;`: the subroutine at 4 runs off the end of the code into the `fail`
+const ROUTINE_OFF_END_THEN_FAIL: &[u8] = &[0x04, 0x04, 0x00, 0x00, 0x01];
+/// `test;`: a called library that runs off the end of its code instead of returning
+const TEST: &[u8] = &[0x01];
+
+/// Validate a transfer built by [`scripted_transfer_with_libs`], dropping the valid consignment
+fn validate_scripted(consignment: Transfer, rules: SchemaRules) -> Result<(), ValidationError> {
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let resolver = OfflineResolver {
+        consignment: &consignment,
+    };
+    consignment
+        .clone()
+        .validate(&rules, &resolver, &validation_config)
+        .map(|_| ())
+}
+
+/// A validator library running `code`, whose `lib#0` is a library running `helper`
+fn caller_and_helper(code: &[u8], helper: &[u8]) -> (Lib, Lib) {
+    let helper = Lib::with("ALU", helper.to_vec(), vec![], none!()).unwrap();
+    let libs = LibSeg::try_from_iter([helper.id()]).unwrap();
+    let caller = Lib::with("ALU", code.to_vec(), vec![], libs).unwrap();
+    (caller, helper)
+}
+
+#[test]
+#[ignore = "routine never advances cp0, so ret halts instead of returning"]
+fn validate_consignment_script_routine_return() {
+    let (consignment, rules) = scripted_transfer(ROUTINE_THEN_FAIL.to_vec(), 0);
+    let res = validate_scripted(consignment, rules);
+    assert!(
+        matches!(
+            res,
+            Err(ValidationError::InvalidConsignment(Failure::ScriptFailure(
+                ..
+            )))
+        ),
+        "the fail a routine returns into was skipped: {res:?}"
+    );
+}
+
+#[test]
+fn validate_consignment_script_routine_return_pass() {
+    let (consignment, rules) = scripted_transfer(ROUTINE_THEN_RET.to_vec(), 0);
+    validate_scripted(consignment, rules).expect("a routine returning into ret must pass");
+}
+
+#[test]
+#[ignore = "call never advances cp0, so ret halts instead of returning"]
+fn validate_consignment_script_call_return() {
+    let (caller, helper) = caller_and_helper(CALL_THEN_FAIL, RET);
+    let (consignment, rules) = scripted_transfer_with_libs(caller, vec![helper], 0);
+    let res = validate_scripted(consignment, rules);
+    assert!(
+        matches!(
+            res,
+            Err(ValidationError::InvalidConsignment(Failure::ScriptFailure(
+                ..
+            )))
+        ),
+        "the fail a called library returns into was skipped: {res:?}"
+    );
+}
+
+#[test]
+fn validate_consignment_script_call_return_pass() {
+    let (caller, helper) = caller_and_helper(CALL_THEN_RET, RET);
+    let (consignment, rules) = scripted_transfer_with_libs(caller, vec![helper], 0);
+    validate_scripted(consignment, rules).expect("a call returning into ret must pass");
+}
+
+/// The schema only ships the libraries a validator's libs segment names, but a library index
+/// past the end of that segment decodes to the default `LibId`, which no schema ships
+#[test]
+#[ignore = "Vm::exec gives up on an unresolved library keeping st0"]
+fn validate_consignment_script_call_missing_lib() {
+    let (consignment, rules) = scripted_transfer(CALL_THEN_RET.to_vec(), 0);
+    let res = validate_scripted(consignment, rules);
+    assert!(
+        res.is_err(),
+        "a call into a library the schema does not ship passed"
+    );
+}
+
+#[test]
+#[ignore = "running off the end of the code ends the whole program"]
+fn validate_consignment_script_routine_off_end() {
+    let (consignment, rules) = scripted_transfer(ROUTINE_OFF_END_THEN_FAIL.to_vec(), 0);
+    let res = validate_scripted(consignment, rules);
+    assert!(
+        matches!(
+            res,
+            Err(ValidationError::InvalidConsignment(Failure::ScriptFailure(
+                ..
+            )))
+        ),
+        "the fail a routine running off the end returns into was skipped: {res:?}"
+    );
+}
+
+#[test]
+#[ignore = "running off the end of a called library ends the whole program"]
+fn validate_consignment_script_call_off_end() {
+    let (caller, helper) = caller_and_helper(CALL_THEN_FAIL, TEST);
+    let (consignment, rules) = scripted_transfer_with_libs(caller, vec![helper], 0);
+    let res = validate_scripted(consignment, rules);
+    assert!(
+        matches!(
+            res,
+            Err(ValidationError::InvalidConsignment(Failure::ScriptFailure(
+                ..
+            )))
+        ),
+        "the fail a called library running off its end returns into was skipped: {res:?}"
     );
 }
 
