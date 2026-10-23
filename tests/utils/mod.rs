@@ -126,13 +126,13 @@ pub use psrgbt::{
 };
 pub use rand::{Rng, RngCore, SeedableRng, rngs::StdRng, seq::SliceRandom};
 pub use rgb::{
-    Anchor, Assign, AssignFungible, AssignmentDetails, AssignmentType, BundleId, DescriptorRgb,
-    FungibleState, FungibleType, GenesisSchema, GenesisSeal, GlobalDetails, GlobalStateSchema,
-    GraphSeal, Identity, KnownTransition, MetaDetails, MetaType, MetaValue, Occurrences,
-    OccurrencesMismatch, OpFullType, OpId, Opout, Outpoint, OwnedStateSchema, RevealedData,
-    RevealedValue, RgbDescr, RgbWallet, SqliteRgbWallet, StateType, TapretKey, TransferParams,
-    Transition, TransitionBundle, TransitionDetails, TransitionSchema, TransitionType,
-    TypedAssigns, Vin, VoidState, WalletProvider, WpkhDescr,
+    Anchor, Assign, AssignFungible, AssignmentDetails, AssignmentType, Assignments, BundleId,
+    DescriptorRgb, ExposedSeal, FungibleState, FungibleType, GenesisSchema, GenesisSeal,
+    GlobalDetails, GlobalStateSchema, GraphSeal, Identity, KnownTransition, MetaDetails, MetaType,
+    MetaValue, Occurrences, OccurrencesMismatch, OpFullType, OpId, Opout, Outpoint,
+    OwnedStateSchema, RevealedData, RevealedValue, RgbDescr, RgbWallet, SqliteRgbWallet, StateType,
+    TapretKey, TransferParams, Transition, TransitionBundle, TransitionDetails, TransitionSchema,
+    TransitionType, TypedAssigns, Vin, VoidState, WalletProvider, WpkhDescr,
     assignments::AssignVec,
     bitcoin::{self, Sequence, TxIn, TxOut, Witness, absolute::LockTime},
     bitcoin::{
@@ -142,7 +142,7 @@ pub use rgb::{
         taproot::LeafVersion, transaction::Version,
     },
     containers::{
-        ConsignmentVer, TerminalSeals, ValidContract, WitnessBundle,
+        AssignmentMatch, ConsignmentVer, ValidContract, WitnessBundle,
         legacy::{ContainerVerV0, PubWitness, SecretSeals, TransferV0, WitnessBundleV0},
     },
     contract::{

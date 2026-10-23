@@ -1,13 +1,6 @@
 {
   "version": "v1",
   "transfer": true,
-  "terminals": {
-    "a3d92c2ad5bd366fe0a3e2e4511cf67ced9494ee6f2ac5c653ed0e063aba0382": [
-      {
-        "concealed": "5b3be6d6115db9bd3edfc0b7ee12340596eff64f362d9fc7080db7324784529e"
-      }
-    ]
-  },
   "genesis": {
     "ffv": 0,
     "schemaId": "rgb:sch:RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU#remote-digital-pegasus",

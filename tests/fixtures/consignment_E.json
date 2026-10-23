@@ -1,24 +1,6 @@
 {
   "version": "v1",
   "transfer": true,
-  "terminals": {
-    "1e3ca068ffe7774d7c8d42ce0f136574288944207227b710446633fc9d558671": [
-      {
-        "revealed": {
-          "txid": null,
-          "vout": 1,
-          "blinding": 8951369337182336197
-        }
-      },
-      {
-        "revealed": {
-          "txid": null,
-          "vout": 2,
-          "blinding": 3784366082642624271
-        }
-      }
-    ]
-  },
   "genesis": {
     "ffv": 0,
     "schemaId": "rgb:sch:3I0xZVEQnQxYVk7vDnh5uNtQyUfsmThw6dX9n_Gvb5o#mama-swing-album",

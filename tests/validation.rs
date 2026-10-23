@@ -182,7 +182,6 @@ fn append_bundle(
     let alt_resolver = resolver.with_new_transaction(witness_bundle.tx.clone());
     bundles.push(witness_bundle);
     consignment.bundles = LargeVec::from_checked(bundles);
-    consignment.terminals = empty!(); // terminals are now outdated
     alt_resolver
 }
 
@@ -1164,55 +1163,6 @@ fn validate_consignment_bundles_fail() {
         res,
         ValidationError::InvalidConsignment(Failure::SealsInvalid(_, _, _))
     ));
-}
-
-#[test]
-fn validate_consignment_terminal_spent_fail() {
-    let scenario = Scenario::A;
-    let resolver = scenario.resolver();
-
-    let mut consignment = get_consignment_from_json(&format!("consignment_{scenario}"));
-
-    let spent_opouts = consignment
-        .bundles
-        .iter()
-        .flat_map(|wbundle| wbundle.bundle.input_map.keys().copied())
-        .collect::<BTreeSet<_>>();
-    // look for an assignment that gets spent
-    let mut candidate = None;
-    'outer: for wbundle in consignment.bundles.iter() {
-        for kt in &wbundle.bundle.known_transitions {
-            for (ty, typed_assigns) in kt.transition.assignments.iter() {
-                for (no, seal) in typed_assigns.seals().enumerate() {
-                    let opout = Opout::new(kt.opid, *ty, no as u16);
-                    if spent_opouts.contains(&opout) {
-                        candidate = Some((wbundle.bundle.bundle_id(), *seal, opout));
-                        break 'outer;
-                    }
-                }
-            }
-        }
-    }
-    let (bundle_id, seal, opout) = candidate.unwrap();
-
-    // terminals: point to an assignment which is spent inside the consignment
-    consignment.terminals =
-        SmallOrdMap::from_iter_checked([(bundle_id, TerminalSeals::from(NonEmptyVec::with(seal)))]);
-
-    let asset_schema = AssetSchema::from(consignment.schema_id());
-    let asset_schema_rules = asset_schema.schema_rules();
-    let validation_config = ValidationConfig {
-        chain_net: ChainNet::BitcoinRegtest,
-        ..Default::default()
-    };
-    let res = consignment
-        .validate(&asset_schema_rules, &resolver, &validation_config)
-        .unwrap_err();
-    dbg!(&res);
-    assert_eq!(
-        res,
-        ValidationError::InvalidConsignment(Failure::TerminalSealSpent(bundle_id, opout))
-    );
 }
 
 #[test]
@@ -2867,7 +2817,6 @@ fn validate_consignment_bfa_propagate() {
         update_anchor(witness_bundle, None);
         let alt_resolver = resolver.with_new_transaction(witness_bundle.tx.clone());
         consignment.bundles = LargeVec::from_checked(bundles);
-        consignment.terminals = empty!(); // terminals are now outdated
         (consignment, alt_resolver, transition_id)
     }
 
@@ -3122,7 +3071,6 @@ fn validate_consignment_bfa_propagate_and_mint_same_bundle(#[case] mint_type: Tr
     update_anchor(witness_bundle, None);
     let alt_resolver = resolver.with_new_transaction(witness_bundle.tx.clone());
     consignment.bundles = LargeVec::from_checked(bundles);
-    consignment.terminals = empty!(); // terminals are now outdated
 
     assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
 }
@@ -4960,15 +4908,9 @@ fn from_str_enforces_confinement() {
         .into_checked()
         .unwrap();
 
-    // SecretSeals wraps a NonEmptyOrdSet, so an empty terminal breaks its lower bound
+    // known transitions are a NonEmptyVec, so a bundle without any breaks its lower bound
     let mut consignment = base_consignment.clone();
-    let terminals = consignment
-        .get_mut("terminals")
-        .unwrap()
-        .as_object_mut()
-        .unwrap();
-    let bundle_id = terminals.keys().next().unwrap().clone();
-    terminals.insert(bundle_id, Value::Array(vec![]));
+    consignment["bundles"][0]["bundle"]["knownTransitions"] = Value::Array(vec![]);
     let err =
         serde_json::from_str::<UncheckedTransfer>(&serde_json::to_string(&consignment).unwrap())
             .unwrap_err();
@@ -5727,7 +5669,6 @@ fn validate_consignment_out_of_bounds_global_state() {
         Some(contract_id),
     );
     consignment.bundles = LargeVec::from_checked(bundles);
-    consignment.terminals = empty!(); // terminals are now outdated
 
     let asset_schema_rules = AssetSchema::from(consignment.schema_id()).schema_rules();
     let validation_config = ValidationConfig {

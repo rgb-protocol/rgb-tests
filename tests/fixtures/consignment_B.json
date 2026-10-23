@@ -1,17 +1,6 @@
 {
   "version": "v1",
   "transfer": true,
-  "terminals": {
-    "e3e3a1067165c8894fc95067375c2d2c09e9ee980d619b0136facfafb419e30f": [
-      {
-        "revealed": {
-          "txid": null,
-          "vout": 1,
-          "blinding": 14841966395195651740
-        }
-      }
-    ]
-  },
   "genesis": {
     "ffv": 0,
     "schemaId": "rgb:sch:RWhwUfTMpuP2Zfx1~j4nswCANGeJrYOqDcKelaMV4zU#remote-digital-pegasus",

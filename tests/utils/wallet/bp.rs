@@ -548,6 +548,75 @@ impl BpTestWallet {
         (consignment, tx)
     }
 
+    /// Send `pieces` allocations of 1 asset unit each to `secret_seal`, all to the same seal, and
+    /// the rest of the allocations on `utxos` back as change, the way a dust attacker would: the
+    /// builder merges repeated seals, so the assignments are rewritten after it.
+    pub fn send_dust(
+        &mut self,
+        contract_id: ContractId,
+        utxos: Vec<Outpoint>,
+        secret_seal: SecretSeal,
+        pieces: u16,
+    ) -> (Transfer, Tx) {
+        let address = self.get_address();
+        let (mut psbt, _) = self.construct_psbt(utxos, vec![(address, None)], None);
+        let mut builder = self
+            .wallet
+            .stock()
+            .transition_builder(contract_id, "transfer")
+            .unwrap();
+        let prev_outputs = psbt
+            .inputs()
+            .map(|txin| outpoint_bp_to_bitcoin(txin.previous_outpoint))
+            .collect::<HashSet<_>>();
+        let mut total = 0;
+        for (_, opout_state_map) in self
+            .wallet
+            .stock()
+            .contract_assignments_for(contract_id, prev_outputs)
+            .unwrap()
+        {
+            for (opout, state) in opout_state_map {
+                if let AllocatedState::Amount(amt) = state {
+                    total += amt.as_u64();
+                }
+                builder = builder.add_input(opout, state).unwrap();
+            }
+        }
+        let change = total - pieces as u64;
+        let change_seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(0));
+        builder = builder
+            .add_owned_state_raw(OS_ASSET, change_seal, Amount::from(change).into())
+            .unwrap();
+        let mut transition = builder.complete_transition().unwrap();
+        let dust = (0..pieces).map(|_| {
+            Assign::with(
+                BuilderSeal::Concealed(secret_seal),
+                RevealedValue::from(1u64),
+            )
+        });
+        let assigns = std::iter::once(Assign::with(change_seal, RevealedValue::from(change)))
+            .chain(dust)
+            .collect::<Vec<_>>();
+        transition.assignments = Assignments::from(SmallOrdMap::from_checked(bmap! {
+            OS_ASSET => TypedAssigns::Fungible(AssignVec::with(NonEmptyVec::from_checked(assigns))),
+        }));
+        let opid = transition.id();
+        psbt.push_rgb_transition(transition).unwrap();
+        psbt.set_opret_host();
+        psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+        psbt.set_as_unmodifiable();
+        let fascia = psbt.rgb_commit().unwrap();
+        let txid = psbt.txid();
+        self.consume_fascia(fascia, txid);
+        let tx = self.sign_finalize_extract(&mut psbt);
+        self.broadcast_tx(&tx);
+        self.mine_tx(&psbt.get_txid(), false);
+        self.sync();
+        let consignment = self.consign_transfer(contract_id, [], [], [opid], Some(txid), None);
+        (consignment, tx)
+    }
+
     /// Mint BFA assets. Does not handle extra transitions
     pub fn mint_bfa(
         &mut self,

@@ -745,7 +745,7 @@ fn same_bundle_listed_per_witness() {
     });
     resume_mining();
 
-    // the receiver holds the change too: a revealed seal in the terminal transition
+    // the receiver holds the change too: a revealed seal in the last transition
     let expected = bset![
         (txid_1, txid_1, amount),
         (txid_1, txid_1, change),
@@ -1629,9 +1629,8 @@ fn tapret_opret_same_utxo() {
         .stock()
         .transfer_with_dag(contract_id_2, [], [], [last_opid], None, None)
         .unwrap();
-    // alt_consignment is created without access to invoice, so it has no terminals
-    let mut consignment = consignment;
-    consignment.terminals = none!();
+    // a consignment does not record what it was requested for, so asking for the last
+    // operation yields the same one as paying the invoice did
     assert_eq!(consignment, alt_consignment);
     // one node per operation, one edge per transition input:
     // 4 nodes: genesis, first, extra and second transitions
@@ -5519,4 +5518,420 @@ fn reorg_between_validation_and_accept() {
     // detects no ord change: the state must be coherent already
     wlt_1.sync_and_update_witnesses(None);
     wlt_1.check_allocations(contract_id, asset_schema, vec![], false);
+}
+
+/// The known transition with id `opid` in `consignment`.
+fn known_transition(consignment: &Transfer, opid: OpId) -> &Transition {
+    consignment
+        .bundles
+        .iter()
+        .find_map(|wb| wb.bundle.get_transition(opid))
+        .expect("the transition is known to the consignment")
+}
+
+/// The id of the last known transition of the last bundle of `consignment`.
+fn last_opid(consignment: &Transfer) -> OpId {
+    consignment
+        .bundles
+        .last()
+        .unwrap()
+        .bundle
+        .known_transitions
+        .last()
+        .unwrap()
+        .opid
+}
+
+/// Every opout assigned by the known transition `opid` of `consignment`.
+fn transition_opouts(consignment: &Transfer, opid: OpId) -> BTreeSet<Opout> {
+    known_transition(consignment, opid)
+        .assignments
+        .iter()
+        .flat_map(|(ty, ta)| (0..ta.len_u16()).map(move |no| Opout::new(opid, *ty, no)))
+        .collect()
+}
+
+#[test]
+fn spent_opouts_and_terminal_ops_of_transfers() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_nia(600, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // genesis -> t1: 100 to wlt_2, change to wlt_1
+    let invoice = wlt_2.invoice(contract_id, schema_id, 100, InvoiceType::Witness);
+    let (consignment, _) =
+        wlt_1.send_to_invoice(&mut wlt_2, invoice.clone(), Some(1000), None, None);
+    let t1 = last_opid(&consignment);
+    let t1_opouts = transition_opouts(&consignment, t1);
+    let t1_received = invoice_assignments(&consignment, &invoice)
+        .into_iter()
+        .map(|m| m.opout)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(t1_opouts.len(), 2, "recipient and change");
+    assert_eq!(t1_received.len(), 1);
+    assert!(t1_received.is_subset(&t1_opouts));
+
+    // t1 is the only terminal op and spends the genesis allocation
+    assert_eq!(consignment.terminal_ops(), bset![t1]);
+    assert_eq!(
+        consignment.spent_opouts(),
+        known_transition(&consignment, t1)
+            .inputs
+            .iter()
+            .copied()
+            .collect()
+    );
+
+    // t1 -> t2: 30 to wlt_3, change to wlt_2
+    let invoice = wlt_3.invoice(contract_id, schema_id, 30, InvoiceType::Blinded(None));
+    let (consignment, _) =
+        wlt_2.send_to_invoice(&mut wlt_3, invoice.clone(), Some(1000), None, None);
+    let t2 = last_opid(&consignment);
+    let t2_opouts = transition_opouts(&consignment, t2);
+    assert_eq!(t2_opouts.len(), 2, "recipient and change");
+
+    // t2 is the only terminal op, and its inputs are spent along with the genesis allocation
+    let terminal_ops = consignment.terminal_ops();
+    assert_eq!(terminal_ops, bset![t2]);
+    let spent = consignment.spent_opouts();
+    let t2_inputs = known_transition(&consignment, t2)
+        .inputs
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    assert_eq!(t2_inputs, t1_received);
+    assert!(t2_inputs.is_subset(&spent));
+    assert!(t2_opouts.iter().all(|opout| !spent.contains(opout)));
+    // the change of t1 is neither spent nor an output of a terminal op
+    let [t1_change] = t1_opouts
+        .difference(&t1_received)
+        .copied()
+        .collect::<Vec<_>>()[..]
+    else {
+        panic!("one change output expected")
+    };
+    assert!(!spent.contains(&t1_change));
+    assert!(!terminal_ops.contains(&t1_change.op));
+}
+
+#[test]
+fn spent_opouts_and_terminal_ops_of_burns() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_ifa(999, None, vec![]);
+    let utxo = wlt_2.get_utxo(None);
+    wlt_1.send_ifa(
+        &mut wlt_2,
+        InvoiceType::Blinded(Some(utxo)),
+        contract_id,
+        300,
+    );
+
+    // partial burn: a split sends the burned part to the burn and keeps the change, so the
+    // burn, with no outputs, is the only terminal op and the change of the split is not spent
+    let utxos = wlt_2.list_unspent_outpoints();
+    let (consignment, _) = wlt_2.burn_ifa(contract_id, utxos, Some(map! {OS_ASSET => 100}));
+    let burn = last_opid(&consignment);
+    let burn_transition = known_transition(&consignment, burn);
+    assert_eq!(burn_transition.transition_type, TS_BURN);
+    assert!(burn_transition.assignments.is_empty());
+    let burned = burn_transition
+        .inputs
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let [split] = burned
+        .iter()
+        .map(|opout| opout.op)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>()[..]
+    else {
+        panic!("one split expected")
+    };
+    let split_opouts = transition_opouts(&consignment, split);
+    assert_eq!(split_opouts.len(), 2, "burned part and change");
+    let spent = consignment.spent_opouts();
+    assert_eq!(consignment.terminal_ops(), bset![burn]);
+    assert!(burned.is_subset(&spent));
+    let [change] = split_opouts
+        .difference(&burned)
+        .copied()
+        .collect::<Vec<_>>()[..]
+    else {
+        panic!("one change output expected")
+    };
+    assert!(!spent.contains(&change));
+
+    // full burn: its inputs are spent, and it is a terminal op with no outputs
+    let utxos = wlt_2.list_unspent_outpoints();
+    let (consignment, _) = wlt_2.burn_ifa(contract_id, utxos, None);
+    let burn = last_opid(&consignment);
+    let burn_transition = known_transition(&consignment, burn);
+    assert_eq!(burn_transition.transition_type, TS_BURN);
+    assert!(burn_transition.assignments.is_empty());
+    let spent = consignment.spent_opouts();
+    assert_eq!(consignment.terminal_ops(), bset![burn]);
+    assert!(
+        burn_transition
+            .inputs
+            .iter()
+            .all(|input| spent.contains(input))
+    );
+}
+
+#[test]
+fn spent_opouts_with_concealed_spender() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id_1 = wlt_1.issue_nia(600, None);
+    let schema_id_1 = wlt_1.schema_id(contract_id_1);
+    let contract_id_2 = wlt_1.issue_nia(800, None);
+    let schema_id_2 = wlt_1.schema_id(contract_id_2);
+
+    // two allocations of contract 1 and one of contract 2 on the same UTXO
+    let utxo = wlt_2.get_utxo(None);
+    mine(false);
+    let invoice = wlt_2.invoice(
+        contract_id_1,
+        schema_id_1,
+        100,
+        InvoiceType::Blinded(Some(utxo)),
+    );
+    let (consignment, _) = wlt_1.send_to_invoice(&mut wlt_2, invoice, Some(1000), None, None);
+    let t_a = last_opid(&consignment);
+    let invoice = wlt_2.invoice(
+        contract_id_1,
+        schema_id_1,
+        200,
+        InvoiceType::Blinded(Some(utxo)),
+    );
+    let (consignment, _) = wlt_1.send_to_invoice(&mut wlt_2, invoice, Some(1000), None, None);
+    let t_b = last_opid(&consignment);
+    let invoice = wlt_2.invoice(
+        contract_id_2,
+        schema_id_2,
+        550,
+        InvoiceType::Blinded(Some(utxo)),
+    );
+    wlt_1.send_to_invoice(&mut wlt_2, invoice, Some(1000), None, None);
+
+    // moving contract 2 moves both allocations of contract 1 too, each by its own transition
+    wlt_2.send(
+        &mut wlt_1,
+        TransferType::Blinded,
+        contract_id_2,
+        500,
+        1000,
+        None,
+    );
+    let (consignment, _) = wlt_2.send(
+        &mut wlt_1,
+        TransferType::Blinded,
+        contract_id_1,
+        20,
+        1000,
+        None,
+    );
+    // the bundle moving both allocations off the UTXO, one transition each
+    let moving = &consignment
+        .bundles
+        .iter()
+        .find(|wb| wb.bundle.known_transitions.len() == 2)
+        .unwrap()
+        .bundle;
+    let spender_of = |op: OpId| {
+        moving
+            .input_map
+            .iter()
+            .find(|(opout, _)| opout.op == op)
+            .map(|(opout, opid)| (*opout, *opid))
+            .unwrap()
+    };
+    let (_, e_a) = spender_of(t_a);
+    let (t_b_spent, e_b) = spender_of(t_b);
+    assert_ne!(e_a, e_b);
+
+    // asking for e_a and t_b only leaves e_b, the spender of t_b, concealed in its bundle
+    let (partial, _) = wlt_2
+        .stock()
+        .transfer(contract_id_1, [], [], [e_a, t_b], None, None)
+        .unwrap();
+    let bundle_e = partial
+        .bundles
+        .iter()
+        .map(|wb| &wb.bundle)
+        .find(|b| b.known_transitions_contain_opid(&e_a))
+        .unwrap();
+    assert!(!bundle_e.known_transitions_contain_opid(&e_b));
+    assert_eq!(bundle_e.input_map.get(&t_b_spent), Some(&e_b));
+
+    // the output of t_b is spent although its spender is concealed, so t_b is not terminal
+    assert!(partial.spent_opouts().contains(&t_b_spent));
+    let terminal_ops = partial.terminal_ops();
+    assert!(!terminal_ops.contains(&t_b));
+    assert!(terminal_ops.contains(&e_a));
+}
+
+#[test]
+fn assignments_to_across_bundles() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_4 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_nia(600, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // bundle 1: blinded to wlt_2, whose stock reveals the seal to an explicit txid
+    let utxo_2 = wlt_2.get_utxo(None);
+    let invoice = wlt_2.invoice(
+        contract_id,
+        schema_id,
+        100,
+        InvoiceType::Blinded(Some(utxo_2)),
+    );
+    let Beneficiary::BlindedSeal(secret_2) = invoice.beneficiary.into_inner() else {
+        unreachable!()
+    };
+    let (_, tx_1) = wlt_1.send_to_invoice(&mut wlt_2, invoice, Some(1000), None, None);
+    let witness_1 = txid_bp_to_bitcoin(tx_1.txid());
+
+    // bundle 2: witness vout to wlt_3, a witness-relative seal
+    let invoice = wlt_3.invoice(contract_id, schema_id, 60, InvoiceType::Witness);
+    let (consignment, tx_2) =
+        wlt_2.send_to_invoice(&mut wlt_3, invoice.clone(), Some(1000), None, None);
+    let witness_2 = txid_bp_to_bitcoin(tx_2.txid());
+    let [received] = invoice_assignments(&consignment, &invoice)[..] else {
+        panic!("one assignment to wlt_3 expected")
+    };
+    let BuilderSeal::Revealed(seal_3) = received.seal else {
+        panic!("a witness vout seal is revealed")
+    };
+    let outpoint_3 = seal_3.to_output_seal_or_default(witness_2).to_outpoint();
+
+    // bundle 3: dust to wlt_4, the same blinded seal repeated
+    let utxo_4 = wlt_4.get_utxo(None);
+    let secret_4 = wlt_4.get_secret_seal(Some(utxo_4), None);
+    let pieces = 10;
+    let utxos = wlt_3.list_unspent_outpoints();
+    let (consignment, tx_3) = wlt_3.send_dust(contract_id, utxos, secret_4, pieces);
+    let witness_3 = txid_bp_to_bitcoin(tx_3.txid());
+    assert_eq!(consignment.bundles.len(), 3);
+
+    let found = consignment.assignments_to(&bset![secret_2, secret_4], &bset![utxo_2, outpoint_3]);
+    assert_eq!(found.len(), 2 + pieces as usize);
+
+    // the explicit-txid seal matches both its secret and its outpoint, and is returned once
+    let [hit_2] = found
+        .iter()
+        .filter(|m| m.witness_id == Some(witness_1))
+        .collect::<Vec<_>>()[..]
+    else {
+        panic!("one assignment to wlt_2 expected")
+    };
+    let BuilderSeal::Revealed(seal_2) = hit_2.seal else {
+        panic!("wlt_2 revealed its seal")
+    };
+    assert_eq!(seal_2.to_output_seal().unwrap().to_outpoint(), utxo_2);
+    assert_eq!(hit_2.seal.to_secret_seal(), secret_2);
+
+    // the witness-relative seal is resolved against its own bundle's witness
+    let [hit_3] = found
+        .iter()
+        .filter(|m| m.witness_id == Some(witness_2))
+        .collect::<Vec<_>>()[..]
+    else {
+        panic!("one assignment to wlt_3 expected")
+    };
+    assert_eq!(hit_3.seal, BuilderSeal::Revealed(seal_3));
+    assert!(seal_3.to_output_seal().is_none());
+
+    // every one of the repeated dust assignments
+    let dust = found
+        .iter()
+        .filter(|m| m.witness_id == Some(witness_3))
+        .collect::<Vec<_>>();
+    assert_eq!(dust.len(), pieces as usize);
+    assert!(
+        dust.iter()
+            .all(|m| m.seal == BuilderSeal::Concealed(secret_4))
+    );
+    assert_eq!(
+        dust.iter().map(|m| m.opout).collect::<BTreeSet<_>>().len(),
+        pieces as usize
+    );
+
+    // and the dust lands on the receiver's UTXO once accepted
+    wlt_4.accept_transfer(consignment, None);
+    let assignments = wlt_4.contract_assignments_for(contract_id, [utxo_4]);
+    let at_utxo = assignments
+        .iter()
+        .find(|(seal, _)| seal.to_outpoint() == utxo_4)
+        .map(|(_, opouts)| opouts.len());
+    assert_eq!(at_utxo, Some(pieces as usize));
+}
+
+#[test]
+fn blinded_receive_reveals_seal() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_nia(600, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    let utxo = wlt_2.get_utxo(None);
+    let invoice = wlt_2.invoice(
+        contract_id,
+        schema_id,
+        100,
+        InvoiceType::Blinded(Some(utxo)),
+    );
+    let Beneficiary::BlindedSeal(secret) = invoice.beneficiary.into_inner() else {
+        unreachable!()
+    };
+    let (consignment, _) = wlt_1.send_to_invoice(&mut wlt_2, invoice, Some(1000), None, None);
+
+    // the sender only knows the seal concealed
+    let [sent] = consignment.assignments_to(&bset![secret], &bset![])[..] else {
+        panic!("one assignment to the secret seal expected")
+    };
+    assert_eq!(sent.seal, BuilderSeal::Concealed(secret));
+
+    // the receiver stored it as an allocation on its UTXO
+    let assignments = wlt_2.contract_assignments_for(contract_id, [utxo]);
+    let stored = assignments
+        .iter()
+        .find(|(seal, _)| seal.to_outpoint() == utxo)
+        .map(|(_, opouts)| opouts)
+        .expect("the allocation is on the receiver's UTXO");
+    assert_eq!(stored.len(), 1);
+    assert!(matches!(
+        stored.get(&sent.opout),
+        Some(AllocatedState::Amount(amt)) if amt.as_u64() == 100
+    ));
+
+    // and composes it revealed from then on
+    let consignment = wlt_2.consign_transfer(contract_id, [], [], [sent.opout.op], None, None);
+    let [stored] = consignment.assignments_to(&bset![], &bset![utxo])[..] else {
+        panic!("one assignment to the receiver's UTXO expected")
+    };
+    assert_eq!(stored.opout, sent.opout);
+    assert!(stored.seal.is_revealed());
+    assert_eq!(stored.seal.to_secret_seal(), secret);
 }

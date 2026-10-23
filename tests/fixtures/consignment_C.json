@@ -1,7 +1,6 @@
 {
   "version": "v1",
   "transfer": true,
-  "terminals": {},
   "genesis": {
     "ffv": 0,
     "schemaId": "rgb:sch:A2n9kPNWtXUqwQJyXfY8yGHKyEPZgvrNYYYPGhXawOk#graph-salute-retro",

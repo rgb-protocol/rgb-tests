@@ -1026,6 +1026,53 @@ impl Report {
     }
 }
 
+/// The assignments `consignment` makes to the beneficiary of `invoice`, located the way a
+/// receiver does: by the invoice's secret seal, or by the outputs of each bundle's witness which
+/// pay the invoice address.
+pub fn invoice_assignments(consignment: &Transfer, invoice: &RgbInvoice) -> Vec<AssignmentMatch> {
+    match invoice.beneficiary.into_inner() {
+        Beneficiary::BlindedSeal(secret) => consignment.assignments_to(&bset![secret], &bset![]),
+        Beneficiary::WitnessVout(pay2vout, _) => {
+            let script = pay2vout.to_script();
+            let outpoints = consignment
+                .bundles
+                .iter()
+                .flat_map(|wb| {
+                    let txid = wb.witness_id();
+                    wb.tx
+                        .output
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, out)| out.script_pubkey == script)
+                        .map(move |(vout, _)| Outpoint::new(txid, vout as u32))
+                })
+                .collect();
+            consignment.assignments_to(&bset![], &outpoints)
+        }
+    }
+}
+
+/// Checks that `consignment` pays `invoice`, and with state it does not spend, as a receiver
+/// does before accepting it.
+pub fn check_invoice_paid(consignment: &Transfer, invoice: &RgbInvoice) -> Vec<AssignmentMatch> {
+    // a tapret invoice is paid to the invoice key tweaked with the commitment, so its output
+    // does not carry the invoice script and the receiver only knows it once the tweak is added
+    if let Beneficiary::WitnessVout(_, Some(_)) = invoice.beneficiary.into_inner() {
+        return vec![];
+    }
+    let received = invoice_assignments(consignment, invoice);
+    assert!(
+        !received.is_empty(),
+        "the consignment assigns nothing to the invoice"
+    );
+    let spent = consignment.spent_opouts();
+    assert!(
+        received.iter().all(|m| !spent.contains(&m.opout)),
+        "the consignment spends what it pays to the invoice"
+    );
+    received
+}
+
 pub fn get_builder_seal(outpoint: Outpoint, blinding: Option<u64>) -> BuilderSeal<BlindSeal<Txid>> {
     let blind_seal = if let Some(blinding) = blinding {
         BlindSeal::with_blinding(outpoint.txid, outpoint.vout, blinding)
@@ -1995,8 +2042,9 @@ where
         TestWallet<W2, D2>: TestWalletExt,
         <TestWallet<W2, D2> as TestWalletExt>::Psbt: Serialize,
     {
-        let (consignment, tx, _, _) = self.pay_full(invoice, sats, fee, true, report);
+        let (consignment, tx, _, _) = self.pay_full(invoice.clone(), sats, fee, true, report);
         self.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+        check_invoice_paid(&consignment, &invoice);
         recv_wlt.accept_transfer(consignment.clone(), report);
         self.sync();
         (consignment, tx)
@@ -2027,9 +2075,10 @@ where
         TestWallet<W2, D2>: TestWalletExt,
         <TestWallet<W2, D2> as TestWalletExt>::Psbt: Serialize,
     {
-        let (consignment, tx, _, _) = self.pay_full(invoice, None, None, true, None);
+        let (consignment, tx, _, _) = self.pay_full(invoice.clone(), None, None, true, None);
         let txid = tx.txid();
         self.mine_tx(&txid_bp_to_bitcoin(txid), false);
+        check_invoice_paid(&consignment, &invoice);
         recv_wlt.accept_transfer_custom(consignment.clone(), None, &recv_wlt.get_resolver());
         self.sync();
         (consignment, tx)
@@ -2049,8 +2098,9 @@ where
     {
         let schema_id = self.schema_id(contract_id);
         let invoice = recv_wlt.invoice(contract_id, schema_id, amount, invoice_type.into());
-        let (consignment, tx, _, _) = self.pay_full(invoice, Some(sats), None, true, None);
+        let (consignment, tx, _, _) = self.pay_full(invoice.clone(), Some(sats), None, true, None);
         self.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+        check_invoice_paid(&consignment, &invoice);
         recv_wlt.accept_transfer_bfa(consignment.clone(), |_anchor| true);
         self.sync();
         (consignment, tx)
