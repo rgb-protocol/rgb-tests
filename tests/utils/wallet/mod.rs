@@ -1429,7 +1429,7 @@ where
                 &schema_rules,
                 &ValidationConfig {
                     chain_net: self.chain_net(),
-                    build_opouts_dag: true,
+                    build_ops_dag: true,
                     ..Default::default()
                 },
             )
@@ -1687,7 +1687,7 @@ where
                 &resolver,
                 &ValidationConfig {
                     chain_net: self.chain_net(),
-                    build_opouts_dag: true,
+                    build_ops_dag: true,
                     ..Default::default()
                 },
             )

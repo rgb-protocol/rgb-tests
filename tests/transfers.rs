@@ -1614,7 +1614,7 @@ fn tapret_opret_same_utxo() {
         None,
     );
 
-    // hijacking this scenario to test opouts_dag construction during consignment creation
+    // hijacking this scenario to test ops_dag construction during consignment creation
     // only for convenience, some history is needed to make meaningful checks
     let last_opid = *consignment
         .bundles
@@ -1625,7 +1625,7 @@ fn tapret_opret_same_utxo() {
         .iter()
         .last()
         .unwrap();
-    let (alt_consignment, (opouts_dag, opouts_map), _) = wlt_3
+    let (alt_consignment, dag, _) = wlt_3
         .stock()
         .transfer_with_dag(contract_id_2, [], [], [last_opid], None, None)
         .unwrap();
@@ -1633,61 +1633,38 @@ fn tapret_opret_same_utxo() {
     let mut consignment = consignment;
     consignment.terminals = none!();
     assert_eq!(consignment, alt_consignment);
-    // 6 nodes:
-    // - 1 genesis opout
-    // - 2 opouts first transition
-    // - 1 opout extra transition
-    // - 2 opouts second transition
-    assert_eq!(opouts_map.len(), 6);
-    assert_eq!(opouts_dag.node_count(), 6);
-    // 5 edges:
-    // - 2 first transition (1 in, 2 out)
-    // - 1 extra transition (1 in, 1 out)
-    // - 2 second transition (1 in, 2 out)
-    assert_eq!(opouts_dag.edge_count(), 5);
+    // one node per operation, one edge per transition input:
+    // 4 nodes: genesis, first, extra and second transitions
+    // 3 edges: one input for each transition
+    assert_dag_matches_consignment(&dag, &consignment);
+    assert_eq!(dag.node_count(), 4);
+    assert_eq!(dag.edge_count(), 3);
 
-    // genesis opouts don't have parents
-    let genesis_opid = OpId::from(*contract_id_2);
-    let genesis_asset_opout = Opout::new(genesis_opid, OS_ASSET, 0);
-    let genesis_asset_idx = *opouts_map.get(&genesis_asset_opout).unwrap();
-    let mut parents = opouts_dag.parents(genesis_asset_idx);
-    assert!(parents.walk_next(&opouts_dag).is_none());
     // genesis has only one assignment
-    assert_eq!(
-        opouts_map
-            .keys()
-            .filter(|opout| opout.op == genesis_opid)
-            .count(),
-        1
-    );
+    let genesis_opid = OpId::from(*contract_id_2);
+    let genesis_outputs = consignment
+        .genesis
+        .assignments
+        .values()
+        .map(|assigns| assigns.len_u16())
+        .sum::<u16>();
+    assert_eq!(genesis_outputs, 1);
 
-    // terminal opouts have no children
+    // terminal opouts are not spent
+    let spent_opouts = dag_ancestors(&dag, last_opid)
+        .into_iter()
+        .flat_map(|opid| dag.spent_opouts(dag.op_node(&opid).unwrap()))
+        .map(|(opout, _)| opout)
+        .collect::<HashSet<_>>();
     for i in 0..2 {
-        let opout = Opout::new(last_opid, OS_ASSET, i);
-        assert!(
-            opouts_dag
-                .children(*opouts_map.get(&opout).unwrap())
-                .walk_next(&opouts_dag)
-                .is_none()
-        );
+        assert!(!spent_opouts.contains(&Opout::new(last_opid, OS_ASSET, i)));
     }
 
-    // each opout is spent by a single transition
-    for node_idx in opouts_map.values() {
-        let children_opids = opouts_dag
-            .children(*node_idx)
-            .iter(&opouts_dag)
-            .map(|child1| {
-                opouts_map
-                    .iter()
-                    .find(|(_, idx)| **idx == child1.1)
-                    .unwrap()
-                    .0
-                    .op
-            })
-            .collect::<HashSet<_>>();
-        assert!(children_opids.len() <= 1);
-    }
+    // walking up from the last transition visits the whole history, genesis included
+    let visited = dag_ancestors(&dag, last_opid);
+    assert_eq!(visited.len(), dag.node_count());
+    assert_eq!(visited.first(), Some(&last_opid));
+    assert!(visited.contains(&genesis_opid));
 }
 
 #[test]
@@ -4219,7 +4196,7 @@ fn bfa_mint_and_transfer(
     // validate the mint consignment with 3-phase validation
     let validation_config = ValidationConfig {
         chain_net: wlt_1.chain_net(),
-        build_opouts_dag: true,
+        build_ops_dag: true,
         ..Default::default()
     };
     let mut pending_mint = mint_consignment
@@ -4297,7 +4274,7 @@ fn bfa_mint_and_transfer(
 
     let validation_config_2 = ValidationConfig {
         chain_net: wlt_1.chain_net(),
-        build_opouts_dag: true,
+        build_ops_dag: true,
         ..Default::default()
     };
     let mut pending_mint_2 = mint_consignment_2
