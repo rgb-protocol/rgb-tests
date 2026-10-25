@@ -1,4 +1,5 @@
 pub mod chain;
+pub mod dag;
 pub mod wallet;
 
 pub const TEST_DATA_DIR: &str = "test-data";
@@ -160,7 +161,7 @@ pub use rgb::{
     },
     tapret::{TapretNodePartner, TapretRightBranch},
     validation::{
-        DbcProof, ExternalAnchor, Failure, OpoutsDagData, PendingValidation, ResolveWitness,
+        DbcProof, ExternalAnchor, Failure, OpsDag, PendingValidation, ResolveWitness,
         SchemaDefError, SchemaDefinition, SchemaRules, Scripts, SpvProof, Status, TypeLibs,
         ValidationConfig, ValidationError, Validator, Validity, Warning, WitnessOrdProvider,
         WitnessResolution, WitnessResolverError, WitnessSafety, WitnessStatus, WitnessTask,
@@ -247,7 +248,7 @@ pub use strict_types::{
 pub use strum::{EnumIter, IntoEnumIterator};
 pub use time::OffsetDateTime;
 
-pub use crate::utils::{chain::*, wallet::*};
+pub use crate::utils::{chain::*, dag::*, wallet::*};
 
 fn running_in_docker() -> bool {
     std::path::Path::new("/.dockerenv").exists()

@@ -1429,7 +1429,7 @@ where
                 &schema_rules,
                 &ValidationConfig {
                     chain_net: self.chain_net(),
-                    build_opouts_dag: true,
+                    build_ops_dag: true,
                     ..Default::default()
                 },
             )
@@ -1449,6 +1449,10 @@ where
         let validation_status = validated_consignment.clone().into_validation_status();
         let validity = validation_status.validity();
         assert_eq!(validity, Validity::Valid);
+        assert_dag_matches_consignment(
+            validation_status.ops_dag.as_ref().expect("DAG requested"),
+            &consignment,
+        );
         self.wallet
             .stock_mut()
             .accept_transfer(validated_consignment, &resolver)
@@ -1687,7 +1691,7 @@ where
                 &resolver,
                 &ValidationConfig {
                     chain_net: self.chain_net(),
-                    build_opouts_dag: true,
+                    build_ops_dag: true,
                     ..Default::default()
                 },
             )
@@ -1700,6 +1704,10 @@ where
         let validation_status = validated_consignment.clone().into_validation_status();
         let validity = validation_status.validity();
         assert_eq!(validity, Validity::Valid);
+        assert_dag_matches_consignment(
+            validation_status.ops_dag.as_ref().expect("DAG requested"),
+            &consignment,
+        );
         let accept_start = Instant::now();
         self.wallet
             .stock_mut()
@@ -2178,20 +2186,18 @@ where
                     }
                 }
             }
-            consignments_map.insert(
-                contract_id,
-                stock
-                    .transfer_from_fascia_with_dag(
-                        contract_id,
-                        beneficiaries_witness,
-                        beneficiaries_blinded,
-                        [],
-                        fascia,
-                        spv_resolver,
-                    )
-                    .unwrap()
-                    .0,
-            );
+            let (consignment, dag, _) = stock
+                .transfer_from_fascia_with_dag(
+                    contract_id,
+                    beneficiaries_witness,
+                    beneficiaries_blinded,
+                    [],
+                    fascia,
+                    spv_resolver,
+                )
+                .unwrap();
+            assert_dag_matches_consignment(&dag, &consignment);
+            consignments_map.insert(contract_id, consignment);
         }
         consignments_map
     }
