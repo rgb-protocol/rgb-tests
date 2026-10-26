@@ -587,6 +587,99 @@ fn validate_consignment_generate() {
     }
 }
 
+/// The structure of a consignment that regenerating its scenario must reproduce, leaving out the
+/// values that change on every run (txids, seals, blinding factors)
+#[derive(Debug, PartialEq)]
+struct ConsignmentShape {
+    schema_id: SchemaId,
+    genesis: Vec<(AssignmentType, u16)>,
+    /// Per bundle, the inputs of all its transitions, also the concealed ones, and its revealed
+    /// transitions
+    bundles: Vec<(BTreeMap<AssignmentType, usize>, Vec<TransitionShape>)>,
+    txs: usize,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct TransitionShape {
+    ty: TransitionType,
+    inputs: Vec<AssignmentType>,
+    assignments: Vec<(AssignmentType, u16)>,
+}
+
+impl ConsignmentShape {
+    fn with(consignment: &Transfer, txs: usize) -> Self {
+        let genesis = consignment
+            .genesis
+            .assignments
+            .iter()
+            .map(|(ty, assigns)| (*ty, assigns.len_u16()))
+            .collect();
+        let bundles = consignment
+            .bundles
+            .iter()
+            .map(|wb| {
+                let mut inputs = BTreeMap::new();
+                for opout in wb.bundle.input_map.keys() {
+                    *inputs.entry(opout.ty).or_insert(0) += 1;
+                }
+                let mut transitions = wb
+                    .bundle
+                    .known_transitions
+                    .iter()
+                    .map(|kt| TransitionShape {
+                        ty: kt.transition.transition_type,
+                        inputs: {
+                            // inputs are ordered by opid, which changes on every run
+                            let mut inputs = kt
+                                .transition
+                                .inputs
+                                .iter()
+                                .map(|opout| opout.ty)
+                                .collect::<Vec<_>>();
+                            inputs.sort();
+                            inputs
+                        },
+                        assignments: kt
+                            .transition
+                            .assignments
+                            .iter()
+                            .map(|(ty, assigns)| (*ty, assigns.len_u16()))
+                            .collect(),
+                    })
+                    .collect::<Vec<_>>();
+                transitions.sort();
+                (inputs, transitions)
+            })
+            .collect();
+        Self {
+            schema_id: consignment.schema_id(),
+            genesis,
+            bundles,
+            txs,
+        }
+    }
+}
+
+/// The tests reading a fixture can't notice that its scenario no longer generates it, which only
+/// shows when the fixture is regenerated: check it here
+#[rstest]
+#[case(Scenario::A)]
+#[case(Scenario::B)]
+#[case(Scenario::C)]
+#[case(Scenario::D)]
+#[case(Scenario::E)]
+fn validate_consignment_fixture_up_to_date(#[case] scenario: Scenario) {
+    let (consignment, txes) = get_consignment(scenario);
+    let fixture = get_consignment_from_json(&format!("consignment_{scenario}"));
+    let fixture_txs = std::fs::read_dir(scenario.txs_folder()).unwrap().count();
+    assert_eq!(
+        ConsignmentShape::with(&consignment, txes.len()),
+        ConsignmentShape::with(&fixture, fixture_txs),
+        "the fixture of scenario {scenario} is outdated, regenerate it with `SCENARIO={scenario} \
+         cargo test --test validation validate_consignment_generate -- --ignored`"
+    );
+}
+
 fn get_consignment_from_json(fname: &str) -> Transfer {
     let cons_path = format!("tests/fixtures/{fname}.json");
     let file = std::fs::File::open(cons_path).unwrap();
