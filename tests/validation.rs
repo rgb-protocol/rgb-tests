@@ -386,10 +386,8 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
 
     if let Scenario::E = scenario {
         let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
-        let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
 
         let contract_id = wlt_1.issue_bfa(2, None);
-        let schema_id = wlt_1.schema_id(contract_id);
 
         let mut txes = vec![];
 
@@ -397,35 +395,9 @@ fn get_consignment(scenario: Scenario) -> (Transfer, Vec<Tx>) {
         let (_consignment, tx) = wlt_1.mint_bfa(contract_id, mint_amt, 20_000_000);
         txes.push(tx);
 
-        // wlt_2 receives both the assets and the mint right on the same UTXO
-        let shared_utxo = wlt_2.get_utxo(None);
-        let (_consignment, tx) = wlt_1.send_bfa(
-            &mut wlt_2,
-            InvoiceType::Blinded(Some(shared_utxo)),
-            contract_id,
-            mint_amt,
-            2000,
-        );
-        txes.push(tx);
-        let invoice = wlt_2.invoice_void(
-            contract_id,
-            schema_id,
-            fname!("mintRight"),
-            InvoiceType::Blinded(Some(shared_utxo)),
-        );
-        let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
-        wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
-        wlt_2.accept_transfer_bfa(consignment, |_anchor| true);
-        txes.push(tx);
-
-        // Sending the assets moves the mint right too: a transfer and a propagate in one bundle
-        let (consignment, tx) = wlt_2.send_bfa(
-            &mut wlt_1,
-            InvoiceType::Blinded(None),
-            contract_id,
-            mint_amt,
-            2000,
-        );
+        // Self-transfer moving both the assets and the mint right forward: a transfer and a
+        // propagate in one bundle
+        let (consignment, tx) = wlt_1.bfa_transfer_with_mint_right(contract_id);
         txes.push(tx);
 
         return (consignment, txes);
