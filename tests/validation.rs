@@ -731,7 +731,7 @@ fn assert_consignment_valid(consignment: &Transfer, resolver: &impl ResolveWitne
     assert!(validation_status.warnings.is_empty());
     let validity = validation_status.validity();
     assert_eq!(validity, Validity::Valid);
-    assert!(validation_status.dag_data_opt.is_none());
+    assert!(validation_status.ops_dag.is_none());
 }
 
 #[test]
@@ -4467,7 +4467,7 @@ fn phase_1_hands_out_witnesses_as_it_walks() {
     let asset_schema_rules = asset_schema.schema_rules();
     let validation_config = ValidationConfig {
         chain_net: ChainNet::BitcoinRegtest,
-        build_opouts_dag: true,
+        build_ops_dag: true,
         ..Default::default()
     };
     let context = (asset_schema_rules.schema(), consignment.contract_id());
@@ -4493,7 +4493,7 @@ fn phase_1_hands_out_witnesses_as_it_walks() {
 
     // the DAG is readable before a single witness has been resolved: this is
     // what lets a caller decide whether resolving is worth it at all
-    assert!(pending.dag_data_opt.is_some());
+    assert!(pending.ops_dag.is_some());
     assert!(!pending.is_resolved());
     assert_eq!(
         pending.unresolved_witnesses().count(),
@@ -4750,7 +4750,7 @@ fn pending_validation_survives_a_round_trip_through_disk() {
     let asset_schema_rules = asset_schema.schema_rules();
     let validation_config = ValidationConfig {
         chain_net: ChainNet::BitcoinRegtest,
-        build_opouts_dag: true,
+        build_ops_dag: true,
         ..Default::default()
     };
     let context = (asset_schema_rules.schema(), consignment.contract_id());
@@ -4766,13 +4766,20 @@ fn pending_validation_survives_a_round_trip_through_disk() {
     let outstanding = pending.unresolved_witnesses().count();
     assert!(outstanding > 0);
     // the DAG rides along, so the far side can inspect it before resolving
-    assert!(pending.dag_data_opt.is_some());
+    assert!(pending.ops_dag.is_some());
 
     // it is also `Send`: the whole point of it owning its data rather than
     // borrowing the consignment the way `Validator` does
     fn assert_send<T: Send>() {}
     assert_send::<PendingValidation>();
 
+    let dag = pending.ops_dag.clone().unwrap();
+    let opids = consignment
+        .bundles
+        .iter()
+        .flat_map(|wb| wb.bundle.known_transitions.iter().map(|kt| kt.opid))
+        .chain([OpId::from(*consignment.contract_id())])
+        .collect::<Vec<_>>();
     let json = serde_json::to_string(&pending).unwrap();
     drop(pending);
     drop(consignment);
@@ -4780,7 +4787,18 @@ fn pending_validation_survives_a_round_trip_through_disk() {
     // ...somewhere else, with no consignment and no validator in sight
     let mut shipped: PendingValidation = serde_json::from_str(&json).unwrap();
     assert_eq!(shipped.unresolved_witnesses().count(), outstanding);
-    assert!(shipped.dag_data_opt.is_some());
+    // the DAG arrives intact
+    let shipped_dag = shipped.ops_dag.as_ref().unwrap();
+    assert_eq!(shipped_dag.node_count(), dag.node_count());
+    assert_eq!(shipped_dag.edge_count(), dag.edge_count());
+    let spent = |dag: &OpsDag, opid: &OpId| {
+        dag.spent_opouts(dag.op_node(opid).unwrap())
+            .map(|(opout, _)| opout)
+            .collect::<HashSet<_>>()
+    };
+    for opid in &opids {
+        assert_eq!(spent(shipped_dag, opid), spent(&dag, opid));
+    }
 
     shipped.resolve_all(&resolver).unwrap();
     assert!(shipped.is_resolved());
@@ -4795,7 +4813,7 @@ fn validate_consignment_opout_dag() {
     let asset_schema_rules = asset_schema.schema_rules();
     let validation_config = ValidationConfig {
         chain_net: ChainNet::BitcoinRegtest,
-        build_opouts_dag: true,
+        build_ops_dag: true,
         ..Default::default()
     };
     let res = consignment
@@ -4806,33 +4824,13 @@ fn validate_consignment_opout_dag() {
             &validation_config,
         )
         .unwrap();
-    let (opouts_dag, opouts_map) = res.validation_status().dag_data_opt.clone().unwrap();
-    dbg!(&opouts_dag);
-    // 8 nodes:
-    // - 2 genesis opout
-    // - 2 opouts after first extra transition
-    // - 2 opouts after transition that isolates inflation right
-    // - 2 opouts after inflation operation
-    // - 1 opout after burn transition (change)
-    assert_eq!(opouts_map.len(), 9);
-    assert_eq!(opouts_dag.node_count(), 9);
-    // 8 edges:
-    // - 4 extra transition (2 in, 2 out)
-    // - 2 inflation right isolation (2 x 1 in, 1 out)
-    // - 2 inflation transition (1 in, 2 out)
-    // - 3 burn transition (3 in, 1 out)
-    assert_eq!(opouts_dag.edge_count(), 11);
-
-    // genesis opouts don't have parents
-    let genesis_opid: OpId = (*consignment.contract_id()).into();
-    let genesis_asset_opout = Opout::new(genesis_opid, OS_ASSET, 0);
-    let genesis_infl_opout = Opout::new(genesis_opid, OS_INFLATION, 0);
-    let genesis_asset_idx = *opouts_map.get(&genesis_asset_opout).unwrap();
-    let mut parents = opouts_dag.parents(genesis_asset_idx);
-    assert!(parents.walk_next(&opouts_dag).is_none());
-    let genesis_infl_idx = *opouts_map.get(&genesis_infl_opout).unwrap();
-    let mut parents = opouts_dag.parents(genesis_infl_idx);
-    assert!(parents.walk_next(&opouts_dag).is_none());
+    let dag = res.validation_status().ops_dag.clone().unwrap();
+    // one node per operation, one edge per transition input:
+    // 6 nodes: genesis, 3 transfers, inflation and burn
+    // 8 edges: transfers (1 + 1 + 2 in), inflation (1 in), burn (3 in)
+    assert_dag_matches_consignment(&dag, &consignment);
+    assert_eq!(dag.node_count(), 6);
+    assert_eq!(dag.edge_count(), 8);
 
     let mut inflation_opid = None;
     let mut burn_opid = None;
@@ -4851,42 +4849,33 @@ fn validate_consignment_opout_dag() {
             _ => {}
         };
     }
-    let infl_ass_opout = Opout::new(inflation_opid.unwrap(), OS_ASSET, 0);
-    let infl_chg_opout = Opout::new(inflation_opid.unwrap(), OS_INFLATION, 0);
-    let burn_chg_opout = Opout::new(burn_opid.unwrap(), OS_ASSET, 0);
-    assert_eq!(
-        opouts_map[&burn_chg_opout],
-        opouts_dag
-            .children(*opouts_map.get(&infl_ass_opout).unwrap())
-            .walk_next(&opouts_dag)
-            .unwrap()
-            .1
-    );
-    assert_eq!(
-        opouts_map[&burn_chg_opout],
-        opouts_dag
-            .children(*opouts_map.get(&infl_chg_opout).unwrap())
-            .walk_next(&opouts_dag)
-            .unwrap()
-            .1
-    );
+    let (inflation_opid, burn_opid) = (inflation_opid.unwrap(), burn_opid.unwrap());
 
-    // each opout is spent by a single transition
-    for node_idx in opouts_map.values() {
-        let children_opids = opouts_dag
-            .children(*node_idx)
-            .iter(&opouts_dag)
-            .map(|child1| {
-                opouts_map
-                    .iter()
-                    .find(|(_, idx)| **idx == child1.1)
-                    .unwrap()
-                    .0
-                    .op
-            })
-            .collect::<HashSet<_>>();
-        assert!(children_opids.len() <= 1);
+    // the burn transition spends both inflation opouts
+    for ty in [OS_ASSET, OS_INFLATION] {
+        let burn_node = dag.op_node(&burn_opid).unwrap();
+        let burn_inputs = dag.spent_opouts(burn_node).map(|(opout, _)| opout);
+        assert!(
+            burn_inputs
+                .collect::<Vec<_>>()
+                .contains(&Opout::new(inflation_opid, ty, 0))
+        );
     }
+
+    // walking up from the burn transition, the leaf, visits the whole history once,
+    // genesis included
+    let genesis_opid: OpId = (*consignment.contract_id()).into();
+    let visited = dag_ancestors(&dag, burn_opid);
+    assert_eq!(visited.len(), dag.node_count());
+    assert_eq!(
+        visited.iter().collect::<HashSet<_>>(),
+        consignment
+            .bundles
+            .iter()
+            .flat_map(|wb| wb.bundle.known_transitions.iter().map(|kt| &kt.opid))
+            .chain([&genesis_opid])
+            .collect::<HashSet<_>>()
+    );
 }
 
 #[test]
