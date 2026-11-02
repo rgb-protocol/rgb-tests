@@ -2678,42 +2678,25 @@ fn validate_consignment_logic_fail() {
         ))
     );
 
-    // SchemaUnknownAssignmentType: unexpected assignment type in transition input
+    // SchemaUnknownAssignmentType: inflation rights handled by the asset transfer
     let mut consignment = base_consignment.clone();
     let mut bundles = consignment.bundles.release();
     let mut witness_id = None;
     let mut transfer_transition = None;
-    for wbun in bundles.iter() {
+    // the first one, so that its descendants are the ones removed
+    'search: for wbun in bundles.iter() {
         for KnownTransition { transition, .. } in wbun.bundle.known_transitions.iter() {
-            if transition.transition_type == TS_TRANSFER
-                && transition
-                    .inputs
-                    .iter()
-                    .map(|i| i.ty)
-                    .collect::<HashSet<_>>()
-                    .is_superset(&set![OS_ASSET, OS_INFLATION])
-            {
+            if transition.transition_type == TS_TRANSFER_INFLATION {
                 witness_id = Some(wbun.witness_id());
                 transfer_transition = Some(transition);
-                break;
+                break 'search;
             }
         }
     }
     let witness_id = witness_id.unwrap();
     let mut transition = transfer_transition.unwrap().clone();
     let old_opid = transition.id();
-    transition.transition_type = TS_INFLATION;
-    let val = Amount::from(42u64)
-        .to_strict_serialized::<{ u16::MAX as usize }>()
-        .unwrap();
-    transition
-        .metadata
-        .add_value(MS_ALLOWED_INFLATION, val.clone().into())
-        .unwrap();
-    transition
-        .globals
-        .add_state(GS_ISSUED_SUPPLY, val.into())
-        .unwrap();
+    transition.transition_type = TS_TRANSFER;
     let opid = transition.id();
     assert_ne!(opid, old_opid);
     let wbundle = bundles
@@ -2733,7 +2716,10 @@ fn validate_consignment_logic_fail() {
     dbg!(&res);
     assert_eq!(
         res,
-        ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(opid, OS_ASSET))
+        ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(
+            opid,
+            OS_INFLATION
+        ))
     );
 }
 
@@ -2811,6 +2797,25 @@ fn assert_bfa_script_failure(consignment: Transfer, rules: &SchemaRules, opid: O
     assert_eq!(
         res,
         ValidationError::InvalidConsignment(Failure::ScriptFailure(opid, Some(errno), None))
+    );
+}
+
+fn assert_bfa_unknown_assignment(
+    consignment: Transfer,
+    rules: &SchemaRules,
+    opid: OpId,
+    ty: AssignmentType,
+) {
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let res = consignment
+        .validate_deterministic(rules, &validation_config)
+        .unwrap_err();
+    assert_eq!(
+        res,
+        ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(opid, ty))
     );
 }
 
@@ -3163,25 +3168,22 @@ fn validate_consignment_bfa_burn() {
             globals.add_state(GS_BURNED_ASSET, val.into()).unwrap();
         }
 
-        // a burn transition defines no OS_MINT assignments: a right it spends is retired
+        // a burn transition defines no assignments: what it spends is destroyed, including the
+        // rights, so `change` is only meant to build forbidden transitions
         let mut assignments = parent_transition.assignments.clone();
-        match change {
-            Some(amount) => {
-                assignments
-                    .insert(
-                        OS_ASSET,
-                        TypedAssigns::Fungible(AssignVec::with(NonEmptyVec::with(
-                            AssignFungible::with(
-                                BuilderSeal::Revealed(GraphSeal::new_random_vout(0)),
-                                RevealedValue::new(amount),
-                            ),
-                        ))),
-                    )
-                    .unwrap();
-            }
-            None => {
-                assignments.remove(&OS_ASSET).unwrap();
-            }
+        assignments.clear();
+        if let Some(amount) = change {
+            assignments
+                .insert(
+                    OS_ASSET,
+                    TypedAssigns::Fungible(AssignVec::with(NonEmptyVec::with(
+                        AssignFungible::with(
+                            BuilderSeal::Revealed(GraphSeal::new_random_vout(0)),
+                            RevealedValue::new(amount),
+                        ),
+                    ))),
+                )
+                .unwrap();
         }
 
         let transition = Transition {
@@ -3228,17 +3230,17 @@ fn validate_consignment_bfa_burn() {
         append_burn(&mut consignment, &resolver, &[OS_ASSET], Some(supply), None);
     assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
 
-    // valid: a partial burn, the remainder carried over as change
+    // SchemaUnknownAssignmentType: a burn cannot carry change, partial burns are not allowed
     let mut consignment = base_consignment.clone();
     let burnt = supply / 4;
-    let (alt_resolver, _) = append_burn(
+    let (_, opid) = append_burn(
         &mut consignment,
         &resolver,
         &[OS_ASSET],
         Some(burnt),
         Some(supply - burnt),
     );
-    assert_bfa_valid(consignment, &asset_schema_rules, &alt_resolver);
+    assert_bfa_unknown_assignment(consignment, &asset_schema_rules, opid, OS_ASSET);
 
     // valid: the mint right alone is retired
     let mut consignment = base_consignment.clone();
@@ -3273,16 +3275,10 @@ fn validate_consignment_bfa_burn() {
 
     // ScriptFailure: an explicit zero is malformed state
     let mut consignment = base_consignment.clone();
-    let (_, opid) = append_burn(
-        &mut consignment,
-        &resolver,
-        &[OS_ASSET],
-        Some(0),
-        Some(supply),
-    );
+    let (_, opid) = append_burn(&mut consignment, &resolver, &[OS_ASSET], Some(0), None);
     assert_bfa_script_failure(consignment, &asset_schema_rules, opid, ERRNO_BURN_MISMATCH);
 
-    // ScriptFailure: a burn transition may not inflate
+    // SchemaUnknownAssignmentType: a burn transition may not inflate
     let mut consignment = base_consignment.clone();
     let (_, opid) = append_burn(
         &mut consignment,
@@ -3291,11 +3287,11 @@ fn validate_consignment_bfa_burn() {
         None,
         Some(supply + 1),
     );
-    assert_bfa_script_failure(consignment, &asset_schema_rules, opid, ERRNO_BURN_MISMATCH);
+    assert_bfa_unknown_assignment(consignment, &asset_schema_rules, opid, OS_ASSET);
 
     // ScriptFailure: a burn transition cannot be used as a plain transfer
     let mut consignment = base_consignment.clone();
-    let (_, opid) = append_burn(&mut consignment, &resolver, &[OS_ASSET], None, Some(supply));
+    let (_, opid) = append_burn(&mut consignment, &resolver, &[OS_ASSET], None, None);
     assert_bfa_script_failure(consignment, &asset_schema_rules, opid, ERRNO_BURN_ZERO);
 }
 
@@ -3441,25 +3437,35 @@ fn validate_consignment_ifa() {
         ..Default::default()
     };
 
-    // take the last "transfer" transition
-    let (old_txid, known_transition) = base_consignment
-        .bundles
-        .iter()
-        .filter_map(|wb| {
-            let kt = wb.bundle.known_transitions.last().unwrap();
-            if kt.transition.transition_type == TS_TRANSFER {
-                Some((wb.witness_id(), kt))
-            } else {
-                None
-            }
-        })
-        .next_back()
-        .unwrap();
-    let old_opid = known_transition.opid;
-    let base_transition = known_transition.transition.clone();
+    // take the first default transition of the assignment type, as the last bundle holds the
+    // burn which is dropped along with the descendants: each type has its own
+    let first_default_transition = |assignment_type: AssignmentType| {
+        let transition_type = match assignment_type {
+            OS_ASSET => TS_TRANSFER,
+            OS_INFLATION => TS_TRANSFER_INFLATION,
+            _ => unreachable!(),
+        };
+        let (witness_id, known_transition) = base_consignment
+            .bundles
+            .iter()
+            .flat_map(|wb| {
+                wb.bundle
+                    .known_transitions
+                    .iter()
+                    .map(move |kt| (wb.witness_id(), kt))
+            })
+            .find(|(_, kt)| kt.transition.transition_type == transition_type)
+            .expect("fixture must carry a default transition for the assignment type");
+        (
+            witness_id,
+            known_transition.opid,
+            known_transition.transition.clone(),
+        )
+    };
 
     // Error: zero-amount allocations are not allowed for fungible assignment types
     for assignment_type in [OS_ASSET, OS_INFLATION] {
+        let (old_txid, _, base_transition) = first_default_transition(assignment_type);
         let mut consignment = base_consignment.clone();
         let mut bundles = consignment.bundles.release();
         let wbundle = bundles
@@ -3482,13 +3488,8 @@ fn validate_consignment_ifa() {
         let opid = transition.id();
         assert_ne!(opid, old_opid);
         replace_transition_in_bundle(wbundle, old_opid, transition);
-        let txid = wbundle.witness_id();
-        update_transition_children(
-            &mut bundles,
-            HashMap::from([(old_opid, opid)]),
-            HashMap::from([(old_txid, txid)]),
-            None,
-        );
+        // the new output shifts the indexes its spenders refer to
+        remove_transition_children(&mut bundles, bset![old_opid], None);
         consignment.bundles = LargeVec::from_checked(bundles);
         let resolver = OfflineResolver {
             consignment: &consignment,
@@ -3510,6 +3511,7 @@ fn validate_consignment_ifa() {
 
     // Error: inflation is not allowed for fungible assignment types
     for assignment_type in [OS_ASSET, OS_INFLATION] {
+        let (old_txid, old_opid, base_transition) = first_default_transition(assignment_type);
         let mut consignment = base_consignment.clone();
         let mut bundles = consignment.bundles.release();
         let wbundle = bundles
@@ -3629,7 +3631,7 @@ fn validate_consignment_ifa() {
     let burn_global_type =
         |at: &AssignmentType| ifa_schema.global_type(burn_global_by_assignment(at));
 
-    // Error: burn transitions can't inflate
+    // Error: burn transitions can't have change nor inflate, they have no assignments at all
     for assignment_type in assignment_types {
         let mut consignment = base_consignment.clone();
         let mut bundles = consignment.bundles.release();
@@ -3663,10 +3665,9 @@ fn validate_consignment_ifa() {
         dbg!(&res);
         assert_eq!(
             res,
-            ValidationError::InvalidConsignment(Failure::ScriptFailure(
+            ValidationError::InvalidConsignment(Failure::SchemaUnknownAssignmentType(
                 opid,
-                Some(ERRNO_BURN_MISMATCH),
-                None,
+                assignment_type
             ))
         );
     }
@@ -3738,21 +3739,6 @@ fn validate_consignment_ifa() {
             <[u8; 8]>::try_from(transition.globals[&global_type].first().unwrap().as_slice())
                 .unwrap(),
         );
-        let chg_amt: u64 = if let Some(ta) = transition.assignments.get(&assignment_type) {
-            ta.as_fungible().iter().map(|a| a.as_state().as_u64()).sum()
-        } else {
-            0
-        };
-        transition
-            .assignments
-            .insert(
-                assignment_type,
-                TypedAssigns::Fungible(AssignVec::with(NonEmptyVec::with(AssignFungible::with(
-                    BuilderSeal::Concealed(SecretSeal::strict_dumb()),
-                    RevealedValue::new(burn_amt + chg_amt),
-                )))),
-            )
-            .unwrap();
         if zeroed {
             *transition
                 .globals
@@ -3807,7 +3793,6 @@ fn validate_consignment_ifa() {
                 .cloned(),
         )
         .into();
-        transition.assignments.remove(&assignment_type).unwrap();
         transition.globals.remove(&global_type).unwrap();
         let opid = transition.id();
         assert_ne!(opid, old_opid);
@@ -4830,37 +4815,49 @@ fn validate_consignment_opout_dag() {
         .unwrap();
     let dag = res.validation_status().ops_dag.clone().unwrap();
     // one node per operation, one edge per transition input:
-    // 6 nodes: genesis, 3 transfers, inflation and burn
-    // 8 edges: transfers (1 + 1 + 2 in), inflation (1 in), burn (3 in)
+    // 8 nodes: genesis, 2 asset transfers, 2 inflation right transfers, inflation, and the burn
+    //          bundle's split transfer and burn
+    // 9 edges: 4 single input transfers, inflation (1 in), split (2 in), burn (2 in)
     assert_dag_matches_consignment(&dag, &consignment);
-    assert_eq!(dag.node_count(), 6);
-    assert_eq!(dag.edge_count(), 8);
+    assert_eq!(dag.node_count(), 8);
+    assert_eq!(dag.edge_count(), 9);
 
     let mut inflation_opid = None;
     let mut burn_opid = None;
-    for KnownTransition { opid, transition } in consignment
-        .bundles
-        .iter()
-        .map(|wb| wb.bundle.known_transitions.first().unwrap())
-    {
-        match transition.transition_type {
-            TS_INFLATION => {
-                inflation_opid = Some(*opid);
-            }
-            TS_BURN => {
-                burn_opid = Some(*opid);
-            }
-            _ => {}
-        };
+    let mut split_opid = None;
+    for wb in consignment.bundles.iter() {
+        for KnownTransition { opid, transition } in wb.bundle.known_transitions.iter() {
+            match transition.transition_type {
+                TS_INFLATION => {
+                    inflation_opid = Some(*opid);
+                }
+                TS_BURN => {
+                    burn_opid = Some(*opid);
+                    // the burn is partial for assets: they are first split by a transfer in the
+                    // same bundle
+                    split_opid = wb
+                        .bundle
+                        .known_transitions
+                        .iter()
+                        .find(|kt| kt.transition.transition_type == TS_TRANSFER)
+                        .map(|kt| kt.opid);
+                }
+                _ => {}
+            };
+        }
     }
-    let (inflation_opid, burn_opid) = (inflation_opid.unwrap(), burn_opid.unwrap());
+    let (inflation_opid, burn_opid, split_opid) = (
+        inflation_opid.unwrap(),
+        burn_opid.unwrap(),
+        split_opid.unwrap(),
+    );
 
-    // the burn transition spends both inflation opouts
-    for ty in [OS_ASSET, OS_INFLATION] {
-        let burn_node = dag.op_node(&burn_opid).unwrap();
-        let burn_inputs = dag.spent_opouts(burn_node).map(|(opout, _)| opout);
+    // the split spends the inflated assets, the burn spends the inflation rights
+    for (ty, spender_opid) in [(OS_ASSET, split_opid), (OS_INFLATION, burn_opid)] {
+        let spender_node = dag.op_node(&spender_opid).unwrap();
+        let spender_inputs = dag.spent_opouts(spender_node).map(|(opout, _)| opout);
         assert!(
-            burn_inputs
+            spender_inputs
                 .collect::<Vec<_>>()
                 .contains(&Opout::new(inflation_opid, ty, 0))
         );
@@ -6129,7 +6126,6 @@ fn permute_precision_names(v: &mut Value) -> usize {
     }
 }
 
-/// V1 consignments carry no types, so the substitution is checked on the type systems
 #[test]
 fn validate_consignment_unicode_char_global_state() {
     // a type library shipped with the schema definition may declare a bare Unicode character,
@@ -6199,6 +6195,7 @@ fn validate_consignment_unicode_char_global_state() {
     }
 }
 
+/// V1 consignments carry no types, so the substitution is checked on the type systems
 #[test]
 #[ignore = "Variant equality matches on tag or name"]
 fn substituted_enum_type_compares_equal() {

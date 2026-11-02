@@ -370,72 +370,180 @@ impl BpTestWallet {
         );
     }
 
+    /// Build the transitions burning the assets on the PSBT inputs. Burns have no change, so a
+    /// fungible type that is only partially burned gets a split transition first: it spends all
+    /// the allocations of the type, assigns the amount to burn to a seal on the first PSBT input
+    /// and the remainder to a new output. The burn then spends that assignment as well as the
+    /// rest of the inputs, all in the same bundle. Fungible types missing from
+    /// `burn_amount_by_type` are burned in full.
+    ///
+    /// Returns all the transitions to push, and the id of the burn.
+    fn burn_transitions(
+        &self,
+        contract_id: ContractId,
+        psbt: &BpPsbt,
+        burn_amount_by_type: &HashMap<AssignmentType, u64>,
+    ) -> (Vec<Transition>, OpId) {
+        let stock = self.wallet.stock();
+        let schema = stock
+            .contract_data(contract_id)
+            .unwrap()
+            .rules
+            .schema()
+            .clone();
+        let prev_outputs = psbt
+            .inputs()
+            .map(|txin| outpoint_bp_to_bitcoin(txin.previous_outpoint))
+            .collect::<HashSet<_>>();
+        let burn_seal_outpoint =
+            outpoint_bp_to_bitcoin(psbt.inputs().next().unwrap().previous_outpoint);
+
+        let mut burn_builder = stock.transition_builder(contract_id, "burn").unwrap();
+        let mut fungible_inputs: BTreeMap<AssignmentType, Vec<(Opout, AllocatedState, u64)>> =
+            bmap! {};
+        for (_, opout_state_map) in stock
+            .contract_assignments_for(contract_id, prev_outputs)
+            .unwrap()
+        {
+            for (opout, state) in opout_state_map {
+                if let AllocatedState::Amount(amt) = &state {
+                    let amt = amt.as_u64();
+                    fungible_inputs
+                        .entry(opout.ty)
+                        .or_default()
+                        .push((opout, state, amt));
+                } else {
+                    burn_builder = burn_builder.add_input(opout, state).unwrap();
+                }
+            }
+        }
+
+        let mut transitions = vec![];
+        for (ty, inputs) in fungible_inputs {
+            let amt = inputs.iter().map(|(_, _, amt)| amt).sum::<u64>();
+            let burn_amt = burn_amount_by_type.get(&ty).copied().unwrap_or(amt);
+            assert!(
+                burn_amt <= amt,
+                "cannot burn more than the {ty} on the inputs"
+            );
+            if burn_amt == amt {
+                for (opout, state, _) in inputs {
+                    burn_builder = burn_builder.add_input(opout, state).unwrap();
+                }
+            } else {
+                let mut split_builder = stock
+                    .transition_builder_raw(
+                        contract_id,
+                        schema.default_transition_for_assignment(&ty),
+                    )
+                    .unwrap();
+                for (opout, state, _) in inputs {
+                    split_builder = split_builder.add_input(opout, state).unwrap();
+                }
+                let burn_seal = GraphSeal::rand_from(burn_seal_outpoint);
+                if burn_amt > 0 {
+                    split_builder = split_builder
+                        .add_owned_state_raw(
+                            ty,
+                            BuilderSeal::Revealed(burn_seal),
+                            Amount::from(burn_amt).into(),
+                        )
+                        .unwrap();
+                }
+                let change_seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(0));
+                split_builder = split_builder
+                    .add_owned_state_raw(ty, change_seal, Amount::from(amt - burn_amt).into())
+                    .unwrap();
+                let split = split_builder.complete_transition().unwrap();
+                if burn_amt > 0 {
+                    let no = split
+                        .assignments
+                        .get(&ty)
+                        .unwrap()
+                        .as_fungible()
+                        .iter()
+                        .position(|assign| assign.revealed_seal() == Some(burn_seal))
+                        .unwrap();
+                    burn_builder = burn_builder
+                        .add_input(
+                            Opout::new(split.id(), ty, no as u16),
+                            AllocatedState::Amount(Amount::from(burn_amt).into()),
+                        )
+                        .unwrap();
+                }
+                transitions.push(split);
+            }
+            // NoneOrOnce global state: recorded only when something is actually burned
+            if burn_amt > 0 {
+                burn_builder = burn_builder
+                    .add_global_state(burn_global_by_assignment(&ty), Amount::from(burn_amt))
+                    .unwrap();
+            }
+        }
+        let burn = burn_builder.complete_transition().unwrap();
+        let burn_opid = burn.id();
+        transitions.push(burn);
+        (transitions, burn_opid)
+    }
+
+    /// Burn the assets on `utxos`, alongside all rights on them. Assignment types missing from
+    /// `burn_amount_by_type` are burned in full. A partial burn is preceded by a split transition
+    /// in the same bundle.
     pub fn burn_ifa(
         &mut self,
         contract_id: ContractId,
         utxos: Vec<Outpoint>,
         burn_amount_by_type: Option<HashMap<AssignmentType, u64>>,
     ) -> (Transfer, Tx) {
+        self.burn_ifa_consigning(contract_id, utxos, burn_amount_by_type, false)
+    }
+
+    /// Like [`Self::burn_ifa`], but the consignment is made from the fascia before it is
+    /// consumed, as a wallet does when it sends the consignment before broadcasting
+    pub fn burn_ifa_from_fascia(
+        &mut self,
+        contract_id: ContractId,
+        utxos: Vec<Outpoint>,
+        burn_amount_by_type: Option<HashMap<AssignmentType, u64>>,
+    ) -> (Transfer, Tx) {
+        self.burn_ifa_consigning(contract_id, utxos, burn_amount_by_type, true)
+    }
+
+    fn burn_ifa_consigning(
+        &mut self,
+        contract_id: ContractId,
+        utxos: Vec<Outpoint>,
+        burn_amount_by_type: Option<HashMap<AssignmentType, u64>>,
+        from_fascia: bool,
+    ) -> (Transfer, Tx) {
         let address = self.get_address();
         let (mut psbt, _) = self.construct_psbt(utxos, vec![(address, None)], None);
-        let mut asset_transition_builder = self
-            .wallet
-            .stock()
-            .transition_builder(contract_id, "burn")
-            .unwrap();
-        let prev_outputs = psbt
-            .inputs()
-            .map(|txin| outpoint_bp_to_bitcoin(txin.previous_outpoint))
-            .collect::<HashSet<_>>();
-        let mut amt_by_type = map! { OS_ASSET => 0, OS_INFLATION => 0 };
-        for (_, opout_state_map) in self
-            .wallet
-            .stock()
-            .contract_assignments_for(contract_id, prev_outputs)
-            .unwrap()
-        {
-            for (opout, state) in opout_state_map {
-                if let AllocatedState::Amount(amt) = state {
-                    *amt_by_type.get_mut(&opout.ty).unwrap() += amt.as_u64();
-                }
-                asset_transition_builder =
-                    asset_transition_builder.add_input(opout, state).unwrap();
-            }
+        let (transitions, opid) =
+            self.burn_transitions(contract_id, &psbt, &burn_amount_by_type.unwrap_or_default());
+        for transition in transitions {
+            psbt.push_rgb_transition(transition).unwrap();
         }
-        let burn_amt_by_type = burn_amount_by_type.unwrap_or_default();
-        let seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(0));
-        for (assignment_type, amt) in &amt_by_type {
-            let burn_amt = burn_amt_by_type.get(assignment_type).unwrap_or(amt);
-            let change = amt - burn_amt;
-            if change > 0 {
-                asset_transition_builder = asset_transition_builder
-                    .add_owned_state_raw(*assignment_type, seal, Amount::from(change).into())
-                    .unwrap();
-            }
-            if *burn_amt > 0 {
-                asset_transition_builder = asset_transition_builder
-                    .add_global_state(
-                        burn_global_by_assignment(assignment_type),
-                        Amount::from(*burn_amt),
-                    )
-                    .unwrap();
-            }
-        }
-        let transition = asset_transition_builder.complete_transition().unwrap();
-        let opid = transition.id();
-        psbt.push_rgb_transition(transition).unwrap();
         psbt.set_opret_host();
         psbt.set_rgb_close_method(CloseMethod::OpretFirst);
         psbt.set_as_unmodifiable();
         let fascia = psbt.rgb_commit().unwrap();
         let txid = psbt.txid();
+        let fascia_consignment = from_fascia.then(|| {
+            self.wallet
+                .stock()
+                .transfer_from_fascia(contract_id, [], [], [opid], &fascia, None)
+                .unwrap()
+                .0
+        });
         self.consume_fascia(fascia, txid);
         let tx = self.sign_finalize_extract(&mut psbt);
         self.broadcast_tx(&tx);
         self.mine_tx(&psbt.get_txid(), false);
         println!("burn txid: {}", txid);
         self.sync();
-        let consignment = self.consign_transfer(contract_id, [], [], [opid], Some(txid), None);
+        let consignment = fascia_consignment.unwrap_or_else(|| {
+            self.consign_transfer(contract_id, [], [], [opid], Some(txid), None)
+        });
         self.accept_transfer(consignment.clone(), None);
         (consignment, tx)
     }
@@ -445,7 +553,7 @@ impl BpTestWallet {
         &mut self,
         contract_id: ContractId,
         mint_amount: u64,
-        after_block: u64,
+        before_block: u64,
     ) -> (Transfer, Tx) {
         // Find the available mint right to consume
         let mint_right_outpoint = {
@@ -505,7 +613,7 @@ impl BpTestWallet {
         }
 
         builder = builder
-            .add_metadata("afterBlock", BlockNumber::from(after_block))
+            .add_metadata("beforeBlock", BlockNumber::from(before_block))
             .unwrap()
             .add_global_state("issuedSupply", Amount::from(mint_amount))
             .unwrap()
@@ -531,7 +639,8 @@ impl BpTestWallet {
         (consignment, tx)
     }
 
-    /// burn `amount` of BFA assets on `utxos`, alongside all rights on them
+    /// burn `amount` of BFA assets on `utxos`, alongside all rights on them. A partial burn is
+    /// preceded by a split transition in the same bundle
     pub fn burn_bfa(
         &mut self,
         contract_id: ContractId,
@@ -540,46 +649,13 @@ impl BpTestWallet {
     ) -> (Transfer, Tx) {
         let address = self.get_address();
         let (mut psbt, _) = self.construct_psbt(utxos, vec![(address, None)], None);
-        let mut builder = self
-            .wallet
-            .stock()
-            .transition_builder(contract_id, "burn")
-            .unwrap();
-        let prev_outputs = psbt
-            .inputs()
-            .map(|txin| outpoint_bp_to_bitcoin(txin.previous_outpoint))
-            .collect::<HashSet<_>>();
-        let mut asset_amt = 0;
-        for (_, opout_state_map) in self
-            .wallet
-            .stock()
-            .contract_assignments_for(contract_id, prev_outputs)
-            .unwrap()
-        {
-            for (opout, state) in opout_state_map {
-                if let AllocatedState::Amount(amt) = state {
-                    asset_amt += amt.as_u64();
-                }
-                builder = builder.add_input(opout, state).unwrap();
-            }
+        let burn_amount_by_type = burn_amount
+            .map(|amt| map! { OS_ASSET => amt })
+            .unwrap_or_default();
+        let (transitions, opid) = self.burn_transitions(contract_id, &psbt, &burn_amount_by_type);
+        for transition in transitions {
+            psbt.push_rgb_transition(transition).unwrap();
         }
-        let burn_amt = burn_amount.unwrap_or(asset_amt);
-        let change = asset_amt - burn_amt;
-        if change > 0 {
-            let seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(0));
-            builder = builder
-                .add_owned_state_raw(OS_ASSET, seal, Amount::from(change).into())
-                .unwrap();
-        }
-        // NoneOrOnce global state: recorded only when something is actually burned
-        if burn_amt > 0 {
-            builder = builder
-                .add_global_state(burn_global_by_assignment(&OS_ASSET), Amount::from(burn_amt))
-                .unwrap();
-        }
-        let transition = builder.complete_transition().unwrap();
-        let opid = transition.id();
-        psbt.push_rgb_transition(transition).unwrap();
         psbt.set_opret_host();
         psbt.set_rgb_close_method(CloseMethod::OpretFirst);
         psbt.set_as_unmodifiable();

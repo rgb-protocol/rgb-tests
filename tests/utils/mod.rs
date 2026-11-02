@@ -229,7 +229,8 @@ pub use schemata::{
     GS_ISSUED_SUPPLY, GS_NOMINAL, IFA_SCHEMA_ID, IfaWrapper, InflatableFungibleAsset,
     MS_ALLOWED_INFLATION, NIA_SCHEMA_ID, NonInflatableAsset, OS_ASSET, OS_INFLATION, OS_LINK,
     OS_MINT, PFA_SCHEMA_ID, PermissionedFungibleAsset, TS_BURN, TS_INFLATION, TS_MINT,
-    TS_PROPAGATE, TS_TRANSFER, UDA_SCHEMA_ID, UniqueDigitalAsset, burn_global_by_assignment,
+    TS_PROPAGATE, TS_TRANSFER, TS_TRANSFER_INFLATION, UDA_SCHEMA_ID, UniqueDigitalAsset,
+    burn_global_by_assignment,
 };
 pub use serde::{Deserialize, Serialize};
 pub use serde_json::{Value, json};

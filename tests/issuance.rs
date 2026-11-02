@@ -551,7 +551,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
         }
         AssetSchema::Ifa => (
             AssetInfo::default_ifa(vec![999], vec![]),
-            "rgb:Ujb1KB6a-sfYFzER-uTaRT9e-YoeEGS2-YQBFU35-eqaIjmM",
+            "rgb:EyXEB31Q-zCJ3T7a-w~AGshH-_3tdBU4-_n34m~R-b8rCi3o",
         ),
         AssetSchema::Bfa => unreachable!("BFA requires mint, not tested here"),
     };

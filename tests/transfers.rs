@@ -2262,9 +2262,40 @@ fn ifa_burn() {
             amounts.iter().copied().sum::<Amount>()
         );
     }
-    // wlt_1 burned 16 and then the whole remaining allocation, and accepted wlt_2's burn of 99
-    // when it received the onward transfer.
-    assert_eq!(ifa.total_burned(&OS_ASSET), Amount::from(issued_amt));
+    // wlt_1 burned 16 and then the whole remaining allocation. Burns have no change, so the
+    // onward transfer spends the split before wlt_2's burn of 99, which wlt_1 never receives.
+    assert_eq!(
+        ifa.total_burned(&OS_ASSET),
+        Amount::from(issued_amt - burn_amt_asset)
+    );
+    let ifa = wlt_2.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    assert_eq!(ifa.total_burned(&OS_ASSET), Amount::from(burn_amt_asset));
+}
+
+#[test]
+fn ifa_partial_burn_from_fascia() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_2 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let issued_amt = 999;
+    let contract_id = wlt_1.issue_ifa(issued_amt, None, vec![]);
+
+    // a transfer puts a bundle in the history of the burn
+    let amt = 300;
+    wlt_1.send_ifa(&mut wlt_2, InvoiceType::Witness, contract_id, amt);
+
+    // the burn spends the split preceding it in the same bundle, which the consignment made from
+    // the fascia must order before the bundle is stored
+    let burn_amt = 99;
+    let utxos = wlt_2.list_unspent_outpoints();
+    let (consignment, _) =
+        wlt_2.burn_ifa_from_fascia(contract_id, utxos, Some(map! {OS_ASSET => burn_amt}));
+    assert_eq!(consignment.bundles.len(), 2);
+    wlt_2.check_allocations(contract_id, AssetSchema::Ifa, vec![amt - burn_amt], false);
+    let ifa = wlt_2.contract_wrapper::<InflatableFungibleAsset>(contract_id);
+    assert_eq!(ifa.total_burned(&OS_ASSET), Amount::from(burn_amt));
 }
 
 #[should_panic(expected = "InputMapTransitionMismatch")]
@@ -4197,8 +4228,8 @@ fn bfa_mint_and_transfer(
 
     // 1st mint
     let mint_amt_1: u64 = 1000;
-    let after_block_1: u64 = 20_000_000;
-    let (mint_consignment, _) = wlt_1.mint_bfa(contract_id, mint_amt_1, after_block_1);
+    let before_block_1: u64 = 20_000_000;
+    let (mint_consignment, _) = wlt_1.mint_bfa(contract_id, mint_amt_1, before_block_1);
     mint_amts.push(mint_amt_1);
 
     // validate the mint consignment with 3-phase validation
@@ -4235,11 +4266,11 @@ fn bfa_mint_and_transfer(
     let anchor_resolver = MockAnchorResolver::new(BFA_CHAIN_ID, |anchor| match anchor {
         ExternalAnchor::MintEvent {
             amount,
-            after_block,
+            before_block,
             ..
         } => {
             assert!(mint_amts.contains(amount), "unexpected amount: {amount}");
-            assert_eq!(*after_block, after_block_1);
+            assert_eq!(*before_block, before_block_1);
             true
         }
     });
@@ -4280,8 +4311,8 @@ fn bfa_mint_and_transfer(
 
     // 2nd mint
     let mint_amt_2: u64 = 500;
-    let after_block_2: u64 = after_block_1 + 100;
-    let (mint_consignment_2, _) = wlt_1.mint_bfa(contract_id, mint_amt_2, after_block_2);
+    let before_block_2: u64 = before_block_1 + 100;
+    let (mint_consignment_2, _) = wlt_1.mint_bfa(contract_id, mint_amt_2, before_block_2);
     mint_amts.push(mint_amt_2);
 
     let validation_config_2 = ValidationConfig {
@@ -4300,13 +4331,13 @@ fn bfa_mint_and_transfer(
     let anchor_resolver_2 = MockAnchorResolver::new(BFA_CHAIN_ID, |anchor| match anchor {
         ExternalAnchor::MintEvent {
             amount,
-            after_block,
+            before_block,
             ..
         } => {
             assert!(mint_amts.contains(amount), "unexpected amount: {amount}");
             assert!(
-                [after_block_1, after_block_2].contains(after_block),
-                "unexpected afterBlock: {after_block}"
+                [before_block_1, before_block_2].contains(before_block),
+                "unexpected beforeBlock: {before_block}"
             );
             true
         }
