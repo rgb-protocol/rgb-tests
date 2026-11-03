@@ -5997,6 +5997,28 @@ fn validate_consignment_script_status_merge_in_range() {
     );
 }
 
+/// `jmp` cut in the middle of its 16-bit offset, as raw bytecode
+const TRUNCATED_JMP: &[u8] = &[0x02, 0x00];
+
+#[test]
+#[ignore = "Lib::exec halts as if successful on an instruction it can't decode"]
+fn validate_consignment_undecodable_script() {
+    let (consignment, rules) = scripted_transfer(TRUNCATED_JMP.to_vec(), 0);
+    let opid = consignment.bundles[0].bundle.known_transitions[0].opid;
+    let validation_config = ValidationConfig {
+        chain_net: ChainNet::BitcoinRegtest,
+        ..Default::default()
+    };
+    let res = consignment.validate_deterministic(&rules, &validation_config);
+    assert_eq!(
+        res.err(),
+        Some(ValidationError::InvalidConsignment(Failure::ScriptFailure(
+            opid, None, None
+        ))),
+        "a validator that can't be decoded must fail"
+    );
+}
+
 /// Build a UDA contract whose `tokens` global state holds two attachments, under keys 1 and 2
 fn uda_contract_with_two_attachments() -> (Consignment<false>, GlobalStateType, Vec<u8>, usize) {
     let att_a = attachment_from_fpath(MEDIA_FPATH);
