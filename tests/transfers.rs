@@ -5823,12 +5823,12 @@ fn assignments_to_across_bundles() {
     };
     let outpoint_3 = seal_3.to_output_seal_or_default(witness_2).to_outpoint();
 
-    // bundle 3: dust to wlt_4, the same blinded seal repeated
+    // bundle 3: spam to wlt_4, the same blinded seal repeated
     let utxo_4 = wlt_4.get_utxo(None);
     let secret_4 = wlt_4.get_secret_seal(Some(utxo_4), None);
     let pieces = 10;
     let utxos = wlt_3.list_unspent_outpoints();
-    let (consignment, tx_3) = wlt_3.send_dust(contract_id, utxos, secret_4, pieces);
+    let (consignment, tx_3) = wlt_3.send_spam(contract_id, utxos, secret_4, pieces);
     let witness_3 = txid_bp_to_bitcoin(tx_3.txid());
     assert_eq!(consignment.bundles.len(), 3);
 
@@ -5860,22 +5860,22 @@ fn assignments_to_across_bundles() {
     assert_eq!(hit_3.seal, BuilderSeal::Revealed(seal_3));
     assert!(seal_3.to_output_seal().is_none());
 
-    // every one of the repeated dust assignments
-    let dust = found
+    // every one of the repeated spam assignments
+    let spam = found
         .iter()
         .filter(|m| m.witness_id == Some(witness_3))
         .collect::<Vec<_>>();
-    assert_eq!(dust.len(), pieces as usize);
+    assert_eq!(spam.len(), pieces as usize);
     assert!(
-        dust.iter()
+        spam.iter()
             .all(|m| m.seal == BuilderSeal::Concealed(secret_4))
     );
     assert_eq!(
-        dust.iter().map(|m| m.opout).collect::<BTreeSet<_>>().len(),
+        spam.iter().map(|m| m.opout).collect::<BTreeSet<_>>().len(),
         pieces as usize
     );
 
-    // and the dust lands on the receiver's UTXO once accepted
+    // and the spam lands on the receiver's UTXO once accepted
     wlt_4.accept_transfer(consignment, None);
     let assignments = wlt_4.contract_assignments_for(contract_id, [utxo_4]);
     let at_utxo = assignments
@@ -5934,4 +5934,321 @@ fn blinded_receive_reveals_seal() {
     assert_eq!(stored.opout, sent.opout);
     assert!(stored.seal.is_revealed());
     assert_eq!(stored.seal.to_secret_seal(), secret);
+}
+
+/// PSBT spending `utxos` with an opret commitment output, along with its BTC change vout.
+fn opret_psbt(wlt: &mut BpTestWallet, utxos: &[Outpoint]) -> (BpPsbt, u32) {
+    let (mut psbt, psbt_meta) = wlt.construct_psbt(utxos.to_vec(), vec![], None);
+    let change_script = psbt
+        .output(psbt_meta.change_vout.unwrap().to_u32() as usize)
+        .unwrap()
+        .script
+        .clone();
+    psbt.construct_output_expect(ScriptPubkey::op_return(&[]), Sats::ZERO)
+        .set_opret_host();
+    psbt.sort_outputs_by(|output| !output.is_opret_host())
+        .unwrap();
+    let change_vout = psbt
+        .outputs()
+        .find(|o| o.script == change_script)
+        .unwrap()
+        .vout()
+        .to_u32();
+    (psbt, change_vout)
+}
+
+/// Spend every allocation of `contract_id` on `utxos` with one transition that pays each
+/// `(seal, amount)` in `dests`, where seals may repeat, and sends the rest to the BTC change output.
+fn send_to_seals(
+    wlt: &mut BpTestWallet,
+    contract_id: ContractId,
+    utxos: &[Outpoint],
+    dests: &[(SecretSeal, u64)],
+) -> (Transfer, Tx) {
+    let inputs = wlt
+        .contract_assignments_for(contract_id, utxos.iter().copied())
+        .into_values()
+        .flatten()
+        .collect::<Vec<_>>();
+    send_inputs_to_seals(wlt, contract_id, utxos, &inputs, dests)
+}
+
+/// Spend `utxos` as [`send_to_seals`] does, but transitioning only the `inputs` allocations of
+/// `contract_id`: allocations on `utxos` left out of `inputs` get burned.
+fn send_inputs_to_seals(
+    wlt: &mut BpTestWallet,
+    contract_id: ContractId,
+    utxos: &[Outpoint],
+    inputs: &[(Opout, AllocatedState)],
+    dests: &[(SecretSeal, u64)],
+) -> (Transfer, Tx) {
+    let (mut psbt, change_vout) = opret_psbt(wlt, utxos);
+    let transition_type = wlt
+        .stock()
+        .contract_data(contract_id)
+        .unwrap()
+        .rules
+        .schema()
+        .default_transition_for_assignment(&AssignmentType::ASSET);
+    let mut builder = wlt
+        .stock()
+        .transition_builder_raw(contract_id, transition_type)
+        .unwrap();
+    let mut available = 0;
+    for (opout, state) in inputs {
+        if let AllocatedState::Amount(amt) = state {
+            available += amt.as_u64();
+        }
+        builder = builder.add_input(*opout, state.clone()).unwrap();
+    }
+    for (seal, amt) in dests {
+        builder = builder
+            .add_fungible_state_raw(AssignmentType::ASSET, BuilderSeal::Concealed(*seal), *amt)
+            .unwrap();
+    }
+    let change = available - dests.iter().map(|(_, amt)| amt).sum::<u64>();
+    if change > 0 {
+        builder = builder
+            .add_fungible_state_raw(
+                AssignmentType::ASSET,
+                GraphSeal::with_blinded_vout(change_vout, rand::random()),
+                change,
+            )
+            .unwrap();
+    }
+
+    psbt.push_rgb_transition(builder.complete_transition().unwrap())
+        .unwrap();
+    psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+    psbt.set_as_unmodifiable();
+    let fascia = psbt.rgb_commit().unwrap();
+    let tx = wlt.sign_finalize_extract(&mut psbt);
+    wlt.broadcast_tx(&tx);
+    let beneficiaries = dests
+        .iter()
+        .map(|(seal, _)| *seal)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(BuilderSeal::Concealed)
+        .collect();
+    let mut consignments = wlt.create_consignments(
+        bmap! { contract_id => beneficiaries },
+        tx.txid(),
+        &fascia,
+        None,
+    );
+    wlt.consume_fascia(fascia, tx.txid());
+    wlt.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
+    (consignments.remove(&contract_id).unwrap(), tx)
+}
+
+/// A sender who knows one blinded seal of the victim's UTXO can pile 255 spam allocations onto
+/// it with a single transfer. Together with the allocation the victim already holds there, the
+/// UTXO then carries 256 allocations, which the victim's wallet must spend in one transition: this
+/// only works because `TransitionBuilder` accepts as many inputs as consensus does.
+#[test]
+fn spam_allocations_on_utxo() {
+    initialize();
+
+    let mut wlt_1 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut victim = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut attacker = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let contract_id = wlt_1.issue_nia(1000, None);
+    let schema_id = wlt_1.schema_id(contract_id);
+
+    // the victim owns an allocation on its UTXO and the attacker some of the same asset
+    let victim_utxo = victim.get_utxo(None);
+    wlt_1.send(
+        &mut victim,
+        InvoiceType::Blinded(Some(victim_utxo)),
+        contract_id,
+        100,
+        1000,
+        None,
+    );
+    wlt_1.send(
+        &mut attacker,
+        InvoiceType::Witness,
+        contract_id,
+        500,
+        1000,
+        None,
+    );
+
+    // the victim hands out a blinded invoice on the same UTXO
+    let invoice = victim.invoice(
+        contract_id,
+        schema_id,
+        1,
+        InvoiceType::Blinded(Some(victim_utxo)),
+    );
+    let Beneficiary::BlindedSeal(secret_seal) = invoice.beneficiary.into_inner() else {
+        unreachable!()
+    };
+
+    // the attacker pays it with 255 assignments of 1 to that one seal in a single transition
+    let spam_count = 255;
+    let attacker_utxos = attacker
+        .contract_fungible_allocations(contract_id, false)
+        .iter()
+        .map(|a| a.seal.to_outpoint())
+        .collect::<Vec<_>>();
+    let (consignment, _) = send_to_seals(
+        &mut attacker,
+        contract_id,
+        &attacker_utxos,
+        &vec![(secret_seal, 1); spam_count],
+    );
+    victim.accept_transfer(consignment, None);
+
+    let victim_opouts = victim
+        .contract_assignments_for(contract_id, [victim_utxo])
+        .into_values()
+        .map(|assigns| assigns.len())
+        .sum::<usize>();
+    assert_eq!(victim_opouts, spam_count + 1);
+    assert_eq!(
+        victim.get_contract_balance(contract_id),
+        100 + spam_count as u64
+    );
+
+    // the victim's wallet spends all 256 opouts on the UTXO in one transition
+    let invoice = wlt_3.invoice(contract_id, schema_id, 10, InvoiceType::Witness);
+    victim.send_to_invoice(&mut wlt_3, invoice, None, None, None);
+    wlt_3.check_allocations(contract_id, schema_id, vec![10], false);
+    victim.check_allocations(
+        contract_id,
+        schema_id,
+        vec![100 + spam_count as u64 - 10],
+        false,
+    );
+}
+
+/// Past the consensus limit the issue remains: once a UTXO carries more than u16 allocations of
+/// one contract, they can't all be spent, since a witness has a single bundle per contract and its
+/// input map is capped at u16 however the inputs are split across transitions. Spending the UTXO
+/// then means leaving some allocations out, which burns them.
+#[test]
+fn spam_allocations_over_consensus_limit() {
+    initialize();
+
+    let mut attacker = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut victim = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+    let mut wlt_3 = BpTestWallet::with_descriptor(&DescriptorType::Wpkh);
+
+    let spam_count = u16::MAX as u64;
+    let utxo_1 = attacker.get_utxo(None);
+    let utxo_2 = attacker.get_utxo(None);
+    let asset_info = AssetInfo::default_nia(vec![100, spam_count]);
+    let contract_id =
+        attacker.issue_with_info(asset_info, vec![Some(utxo_1), Some(utxo_2)], None, None);
+    let schema_id = attacker.schema_id(contract_id);
+
+    // the victim gets an allocation on its UTXO, then the attacker reuses the same blinded seal to
+    // fill a whole assignment list with spam
+    let victim_utxo = victim.get_utxo(None);
+    let secret_seal = victim.get_secret_seal(Some(victim_utxo), None);
+    let (consignment, _) =
+        send_to_seals(&mut attacker, contract_id, &[utxo_1], &[(secret_seal, 100)]);
+    victim.accept_transfer(consignment, None);
+    let (consignment, _) = send_to_seals(
+        &mut attacker,
+        contract_id,
+        &[utxo_2],
+        &vec![(secret_seal, 1); spam_count as usize],
+    );
+    victim.accept_transfer(consignment, None);
+
+    let opouts = victim
+        .contract_assignments_for(contract_id, [victim_utxo])
+        .into_values()
+        .flatten()
+        .collect::<Vec<_>>();
+    assert_eq!(opouts.len(), spam_count as usize + 1);
+    assert_eq!(victim.get_contract_balance(contract_id), 100 + spam_count);
+
+    // the victim's wallet can't fit them in one transition
+    let invoice = wlt_3.invoice(contract_id, schema_id, 10, InvoiceType::Witness);
+    let err = victim
+        .wallet
+        .pay::<PropKey, Output>(&invoice, TransferParams::with(DEFAULT_FEE_ABS, 2000), None)
+        .unwrap_err();
+    assert!(
+        matches!(
+            err,
+            rgb::PayError::Composition(rgb::CompositionError::Builder(
+                rgb::contract::BuilderError::Confinement(_)
+            ))
+        ),
+        "{err:?}"
+    );
+
+    // nor in one bundle by splitting them across transitions
+    let (mut psbt, change_vout) = opret_psbt(&mut victim, &[victim_utxo]);
+    let transition_type = victim
+        .stock()
+        .contract_data(contract_id)
+        .unwrap()
+        .rules
+        .schema()
+        .default_transition_for_assignment(&AssignmentType::ASSET);
+    for chunk in opouts.chunks(opouts.len().div_ceil(2)) {
+        let mut builder = victim
+            .stock()
+            .transition_builder_raw(contract_id, transition_type)
+            .unwrap();
+        let mut sum = 0;
+        for (opout, state) in chunk {
+            if let AllocatedState::Amount(amt) = state {
+                sum += amt.as_u64();
+            }
+            builder = builder.add_input(*opout, state.clone()).unwrap();
+        }
+        let transition = builder
+            .add_fungible_state_raw(
+                AssignmentType::ASSET,
+                GraphSeal::with_blinded_vout(change_vout, rand::random()),
+                sum,
+            )
+            .unwrap()
+            .complete_transition()
+            .unwrap();
+        psbt.push_rgb_transition(transition).unwrap();
+    }
+    psbt.set_rgb_close_method(CloseMethod::OpretFirst);
+    psbt.set_as_unmodifiable();
+    let err = psbt.rgb_commit().unwrap_err();
+    assert!(
+        matches!(
+            err,
+            psrgbt::CommitError::Rgb(psrgbt::RgbPsbtError::InvalidInputsNumber(n))
+                if n == opouts.len()
+        ),
+        "{err:?}"
+    );
+
+    // the UTXO can only be spent by leaving an allocation out, burning it
+    let ((_, burnt), inputs) = opouts.split_last().unwrap();
+    let AllocatedState::Amount(burnt) = burnt else {
+        unreachable!()
+    };
+    let wlt_3_seal = wlt_3.get_secret_seal(None, None);
+    let (consignment, _) = send_inputs_to_seals(
+        &mut victim,
+        contract_id,
+        &[victim_utxo],
+        inputs,
+        &[(wlt_3_seal, 10)],
+    );
+    wlt_3.accept_transfer(consignment, None);
+    wlt_3.check_allocations(contract_id, schema_id, vec![10], false);
+    victim.sync();
+    victim.check_allocations(
+        contract_id,
+        schema_id,
+        vec![100 + spam_count - 10 - burnt.as_u64()],
+        false,
+    );
 }

@@ -549,9 +549,8 @@ impl BpTestWallet {
     }
 
     /// Send `pieces` allocations of 1 asset unit each to `secret_seal`, all to the same seal, and
-    /// the rest of the allocations on `utxos` back as change, the way a dust attacker would: the
-    /// builder merges repeated seals, so the assignments are rewritten after it.
-    pub fn send_dust(
+    /// the rest of the allocations on `utxos` back as change, the way a spam attacker would.
+    pub fn send_spam(
         &mut self,
         contract_id: ContractId,
         utxos: Vec<Outpoint>,
@@ -584,23 +583,15 @@ impl BpTestWallet {
             }
         }
         let change = total - pieces as u64;
-        let change_seal = BuilderSeal::Revealed(GraphSeal::new_random_vout(0));
         builder = builder
-            .add_owned_state_raw(OS_ASSET, change_seal, Amount::from(change).into())
+            .add_fungible_state_raw(OS_ASSET, GraphSeal::new_random_vout(0), change)
             .unwrap();
-        let mut transition = builder.complete_transition().unwrap();
-        let dust = (0..pieces).map(|_| {
-            Assign::with(
-                BuilderSeal::Concealed(secret_seal),
-                RevealedValue::from(1u64),
-            )
-        });
-        let assigns = std::iter::once(Assign::with(change_seal, RevealedValue::from(change)))
-            .chain(dust)
-            .collect::<Vec<_>>();
-        transition.assignments = Assignments::from(SmallOrdMap::from_checked(bmap! {
-            OS_ASSET => TypedAssigns::Fungible(AssignVec::with(NonEmptyVec::from_checked(assigns))),
-        }));
+        for _ in 0..pieces {
+            builder = builder
+                .add_fungible_state_raw(OS_ASSET, BuilderSeal::Concealed(secret_seal), 1u64)
+                .unwrap();
+        }
+        let transition = builder.complete_transition().unwrap();
         let opid = transition.id();
         psbt.push_rgb_transition(transition).unwrap();
         psbt.set_opret_host();
