@@ -3343,7 +3343,7 @@ fn contract_linking() {
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
     wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
-    wlt_1.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_1.accept_transfer_bfa(consignment, |_claim| true);
     wlt_1.sync();
 
     // LINK C2 -> C3
@@ -3403,7 +3403,7 @@ fn contract_linking() {
     wlt_2.accept_transfer(link_consignment_1, None);
     validate_link_1_2(&wlt_2).unwrap();
     validate_link_2_3(&wlt_2).unwrap_err();
-    wlt_2.accept_transfer_bfa(link_consignment_2, |_anchor| true);
+    wlt_2.accept_transfer_bfa(link_consignment_2, |_claim| true);
     validate_link_2_3(&wlt_2).unwrap();
 }
 
@@ -4246,24 +4246,24 @@ fn bfa_mint_and_transfer(
         &mint_consignment,
     );
     // a resolver connected to another chain is refused before it can confirm anything
-    let wrong_chain_resolver = MockAnchorResolver::new(BFA_CHAIN_ID + 1, |_anchor| true);
+    let wrong_chain_resolver = MockClaimResolver::new(BFA_CHAIN_ID + 1, |_claim| true);
     assert_eq!(
         pending_mint
-            .resolve_all_anchors(
+            .resolve_all_claims(
                 BridgedFungibleAsset::bridge_location(pending_mint.consignment().genesis())
                     .unwrap(),
                 &wrong_chain_resolver
             )
             .unwrap_err(),
-        AnchorResolverError::WrongChainId {
+        ClaimResolverError::WrongChainId {
             expected: BFA_CHAIN_ID,
             actual: BFA_CHAIN_ID + 1,
         }
     );
-    assert_eq!(pending_mint.pending().unresolved_anchors().count(), 1);
+    assert_eq!(pending_mint.pending().unresolved_claims().count(), 1);
 
-    let anchor_resolver = MockAnchorResolver::new(BFA_CHAIN_ID, |anchor| match anchor {
-        ExternalAnchor::MintEvent {
+    let claim_resolver = MockClaimResolver::new(BFA_CHAIN_ID, |claim| match claim {
+        Claim::Lock {
             amount,
             before_block,
             ..
@@ -4273,19 +4273,19 @@ fn bfa_mint_and_transfer(
             true
         }
     });
-    let checked_anchor_resolver = CheckedAnchorResolver::with(
-        &anchor_resolver,
+    let checked_claim_resolver = CheckedClaimResolver::with(
+        &claim_resolver,
         BridgedFungibleAsset::bridge_location(pending_mint.consignment().genesis()).unwrap(),
     )
     .unwrap();
-    for anchor in pending_mint
+    for claim in pending_mint
         .pending()
-        .unresolved_anchors()
+        .unresolved_claims()
         .cloned()
         .collect::<Vec<_>>()
     {
         pending_mint
-            .resolve_anchor(&checked_anchor_resolver, &anchor)
+            .resolve_claim(&checked_claim_resolver, &claim)
             .unwrap();
     }
     pending_mint
@@ -4327,8 +4327,8 @@ fn bfa_mint_and_transfer(
         pending_mint_2.pending().ops_dag.as_ref().unwrap(),
         &mint_consignment_2,
     );
-    let anchor_resolver_2 = MockAnchorResolver::new(BFA_CHAIN_ID, |anchor| match anchor {
-        ExternalAnchor::MintEvent {
+    let claim_resolver_2 = MockClaimResolver::new(BFA_CHAIN_ID, |claim| match claim {
+        Claim::Lock {
             amount,
             before_block,
             ..
@@ -4342,9 +4342,9 @@ fn bfa_mint_and_transfer(
         }
     });
     pending_mint_2
-        .resolve_all_anchors(
+        .resolve_all_claims(
             BridgedFungibleAsset::bridge_location(pending_mint_2.consignment().genesis()).unwrap(),
-            &anchor_resolver_2,
+            &claim_resolver_2,
         )
         .unwrap();
     pending_mint_2
@@ -4413,7 +4413,7 @@ fn bfa_transfer_mint_right_only() {
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
     wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
-    wlt_2.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_2.accept_transfer_bfa(consignment, |_claim| true);
     wlt_1.sync();
     assert_eq!(mint_rights_count(&wlt_1), 0);
     assert_eq!(mint_rights_count(&wlt_2), 1);
@@ -4435,7 +4435,7 @@ fn bfa_transfer_mint_right_only() {
     );
     let (consignment, tx, _, _) = wlt_2.pay_full(invoice, None, None, true, None);
     wlt_2.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
-    wlt_1.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_1.accept_transfer_bfa(consignment, |_claim| true);
     wlt_2.sync();
     assert_eq!(mint_rights_count(&wlt_1), 1);
     assert_eq!(mint_rights_count(&wlt_2), 0);
@@ -4463,7 +4463,7 @@ fn bfa_transfer_mint_right_only() {
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
     wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
-    wlt_2.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_2.accept_transfer_bfa(consignment, |_claim| true);
     wlt_1.sync();
     assert_eq!(mint_rights_count(&wlt_1), 1);
     assert_eq!(mint_rights_count(&wlt_2), 1);
@@ -4487,7 +4487,7 @@ fn bfa_transfer_mint_right_only() {
     );
     let (consignment, tx, _, _) = wlt_1.pay_full(invoice, None, None, true, None);
     wlt_1.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
-    wlt_2.accept_transfer_bfa(consignment, |_anchor| true);
+    wlt_2.accept_transfer_bfa(consignment, |_claim| true);
     wlt_1.sync();
     assert_eq!(mint_right_outpoints(&wlt_2).len(), 1);
     let remaining = mint_right_outpoints(&wlt_1);

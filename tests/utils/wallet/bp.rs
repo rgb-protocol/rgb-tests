@@ -728,7 +728,7 @@ impl BpTestWallet {
         println!("bfa burn txid: {}", txid);
         self.sync();
         let consignment = self.consign_transfer(contract_id, [], [], [opid], Some(txid), None);
-        self.accept_transfer_bfa(consignment.clone(), |_anchor| true);
+        self.accept_transfer_bfa(consignment.clone(), |_claim| true);
         (consignment, tx)
     }
 

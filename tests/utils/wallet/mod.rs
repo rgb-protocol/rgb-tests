@@ -131,30 +131,30 @@ impl<R: ResolveWitness> ResolveWitness for NoHeadersResolver<'_, R> {
 /// EVM chain ID the test BFA contracts commit to in their bridge location.
 pub const BFA_CHAIN_ID: u64 = 1;
 
-/// Anchor resolver standing in for a node of the EVM chain `chain_id`: `confirm` decides
-/// which anchors the bridge contract is said to have emitted.
-pub struct MockAnchorResolver<F: Fn(&ExternalAnchor) -> bool> {
+/// Claim resolver standing in for a node of the EVM chain `chain_id`: `confirm` decides
+/// which lock claims the bridge is said to hold.
+pub struct MockClaimResolver<F: Fn(&Claim) -> bool> {
     pub chain_id: u64,
     pub confirm: F,
 }
 
-impl<F: Fn(&ExternalAnchor) -> bool> MockAnchorResolver<F> {
+impl<F: Fn(&Claim) -> bool> MockClaimResolver<F> {
     pub fn new(chain_id: u64, confirm: F) -> Self {
         Self { chain_id, confirm }
     }
 }
 
-impl<F: Fn(&ExternalAnchor) -> bool> ResolveAnchor for MockAnchorResolver<F> {
-    fn evm_chain_id(&self) -> Result<u64, AnchorResolverError> {
+impl<F: Fn(&Claim) -> bool> ResolveClaim for MockClaimResolver<F> {
+    fn evm_chain_id(&self) -> Result<u64, ClaimResolverError> {
         Ok(self.chain_id)
     }
 
     fn is_confirmed(
         &self,
         _location: &BridgeLocation,
-        anchor: &ExternalAnchor,
-    ) -> Result<bool, AnchorResolverError> {
-        Ok((self.confirm)(anchor))
+        claim: &Claim,
+    ) -> Result<bool, ClaimResolverError> {
+        Ok((self.confirm)(claim))
     }
 }
 
@@ -1465,7 +1465,7 @@ where
     pub fn accept_transfer_bfa(
         &mut self,
         consignment: Transfer,
-        anchor_resolver: impl Fn(&ExternalAnchor) -> bool,
+        claim_resolver: impl Fn(&Claim) -> bool,
     ) -> Status {
         let resolver = self.get_resolver();
         self.sync();
@@ -1482,10 +1482,10 @@ where
             )
             .unwrap();
         pending_consignment
-            .resolve_all_anchors(
+            .resolve_all_claims(
                 BridgedFungibleAsset::bridge_location(pending_consignment.consignment().genesis())
                     .unwrap(),
-                &MockAnchorResolver::new(BFA_CHAIN_ID, anchor_resolver),
+                &MockClaimResolver::new(BFA_CHAIN_ID, claim_resolver),
             )
             .unwrap();
         pending_consignment
@@ -2101,7 +2101,7 @@ where
         let (consignment, tx, _, _) = self.pay_full(invoice.clone(), Some(sats), None, true, None);
         self.mine_tx(&txid_bp_to_bitcoin(tx.txid()), false);
         check_invoice_paid(&consignment, &invoice);
-        recv_wlt.accept_transfer_bfa(consignment.clone(), |_anchor| true);
+        recv_wlt.accept_transfer_bfa(consignment.clone(), |_claim| true);
         self.sync();
         (consignment, tx)
     }

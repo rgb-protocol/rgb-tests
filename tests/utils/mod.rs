@@ -161,10 +161,10 @@ pub use rgb::{
     },
     tapret::{TapretNodePartner, TapretRightBranch},
     validation::{
-        DbcProof, ExternalAnchor, Failure, OpsDag, PendingValidation, ResolveWitness,
-        SchemaDefError, SchemaDefinition, SchemaRules, Scripts, SpvProof, Status, TypeLibs,
-        ValidationConfig, ValidationError, Validator, Validity, Warning, WitnessOrdProvider,
-        WitnessResolution, WitnessResolverError, WitnessSafety, WitnessStatus, WitnessTask,
+        Claim, DbcProof, Failure, OpsDag, PendingValidation, ResolveWitness, SchemaDefError,
+        SchemaDefinition, SchemaRules, Scripts, SpvProof, Status, TypeLibs, ValidationConfig,
+        ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolution,
+        WitnessResolverError, WitnessSafety, WitnessStatus, WitnessTask,
     },
     vm::{
         ContractStateAccess, ContractStateEvolve, GlobalStateEntry, GlobalsIter, RgbIsa,
@@ -197,8 +197,8 @@ pub use rgbstd::{
     TokenIndex,
     TxoSeal,
     containers::{
-        AnchorResolverError, BuilderSeal, CheckedAnchorResolver, Consignment,
-        ConsignmentConstraintError, ConsignmentExt, Fascia, FileContent, ResolveAnchor, Transfer,
+        BuilderSeal, CheckedClaimResolver, ClaimResolverError, Consignment,
+        ConsignmentConstraintError, ConsignmentExt, Fascia, FileContent, ResolveClaim, Transfer,
         UncheckedTransfer,
     },
     contract::{

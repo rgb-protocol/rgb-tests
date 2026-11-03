@@ -705,17 +705,17 @@ fn assert_consignment_valid(consignment: &Transfer, resolver: &impl ResolveWitne
         build_ops_dag: true,
         ..Default::default()
     };
-    // BFA carries external anchors, which `validate` cannot discharge on its own
+    // BFA carries claims, which `validate` cannot discharge on its own
     let res = if matches!(asset_schema, AssetSchema::Bfa) {
         let mut pending_consignment = consignment
             .clone()
             .validate_deterministic(&asset_schema_rules, &validation_config)
             .unwrap();
         pending_consignment
-            .resolve_all_anchors(
+            .resolve_all_claims(
                 BridgedFungibleAsset::bridge_location(pending_consignment.consignment().genesis())
                     .unwrap(),
-                &MockAnchorResolver::new(BFA_CHAIN_ID, |_anchor| true),
+                &MockClaimResolver::new(BFA_CHAIN_ID, |_claim| true),
             )
             .unwrap();
         pending_consignment.pending().resolve_all(resolver).unwrap();
@@ -2706,22 +2706,22 @@ fn assert_bfa_valid(consignment: Transfer, rules: &SchemaRules, resolver: &MockR
         chain_net: ChainNet::BitcoinRegtest,
         ..Default::default()
     };
-    // a witness resolver alone cannot validate a consignment carrying external anchors
+    // a witness resolver alone cannot validate a consignment carrying claims
     assert!(matches!(
         consignment
             .clone()
             .validate(rules, resolver, &validation_config)
             .unwrap_err(),
-        ValidationError::ExternalAnchorsPending(_)
+        ValidationError::PendingClaims(_)
     ));
     let mut pending_consignment = consignment
         .validate_deterministic(rules, &validation_config)
         .unwrap();
     pending_consignment
-        .resolve_all_anchors(
+        .resolve_all_claims(
             BridgedFungibleAsset::bridge_location(pending_consignment.consignment().genesis())
                 .unwrap(),
-            &MockAnchorResolver::new(BFA_CHAIN_ID, |_anchor| true),
+            &MockClaimResolver::new(BFA_CHAIN_ID, |_claim| true),
         )
         .unwrap();
     pending_consignment.pending().resolve_all(resolver).unwrap();
@@ -2733,7 +2733,7 @@ fn assert_bfa_valid(consignment: Transfer, rules: &SchemaRules, resolver: &MockR
 
 /// Assert a BFA consignment is rejected by a schema script.
 ///
-/// Scripts run in phase 1, so this needs neither a resolver nor the external anchors: the
+/// Scripts run in phase 1, so this needs neither a resolver nor the claims: the
 /// consignment is rejected before anything is asked of a chain.
 fn assert_bfa_script_failure(consignment: Transfer, rules: &SchemaRules, opid: OpId, errno: u8) {
     let validation_config = ValidationConfig {
