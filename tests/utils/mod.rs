@@ -198,8 +198,8 @@ pub use rgbstd::{
     TxoSeal,
     containers::{
         BuilderSeal, CheckedClaimResolver, ClaimResolverError, Consignment,
-        ConsignmentConstraintError, ConsignmentExt, Fascia, FileContent, ResolveClaim, Transfer,
-        UncheckedTransfer,
+        ConsignmentConstraintError, ConsignmentExt, Fascia, FileContent, LockId, ResolveClaim,
+        Transfer, UncheckedTransfer,
     },
     contract::{
         ContractBuilder, ContractData, ContractStateRead, DataAllocation, FilterExclude,

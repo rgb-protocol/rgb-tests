@@ -4198,6 +4198,23 @@ fn spv_proofs_bitcoind() {
     );
 }
 
+/// The ID of the lock to make on the bridge for the mint in `mint_tx`, as the recipient of
+/// `consignment` would compute it
+fn bfa_mint_lock_id(consignment: &Transfer, mint_tx: &Tx) -> LockId {
+    let witness_id = txid_bp_to_bitcoin(mint_tx.txid());
+    let mint = consignment
+        .bundles
+        .iter()
+        .find(|wb| wb.witness_id() == witness_id)
+        .unwrap()
+        .bundle
+        .known_transitions
+        .iter()
+        .find(|kt| kt.transition.transition_type == TS_MINT)
+        .unwrap();
+    LockId::with(mint.opid, witness_id)
+}
+
 #[rstest]
 #[case(TT::Blinded, DT::Wpkh, DT::Wpkh)]
 #[case(TT::Witness, DT::Wpkh, DT::Wpkh)]
@@ -4223,13 +4240,19 @@ fn bfa_mint_and_transfer(
 
     // no initial allocations
     wlt_1.check_allocations(contract_id, AssetSchema::Bfa, vec![], false);
-    let mut mint_amts = set![];
+    // the locks made on the bridge, as (lock ID, amount, beforeBlock): a claim is confirmed only by
+    // a lock for the TX its mint is in
+    let mut locks = vec![];
 
     // 1st mint
     let mint_amt_1: u64 = 1000;
     let before_block_1: u64 = 20_000_000;
-    let (mint_consignment, _) = wlt_1.mint_bfa(contract_id, mint_amt_1, before_block_1);
-    mint_amts.push(mint_amt_1);
+    let (mint_consignment, mint_tx_1) = wlt_1.mint_bfa(contract_id, mint_amt_1, before_block_1);
+    locks.push((
+        bfa_mint_lock_id(&mint_consignment, &mint_tx_1),
+        mint_amt_1,
+        before_block_1,
+    ));
 
     // validate the mint consignment with 3-phase validation
     let validation_config = ValidationConfig {
@@ -4267,11 +4290,7 @@ fn bfa_mint_and_transfer(
             amount,
             before_block,
             ..
-        } => {
-            assert!(mint_amts.contains(amount), "unexpected amount: {amount}");
-            assert_eq!(*before_block, before_block_1);
-            true
-        }
+        } => locks.contains(&(LockId::from(claim), *amount, *before_block)),
     });
     let checked_claim_resolver = CheckedClaimResolver::with(
         &claim_resolver,
@@ -4311,8 +4330,12 @@ fn bfa_mint_and_transfer(
     // 2nd mint
     let mint_amt_2: u64 = 500;
     let before_block_2: u64 = before_block_1 + 100;
-    let (mint_consignment_2, _) = wlt_1.mint_bfa(contract_id, mint_amt_2, before_block_2);
-    mint_amts.push(mint_amt_2);
+    let (mint_consignment_2, mint_tx_2) = wlt_1.mint_bfa(contract_id, mint_amt_2, before_block_2);
+    locks.push((
+        bfa_mint_lock_id(&mint_consignment_2, &mint_tx_2),
+        mint_amt_2,
+        before_block_2,
+    ));
 
     let validation_config_2 = ValidationConfig {
         chain_net: wlt_1.chain_net(),
@@ -4332,14 +4355,7 @@ fn bfa_mint_and_transfer(
             amount,
             before_block,
             ..
-        } => {
-            assert!(mint_amts.contains(amount), "unexpected amount: {amount}");
-            assert!(
-                [before_block_1, before_block_2].contains(before_block),
-                "unexpected beforeBlock: {before_block}"
-            );
-            true
-        }
+        } => locks.contains(&(LockId::from(claim), *amount, *before_block)),
     });
     pending_mint_2
         .resolve_all_claims(
