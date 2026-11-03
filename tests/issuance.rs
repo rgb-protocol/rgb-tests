@@ -546,7 +546,7 @@ fn deterministic_contract_id(#[case] asset_schema: AssetSchema) {
             .unwrap();
             (
                 AssetInfo::default_pfa(vec![999], pubkey),
-                "rgb:L9pgSVBV-SZak7SD-HG5YZbz-zQYuV01-oMKcHpO-RAQQ2zM",
+                "rgb:FeW5Q9la-Mh9xBy6-wAuWVmR-QUu_Cz4-ZfOo3Kt-20gmoPM",
             )
         }
         AssetSchema::Ifa => (
