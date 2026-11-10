@@ -6459,10 +6459,9 @@ fn schema_definition_rejects_substituted_enum_type() {
     assert!(stock.import_schema_definition(rekeyed).is_err());
 }
 
-/// Pad `bundles` with copies of the first one until the consignment exceeds the ASCII armor bound.
-/// Returns the padded consignment and its serialized size, computed rather than measured since
-/// serializing it takes ~10s in a debug build.
-fn oversized_consignment() -> (Transfer, usize) {
+/// Pad `bundles` with copies of the first one until the consignment exceeds `cap`.
+/// Returns the padded consignment and its serialized size.
+fn oversized_consignment(cap: usize) -> (Transfer, usize) {
     let mut consignment = get_consignment_from_json("consignment_B");
     let base = consignment.bundles.iter().next().unwrap().clone();
     let bundle_len = base
@@ -6471,7 +6470,7 @@ fn oversized_consignment() -> (Transfer, usize) {
         .unbox()
         .unconfine()
         .len();
-    let copies = u24::MAX.to_usize() / bundle_len + 1;
+    let copies = cap / bundle_len + 1;
     // the bundles length prefix has a fixed width, so each copy adds exactly its own encoding
     let size = consignment
         .to_strict_serialized::<{ usize::MAX }>()
@@ -6485,11 +6484,10 @@ fn oversized_consignment() -> (Transfer, usize) {
 }
 
 #[test]
-#[ignore = "armor encode cap is below the container decode cap, ~25s"]
 fn oversized_consignment_armoring() {
     let Some(completed) = child_case("oversized_consignment_armoring") else {
-        let (consignment, size) = oversized_consignment();
-        assert!(size > u24::MAX.to_usize(), "padding insufficient: {size}");
+        let (consignment, size) = oversized_consignment(ASCII_ARMOR_MAX_LEN);
+        assert!(size > ASCII_ARMOR_MAX_LEN, "padding insufficient: {size}");
 
         // refusing the container on save, refusing it on load and rendering it are all
         // acceptable; only terminating the process is not

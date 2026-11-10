@@ -2673,6 +2673,7 @@ dependencies = [
  "rand 0.9.5",
  "rgb-aluvm",
  "rgb-api",
+ "rgb-ascii-armor",
  "rgb-consensus",
  "rgb-ops",
  "rgb-psbt-utils",

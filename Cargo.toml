@@ -73,6 +73,8 @@ rgb-psbt-utils = { path = "./rgb-api/psbt", features = [
 ] }
 ## aluvm
 rgb-aluvm = { path = "./rgb-aluvm" }
+## ascii-armor
+rgb-ascii-armor = { path = "./rgb-ascii-armor" }
 ## rgb-consensus
 rgb-consensus = { path = "./rgb-consensus" }
 ## rgb-ops

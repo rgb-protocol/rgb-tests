@@ -70,6 +70,7 @@ pub use amplify::{
     num::u24,
     s, set, tiny_bmap, zero,
 };
+pub use armor::ASCII_ARMOR_MAX_LEN;
 pub use bdk_electrum::{
     BdkElectrumClient,
     electrum_client::{Client as ElectrumClient, ElectrumApi as _},
