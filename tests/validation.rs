@@ -6485,7 +6485,6 @@ fn oversized_consignment() -> (Transfer, usize) {
 }
 
 #[test]
-#[ignore = "armor encode cap is below the container decode cap, ~25s"]
 fn oversized_consignment_armoring() {
     let Some(completed) = child_case("oversized_consignment_armoring") else {
         let (consignment, size) = oversized_consignment();
