@@ -6013,7 +6013,6 @@ fn validate_consignment_script_status_merge_in_range() {
 const PUT_PAST_DATA: &[u8] = &[0x30, 0x00, 0x00, 0x00, 0x01, 0x00];
 
 #[test]
-#[ignore = "read_data clamps to the maximum data segment length, not to the actual one"]
 fn validate_consignment_script_put_past_data_segment() {
     let Some(completed) = child_case("validate_consignment_script_put_past_data_segment") else {
         // the data segment is empty, so the one byte the PUT asks for lies past its end
