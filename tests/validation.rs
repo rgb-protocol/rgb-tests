@@ -6050,7 +6050,6 @@ fn validate_consignment_script_bytes_fill_reversed_range() {
 }
 
 #[test]
-#[ignore = "find with an empty fragment panics in windows(0)"]
 fn validate_consignment_script_bytes_find_empty_fragment() {
     let Some(completed) = child_case("validate_consignment_script_bytes_find_empty_fragment")
     else {
