@@ -6027,7 +6027,6 @@ fn validate_consignment_script_put_past_data_segment() {
 }
 
 #[test]
-#[ignore = "fill slices a reversed range"]
 fn validate_consignment_script_bytes_fill_reversed_range() {
     let Some(completed) = child_case("validate_consignment_script_bytes_fill_reversed_range")
     else {
