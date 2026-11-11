@@ -19,6 +19,13 @@ impl fmt::Display for Indexer {
 
 pub fn initialize() {
     INIT.call_once(|| {
+        // The electrum client installs the default rustls crypto provider the first time
+        // it opens a TLS connection, checking whether one is already set and installing
+        // one in two separate steps. Two tests connecting at the same time can both pass
+        // the check, and the one that loses the install then fails. Install the provider
+        // here instead, where this Once runs it before any test gets to connect.
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
         INDEXER.get_or_init(|| match std::env::var("INDEXER") {
             Ok(val) if val.to_lowercase() == Indexer::Esplora.to_string() => Indexer::Esplora,
             Ok(val) if val.to_lowercase() == Indexer::Electrum.to_string() => Indexer::Electrum,

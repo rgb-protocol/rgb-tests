@@ -2681,6 +2681,7 @@ dependencies = [
  "rgb-strict-types",
  "rstest",
  "rstest_reuse",
+ "rustls 0.23.45",
  "serde",
  "serde_json",
  "serial_test",
