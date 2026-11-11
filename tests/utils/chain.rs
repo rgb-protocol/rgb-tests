@@ -31,18 +31,56 @@ pub fn initialize() {
             println!("skipping services initialization");
             return;
         }
-        let start_services_file = PathBuf::from("tests").join("start_services.sh");
-        println!("starting test services...");
-        let output = Command::new(start_services_file)
-            .env("PROFILE", INDEXER.get().unwrap().to_string())
-            .output()
-            .expect("failed to start test services");
-        if !output.status.success() {
-            println!("{output:?}");
-            panic!("failed to start test services");
+        let profile = INDEXER.get().unwrap().to_string();
+        // Each test binary of a `cargo test` run would otherwise restart the services,
+        // which costs more than the tests of some of the binaries. Let the first binary
+        // of a run start them and the others reuse what it started.
+        let run_file = PathBuf::from(TEST_DATA_DIR).join(".test-run");
+        let run_id = _cargo_run_id().map(|id| format!("{id} {profile}"));
+        let started_by_this_run = match &run_id {
+            Some(run_id) => {
+                std::fs::read_to_string(&run_file).ok().as_deref() == Some(run_id.as_str())
+            }
+            None => false,
+        };
+        if started_by_this_run {
+            println!("test services already started by this test run");
+        } else {
+            let start_services_file = PathBuf::from("tests").join("start_services.sh");
+            println!("starting test services...");
+            let output = Command::new(start_services_file)
+                .env("PROFILE", &profile)
+                .output()
+                .expect("failed to start test services");
+            if !output.status.success() {
+                println!("{output:?}");
+                panic!("failed to start test services");
+            }
+            if let Some(run_id) = &run_id {
+                std::fs::write(&run_file, run_id).expect("failed to write the test run file");
+            }
         }
         (INSTANCE_1..=INSTANCE_3).for_each(_wait_indexer_sync);
     });
+}
+
+/// Identifier of the `cargo test` run this test binary belongs to, if there is one.
+///
+/// Cargo runs the test binaries of a run one at a time as its own children, so the PID
+/// of the parent process, paired with its start time to rule out a recycled PID, tells
+/// the binaries of one run apart from those of every other run. A test binary executed
+/// directly has no run to share a service startup with, hence no identifier.
+fn _cargo_run_id() -> Option<String> {
+    let mut sys = sysinfo::System::new();
+    let pid = sysinfo::get_current_pid().ok()?;
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), false);
+    let parent_pid = sys.process(pid)?.parent()?;
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[parent_pid]), false);
+    let parent = sys.process(parent_pid)?;
+    if !parent.name().to_string_lossy().starts_with("cargo") {
+        return None;
+    }
+    Some(format!("{parent_pid} {}", parent.start_time()))
 }
 
 static MINER: Lazy<RwLock<Miner>> = Lazy::new(|| {

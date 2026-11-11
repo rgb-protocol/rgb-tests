@@ -52,7 +52,9 @@ See the dedicated [documentation](STRESS.md) for more information.
 ### Test services
 
 Test services will be automatically (re)started by the test command and will
-run in docker containers.
+run in docker containers. They are restarted once per test run, not once per
+test target: the first test binary of a `cargo test` run starts them and the
+other binaries of the same run reuse them, sharing the same chain.
 If you don't have the docker images they will be automatically pulled. Note
 that in this case the first test execution will be slower.
 Also note that there's no automatic shutdown of test services, you'll need to
