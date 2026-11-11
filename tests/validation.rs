@@ -6404,7 +6404,6 @@ fn validate_consignment_unicode_char_global_state() {
 
 /// V1 consignments carry no types, so the substitution is checked on the type systems
 #[test]
-#[ignore = "Variant equality matches on tag or name"]
 fn substituted_enum_type_compares_equal() {
     let trusted = AssetSchema::Nia.types();
     let mut json_types = serde_json::to_value(&trusted).unwrap();
