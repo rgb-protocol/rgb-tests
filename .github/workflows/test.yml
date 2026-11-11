@@ -35,8 +35,30 @@ jobs:
       - name: Test and generate coverage report
         run: ./tests/coverage.sh --ci --threads 2
 
+      - name: Store the coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage.lcov
+          if-no-files-found: error
+          retention-days: 7
+
+  upload_coverage:
+    needs: test_and_coverage
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Retrieve the coverage report
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-report
+
       - name: Upload coverage report
         uses: codecov/codecov-action@v7
+        timeout-minutes: 5
         with:
           fail_ci_if_error: true
           files: coverage.lcov
