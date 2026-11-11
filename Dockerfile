@@ -3,7 +3,7 @@
 # required to support COPY --exclude
 # see https://github.com/moby/buildkit/blob/dockerfile/1.7.0-labs/frontend/dockerfile/docs/reference.md#copy---exclude
 
-FROM rust:1.91-slim-trixie
+FROM rust:1.99-slim-trixie
 
 # requirements
 RUN apt-get update && apt install -y --no-install-recommends \
