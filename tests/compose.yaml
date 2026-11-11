@@ -29,7 +29,7 @@ services:
     depends_on:
       - bitcoind_1
   electrs_1:
-    image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.12.1
     profiles: [electrum]
     environment:
       BTCHOST: bitcoind_1
@@ -38,7 +38,7 @@ services:
     depends_on:
       - bitcoind_1
   electrs_2:
-    image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.12.1
     profiles: [electrum]
     environment:
       BTCHOST: bitcoind_2
@@ -47,7 +47,7 @@ services:
     depends_on:
       - bitcoind_2
   electrs_3:
-    image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.12.1
     profiles: [electrum]
     environment:
       BTCHOST: bitcoind_3
@@ -98,7 +98,7 @@ services:
     environment:
       NETWORK: signet
   electrs_signet_custom:
-    image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.12.1
     profiles: [electrum]
     environment:
       BTCHOST: bitcoind_signet_custom

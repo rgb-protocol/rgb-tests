@@ -43,7 +43,7 @@ _wait_for_electrs() {
     # wait for electrs to have completed startup
     electrs_service_name="$1"
     start_time=$(date +%s)
-    until $COMPOSE logs $electrs_service_name | grep -q 'finished full compaction'; do
+    until $COMPOSE logs $electrs_service_name | grep -q 'started auto compactions'; do
         current_time=$(date +%s)
         if [ $((current_time - start_time)) -gt $TIMEOUT ]; then
             echo "Timeout waiting for $electrs_service_name to start"
