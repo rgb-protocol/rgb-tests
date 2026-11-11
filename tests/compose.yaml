@@ -1,18 +1,18 @@
 services:
   bitcoind_1:
-    image: registry.gitlab.com/hashbeam/docker/bitcoind:31.2
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:32.1
     profiles: [electrum]
     command: "-fallbackfee=0.0002"
     ports:
       - 18443:18443
   bitcoind_2:
-    image: registry.gitlab.com/hashbeam/docker/bitcoind:31.2
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:32.1
     profiles: [electrum]
     command: "-fallbackfee=0.0002"
     ports:
       - 18453:18443
   bitcoind_3:
-    image: registry.gitlab.com/hashbeam/docker/bitcoind:31.2
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:32.1
     profiles: [electrum]
     command: "-fallbackfee=0.0002"
     ports:
@@ -21,7 +21,7 @@ services:
   # The trailing -txindex=0 overrides the -txindex the image entrypoint always adds, and
   # -connect keeps it in sync with the chain of bitcoind_1.
   bitcoind_no_txindex:
-    image: registry.gitlab.com/hashbeam/docker/bitcoind:31.2
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:32.1
     profiles: [electrum]
     command: "-fallbackfee=0.0002 -txindex=0 -connect=bitcoind_1:18444"
     ports:
@@ -92,7 +92,7 @@ services:
       - 50006:50001
       - 8096:80
   bitcoind_signet_custom:
-    image: registry.gitlab.com/hashbeam/docker/bitcoind:31.2
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:32.1
     profiles: [electrum, esplora]
     command: "-signet -signetchallenge=51 -fallbackfee=0.0002"
     environment:
