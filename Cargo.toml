@@ -9,7 +9,6 @@ authors = [
 edition = "2024"
 rust-version = "1.88.0"
 repository = "https://github.com/rgb-protocol/rgb-tests"
-homepage = "https://github.com/rgb-protocol/rgb-tests"
 license = "Apache-2.0"
 description = "RGB tests"
 
