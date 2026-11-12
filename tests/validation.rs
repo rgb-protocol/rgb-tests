@@ -6049,6 +6049,28 @@ fn validate_consignment_script_bytes_fill_reversed_range() {
     );
 }
 
+#[test]
+fn validate_consignment_script_bytes_find_empty_fragment() {
+    let Some(completed) = child_case("validate_consignment_script_bytes_find_empty_fragment")
+    else {
+        // searching for an empty fragment makes `windows(0)` panic before the closure can bail
+        let code = rgbasm! {
+            put     s16[0], b"banana";
+            put     s16[1], b"";
+            find    s16[0],s16[1],a16[0];
+            ret;
+        };
+        let lib = Lib::assemble::<Instr<RgbIsa<FilteredContractState>>>(&code).unwrap();
+        let (consignment, rules) = scripted_transfer_with_libs(lib, vec![], 0);
+        child_target(|| validate_quietly(consignment, rules));
+        return;
+    };
+    assert!(
+        completed,
+        "a validator searching for an empty fragment terminated the process"
+    );
+}
+
 /// `jmp` cut in the middle of its 16-bit offset, as raw bytecode
 const TRUNCATED_JMP: &[u8] = &[0x02, 0x00];
 
