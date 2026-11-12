@@ -6026,6 +6026,29 @@ fn validate_consignment_script_put_past_data_segment() {
     );
 }
 
+#[test]
+fn validate_consignment_script_bytes_fill_reversed_range() {
+    let Some(completed) = child_case("validate_consignment_script_bytes_fill_reversed_range")
+    else {
+        // fill s16[0][5..3]: a range whose start exceeds its end, which slices out of order
+        let code = rgbasm! {
+            put     a16[0],5;
+            put     a16[1],3;
+            put     a8[0],255;
+            fill.e  s16[0],a16[0],a16[1],a8[0];
+            ret;
+        };
+        let lib = Lib::assemble::<Instr<RgbIsa<FilteredContractState>>>(&code).unwrap();
+        let (consignment, rules) = scripted_transfer_with_libs(lib, vec![], 0);
+        child_target(|| validate_quietly(consignment, rules));
+        return;
+    };
+    assert!(
+        completed,
+        "a validator filling a reversed byte range terminated the process"
+    );
+}
+
 /// `jmp` cut in the middle of its 16-bit offset, as raw bytecode
 const TRUNCATED_JMP: &[u8] = &[0x02, 0x00];
 
