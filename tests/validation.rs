@@ -6008,6 +6008,24 @@ fn validate_consignment_script_status_merge_in_range() {
     );
 }
 
+/// `put s16[0], data[0..1]` (`INSTR_PUT`, index 0, offset 0, length 1): reads one byte of the data
+/// segment, hand-crafted because the assembler would only ever emit offsets the segment covers
+const PUT_PAST_DATA: &[u8] = &[0x30, 0x00, 0x00, 0x00, 0x01, 0x00];
+
+#[test]
+fn validate_consignment_script_put_past_data_segment() {
+    let Some(completed) = child_case("validate_consignment_script_put_past_data_segment") else {
+        // the data segment is empty, so the one byte the PUT asks for lies past its end
+        let (consignment, rules) = scripted_transfer(PUT_PAST_DATA.to_vec(), 0);
+        child_target(|| validate_quietly(consignment, rules));
+        return;
+    };
+    assert!(
+        completed,
+        "a validator reading past the data segment terminated the process"
+    );
+}
+
 /// `jmp` cut in the middle of its 16-bit offset, as raw bytecode
 const TRUNCATED_JMP: &[u8] = &[0x02, 0x00];
 
