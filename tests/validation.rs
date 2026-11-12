@@ -5980,7 +5980,6 @@ const ST_A16: &[u8] = &[0x1e, 0x05, 0x07];
 const ST_A8: &[u8] = &[0x1e, 0x01, 0x07];
 
 #[test]
-#[ignore = "cmp.st merges the 8-bit status flag into a register of any width"]
 fn validate_consignment_script_status_merge() {
     let Some(completed) = child_case("validate_consignment_script_status_merge") else {
         // rgb-consensus preloads a16[0] with the transition type, so `st.a a16[0]` alone
