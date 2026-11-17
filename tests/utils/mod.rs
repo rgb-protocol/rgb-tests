@@ -136,10 +136,11 @@ pub use rgb::{
     assignments::AssignVec,
     bitcoin::{self, Sequence, TxIn, TxOut, Witness, absolute::LockTime},
     bitcoin::{
-        Address, BlockHash, CompressedPublicKey, Network, Psbt, ScriptBuf, TapLeafHash,
-        TapNodeHash, Transaction, block::Header as BlockHeader, constants::ChainHash,
-        hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1, taproot::LeafScript,
-        taproot::LeafVersion, transaction::Version,
+        Address, BlockHash, CompactTarget, CompressedPublicKey, Network, Psbt, ScriptBuf,
+        TapLeafHash, TapNodeHash, Transaction, TxMerkleNode, block::Header as BlockHeader,
+        block::Version as BlockVersion, constants::ChainHash, hashes::Hash as _,
+        hashes::HashEngine as _, hashes::sha256d, key::Secp256k1 as BitcoinSecp256k1,
+        taproot::LeafScript, taproot::LeafVersion, transaction::Version,
     },
     containers::{
         AssignmentMatch, ConsignmentVer, ValidContract, WitnessBundle,
@@ -162,9 +163,9 @@ pub use rgb::{
     tapret::{TapretNodePartner, TapretRightBranch},
     validation::{
         Claim, DbcProof, Failure, OpsDag, PendingValidation, ResolveWitness, SchemaDefError,
-        SchemaDefinition, SchemaRules, Scripts, SpvProof, Status, TypeLibs, ValidationConfig,
-        ValidationError, Validator, Validity, Warning, WitnessOrdProvider, WitnessResolution,
-        WitnessResolverError, WitnessSafety, WitnessStatus, WitnessTask,
+        SchemaDefinition, SchemaRules, Scripts, SpvProof, SpvValidationError, Status, TypeLibs,
+        ValidationConfig, ValidationError, Validator, Validity, Warning, WitnessOrdProvider,
+        WitnessResolution, WitnessResolverError, WitnessSafety, WitnessStatus, WitnessTask,
     },
     vm::{
         ContractStateAccess, ContractStateEvolve, GlobalStateEntry, GlobalsIter, RgbIsa,

