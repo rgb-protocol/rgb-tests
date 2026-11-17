@@ -6611,7 +6611,6 @@ fn bundles_size_alloc_bomb() {
 /// attack a test cannot afford, getting `T` mined, which takes ~2^40 more hashes to make `T` spend
 /// a real UTXO as well.
 #[test]
-#[ignore = "SpvProof::validate accepts 64-byte TXs as merkle nodes"]
 fn validate_consignment_spv_proof_64_byte_tx() {
     /// Resolver of a victim whose chain has, at `height`, the block with header `header`, and
     /// which knows no witness.
@@ -6801,6 +6800,10 @@ fn validate_consignment_spv_proof_64_byte_tx() {
         ])
         .unwrap(),
     };
+    assert_eq!(
+        forged_proof.validate(fake_txid, &resolver.header),
+        Err(SpvValidationError::InnerNodeIsTransaction)
+    );
     let mut wbundle = WitnessBundle::with(fake, anchor, bundle);
     wbundle.spv_proof = Some(forged_proof);
     let forged = Consignment::<true> {
